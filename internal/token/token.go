@@ -16,8 +16,10 @@ const (
 	SIGNED_NUMBER Type = "SIGNED_NUMBER"
 
 	// Delimiters
-	LBRACE Type = "LBRACE"
-	RBRACE Type = "RBRACE"
+	LBRACE   Type = "LBRACE"
+	RBRACE   Type = "RBRACE"
+	LBRACKET Type = "LBRACKET" // [
+	RBRACKET Type = "RBRACKET" // ]
 
 	// Operators / comparisons
 	GTE Type = "GTE" // >=
@@ -57,6 +59,10 @@ func (t Type) String() string {
 		return "LBRACE"
 	case RBRACE:
 		return "RBRACE"
+	case LBRACKET:
+		return "LBRACKET"
+	case RBRACKET:
+		return "RBRACKET"
 	case GTE:
 		return "GTE"
 	case LTE:

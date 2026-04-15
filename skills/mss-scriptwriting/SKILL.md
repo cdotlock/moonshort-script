@@ -67,6 +67,15 @@ YOU: He hasn't called me that in eight years.
 
 Three special names: `NARRATOR` (third-person scene narration), `YOU` (MC's inner monologue), and any other name (character dialogue). Character names in dialogue are case-insensitive with their `@` directive counterparts — `MAURICIO:` in dialogue = `@mauricio` in directives.
 
+**Syntax sugar — expression change + dialogue in one line:**
+```
+CHARACTER [pose_expr]: text
+```
+This is shorthand for `@character expr pose_expr` followed by `CHARACTER: text`. Use it to keep the script tight when a character's expression changes right before they speak:
+```
+MAURICIO [arms_crossed_angry]: Your call, Butterfly.
+```
+
 ## Visual Directives
 
 All visual directives use **object-action** order: `@<object> <action> [params]`.

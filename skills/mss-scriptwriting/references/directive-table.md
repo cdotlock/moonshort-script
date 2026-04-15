@@ -34,6 +34,7 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | `CHARACTER: text` | `MAURICIO: Hey, Butterfly.` |
 | `NARRATOR: text` | `NARRATOR: Senior year. Day one.` |
 | `YOU: text` | `YOU: He hasn't called me that in eight years.` |
+| `CHARACTER [pose_expr]: text` | `MAURICIO [arms_crossed_angry]: Your call, Butterfly.` — dialogue + expression change (syntax sugar) |
 
 ## Phone
 

@@ -544,6 +544,140 @@ func TestParseIfElse(t *testing.T) {
 	}
 }
 
+// TestParseDialogueWithExpr tests that CHARACTER [pose_expr]: text expands to
+// CharExprNode + DialogueNode in the correct order.
+func TestParseDialogueWithExpr(t *testing.T) {
+	src := `@episode main:01 "Test" {
+  MAURICIO [arms_crossed_angry]: Your call, Butterfly.
+  @gates { @default main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 2 {
+		t.Fatalf("Body length: got %d, want 2 (CharExprNode + DialogueNode)", len(ep.Body))
+	}
+
+	// Body[0] must be CharExprNode.
+	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+	}
+	if expr.Char != "mauricio" {
+		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "mauricio")
+	}
+	if expr.Pose != "arms_crossed_angry" {
+		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "arms_crossed_angry")
+	}
+
+	// Body[1] must be DialogueNode.
+	dlg, ok := ep.Body[1].(*ast.DialogueNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *DialogueNode, got %T", ep.Body[1])
+	}
+	if dlg.Character != "MAURICIO" {
+		t.Errorf("DialogueNode.Character: got %q, want %q", dlg.Character, "MAURICIO")
+	}
+	if dlg.Text != "Your call, Butterfly." {
+		t.Errorf("DialogueNode.Text: got %q, want %q", dlg.Text, "Your call, Butterfly.")
+	}
+}
+
+// TestParseYouWithExpr tests that YOU [pose_expr]: text expands to CharExprNode + YouNode.
+func TestParseYouWithExpr(t *testing.T) {
+	src := `@episode main:01 "Test" {
+  YOU [thinking]: Why is he looking at me like that?
+  @gates { @default main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 2 {
+		t.Fatalf("Body length: got %d, want 2 (CharExprNode + YouNode)", len(ep.Body))
+	}
+
+	// Body[0] must be CharExprNode for "you".
+	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+	}
+	if expr.Char != "you" {
+		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "you")
+	}
+	if expr.Pose != "thinking" {
+		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "thinking")
+	}
+
+	// Body[1] must be YouNode.
+	you, ok := ep.Body[1].(*ast.YouNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *YouNode, got %T", ep.Body[1])
+	}
+	if you.Text != "Why is he looking at me like that?" {
+		t.Errorf("YouNode.Text: got %q, want %q", you.Text, "Why is he looking at me like that?")
+	}
+}
+
+// TestParseNarratorWithExpr tests that NARRATOR [pose_expr]: text expands to
+// CharExprNode + NarratorNode.
+func TestParseNarratorWithExpr(t *testing.T) {
+	src := `@episode main:01 "Test" {
+  NARRATOR [somber]: Three days passed without a word.
+  @gates { @default main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 2 {
+		t.Fatalf("Body length: got %d, want 2 (CharExprNode + NarratorNode)", len(ep.Body))
+	}
+
+	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+	}
+	if expr.Char != "narrator" {
+		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "narrator")
+	}
+	if expr.Pose != "somber" {
+		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "somber")
+	}
+
+	narr, ok := ep.Body[1].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *NarratorNode, got %T", ep.Body[1])
+	}
+	if narr.Text != "Three days passed without a word." {
+		t.Errorf("NarratorNode.Text: got %q, want %q", narr.Text, "Three days passed without a word.")
+	}
+}
+
+// TestParseDialogueWithExprFollowedByMore verifies that nodes after the syntax sugar
+// are parsed correctly (pending is drained, then parsing continues normally).
+func TestParseDialogueWithExprFollowedByMore(t *testing.T) {
+	src := `@episode main:01 "Test" {
+  MAURICIO [arms_crossed_angry]: Your call, Butterfly.
+  NARRATOR: She turned away.
+  @gates { @default main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 3 {
+		t.Fatalf("Body length: got %d, want 3", len(ep.Body))
+	}
+
+	if _, ok := ep.Body[0].(*ast.CharExprNode); !ok {
+		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+	}
+	if _, ok := ep.Body[1].(*ast.DialogueNode); !ok {
+		t.Fatalf("Body[1]: expected *DialogueNode, got %T", ep.Body[1])
+	}
+	narr, ok := ep.Body[2].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("Body[2]: expected *NarratorNode, got %T", ep.Body[2])
+	}
+	if narr.Text != "She turned away." {
+		t.Errorf("NarratorNode.Text: got %q, want %q", narr.Text, "She turned away.")
+	}
+}
+
 // TestParseGates tests gates with choice gate, influence gate, and default.
 func TestParseGates(t *testing.T) {
 	src := `@episode main:01 "Gates" {

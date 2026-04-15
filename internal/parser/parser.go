@@ -4,6 +4,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cdotlock/moonshort-script/internal/ast"
 	"github.com/cdotlock/moonshort-script/internal/lexer"
@@ -22,9 +23,10 @@ var knownKeywords = map[string]bool{
 
 // Parser consumes tokens from a Lexer and produces an AST.
 type Parser struct {
-	l    *lexer.Lexer
-	cur  token.Token
-	peek token.Token
+	l       *lexer.Lexer
+	cur     token.Token
+	peek    token.Token
+	pending ast.Node // set by parseDialogueWithExpr; drained on next parseStatement call
 }
 
 // New creates a Parser that reads tokens from the given Lexer.
@@ -114,6 +116,13 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GatesBlock, error) {
 	var gates *ast.GatesBlock
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
+		// Drain any pending node queued by parseDialogueWithExpr before
+		// checking for the @gates short-circuit path.
+		if p.pending != nil {
+			body = append(body, p.pending)
+			p.pending = nil
+			continue
+		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gates" {
 			g, err := p.parseGatesBlock()
 			if err != nil {
@@ -137,6 +146,12 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GatesBlock, error) {
 func (p *Parser) parseBlock() ([]ast.Node, error) {
 	var nodes []ast.Node
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
+		// Drain any pending node queued by parseDialogueWithExpr.
+		if p.pending != nil {
+			nodes = append(nodes, p.pending)
+			p.pending = nil
+			continue
+		}
 		node, err := p.parseStatement()
 		if err != nil {
 			return nil, err
@@ -149,12 +164,21 @@ func (p *Parser) parseBlock() ([]ast.Node, error) {
 }
 
 // parseStatement dispatches to the appropriate parser based on current token.
+// If a pending node was queued by parseDialogueWithExpr, it is returned first.
 func (p *Parser) parseStatement() (ast.Node, error) {
+	if p.pending != nil {
+		node := p.pending
+		p.pending = nil
+		return node, nil
+	}
 	if p.cur.Type == token.AT {
 		return p.parseDirective()
 	}
 	if p.cur.Type == token.IDENT && p.peek.Type == token.COLON {
 		return p.parseDialogue()
+	}
+	if p.cur.Type == token.IDENT && p.peek.Type == token.LBRACKET {
+		return p.parseDialogueWithExpr()
 	}
 	// Skip unexpected tokens to avoid infinite loops.
 	p.advance()
@@ -191,6 +215,93 @@ func (p *Parser) parseDialogue() (ast.Node, error) {
 	default:
 		return &ast.DialogueNode{Character: name, Text: textTok.Literal}, nil
 	}
+}
+
+// parseDialogueWithExpr handles the syntax sugar:
+//
+//	CHARACTER [pose_expr]: text
+//
+// Token stream when called: cur=IDENT("MAURICIO"), peek=LBRACKET
+// Full stream:  IDENT LBRACKET IDENT RBRACKET COLON <dialogue text>
+//
+// This is equivalent to:
+//
+//	@character expr pose_expr
+//	CHARACTER: text
+//
+// It returns CharExprNode immediately, and queues the dialogue node as p.pending
+// so that the next parseStatement call drains it — preserving correct order.
+//
+// Lexer position note: each p.advance() reads one token from the lexer into
+// p.peek, advancing the lexer's internal position. By the time cur==COLON,
+// p.peek already holds whatever follows the COLON (first word of dialogue),
+// meaning the lexer has consumed past the COLON. We must NOT call p.advance()
+// again before ReadDialogueText — instead we call it directly on the position
+// the lexer is already at (after cur was loaded into peek).
+//
+// The trick: after RBRACKET is confirmed in cur, p.peek == COLON.
+// We do NOT advance again; instead we call ReadDialogueText which starts
+// reading from the lexer's current position — which is right after COLON
+// (since COLON was the token that was pulled into p.peek).
+func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
+	name := p.cur.Literal
+	charID := strings.ToLower(name)
+
+	// cur=IDENT(name), peek=LBRACKET
+	p.advance() // cur=LBRACKET, peek=IDENT(pose)
+	p.advance() // cur=IDENT(pose), peek=RBRACKET
+
+	// Read pose_expr IDENT.
+	if p.cur.Type != token.IDENT {
+		return nil, fmt.Errorf("line %d col %d: expected pose expression after '[', got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+	pose := p.cur.Literal
+
+	p.advance() // cur=RBRACKET, peek=COLON
+
+	// Confirm RBRACKET.
+	if p.cur.Type != token.RBRACKET {
+		return nil, fmt.Errorf("line %d col %d: expected ']' after pose expression, got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+
+	// At this point: cur=RBRACKET, peek=COLON.
+	// p.peek was loaded by calling p.l.NextToken() inside the last p.advance(),
+	// so the lexer's internal pos is now right after the COLON character — exactly
+	// where ReadDialogueText expects to start. Do NOT call p.advance() here.
+	if p.peek.Type != token.COLON {
+		return nil, fmt.Errorf("line %d col %d: expected ':' after ']', got %s (%q)",
+			p.peek.Line, p.peek.Col, p.peek.Type, p.peek.Literal)
+	}
+
+	textTok := p.l.ReadDialogueText()
+
+	// Re-prime cur and peek, skipping comments and newlines.
+	p.cur = p.l.NextToken()
+	for p.cur.Type == token.COMMENT || p.cur.Type == token.NEWLINE {
+		p.cur = p.l.NextToken()
+	}
+	p.peek = p.l.NextToken()
+	for p.peek.Type == token.COMMENT || p.peek.Type == token.NEWLINE {
+		p.peek = p.l.NextToken()
+	}
+
+	// Queue the dialogue node as pending — returned on the next parseStatement call.
+	switch name {
+	case "NARRATOR":
+		p.pending = &ast.NarratorNode{Text: textTok.Literal}
+	case "YOU":
+		p.pending = &ast.YouNode{Text: textTok.Literal}
+	default:
+		p.pending = &ast.DialogueNode{Character: name, Text: textTok.Literal}
+	}
+
+	// Return CharExprNode first.
+	return &ast.CharExprNode{
+		Char: charID,
+		Pose: pose,
+	}, nil
 }
 
 // parseDirective parses an @-prefixed directive.

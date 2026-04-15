@@ -225,6 +225,36 @@ func TestLexLineTracking(t *testing.T) {
 	}
 }
 
+// TestLexBrackets: [ and ] should produce LBRACKET and RBRACKET tokens.
+func TestLexBrackets(t *testing.T) {
+	// Use a newline-terminated input so the dialogue text ("Hey.") is left for
+	// ReadDialogueText; we only verify the tokens up through COLON here.
+	input := `MAURICIO [arms_crossed]: Hey.`
+	got := toks(input)
+	// toks() tokenizes the entire line. "Hey." lexes as IDENT("Hey") + DOT.
+	assertTypes(t, got,
+		token.IDENT,    // MAURICIO
+		token.LBRACKET, // [
+		token.IDENT,    // arms_crossed
+		token.RBRACKET, // ]
+		token.COLON,    // :
+		token.IDENT,    // Hey
+		token.DOT,      // .
+	)
+	if got[0].Literal != "MAURICIO" {
+		t.Errorf("token[0] literal: got %q, want %q", got[0].Literal, "MAURICIO")
+	}
+	if got[2].Literal != "arms_crossed" {
+		t.Errorf("token[2] literal: got %q, want %q", got[2].Literal, "arms_crossed")
+	}
+	if got[1].Type != token.LBRACKET {
+		t.Errorf("token[1]: got %s, want LBRACKET", got[1].Type)
+	}
+	if got[3].Type != token.RBRACKET {
+		t.Errorf("token[3]: got %s, want RBRACKET", got[3].Type)
+	}
+}
+
 // TestLexOperators: verify all comparison and logical operators.
 func TestLexOperators(t *testing.T) {
 	cases := []struct {

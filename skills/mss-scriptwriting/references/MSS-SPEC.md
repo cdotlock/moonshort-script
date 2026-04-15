@@ -285,6 +285,27 @@ YOU: He hasn't called me that in eight years.
 - `NARRATOR:` — 旁白，无角色立绘，独立对话框样式
 - `YOU:` — MC 内心独白，斜体或特殊样式
 
+**语法糖：表情变换 + 对白一行完成**
+
+```
+CHARACTER [pose_expr]: text
+```
+
+等价于：
+
+```
+@character expr pose_expr
+CHARACTER: text
+```
+
+例：
+
+```
+MAURICIO [arms_crossed_angry]: Your call, Butterfly.
+```
+
+解释器将其展开为 `CharExprNode`（表情变换）+ `DialogueNode`（对白），顺序与分开写完全一致。
+
 ---
 
 ### 4.4 手机/消息
