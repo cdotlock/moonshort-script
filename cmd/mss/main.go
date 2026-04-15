@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cdotlock/moonshort-script/internal/emitter"
+	"github.com/cdotlock/moonshort-script/internal/fixer"
 	"github.com/cdotlock/moonshort-script/internal/lexer"
 	"github.com/cdotlock/moonshort-script/internal/parser"
 	"github.com/cdotlock/moonshort-script/internal/resolver"
@@ -24,6 +25,8 @@ func main() {
 		cmdCompile(os.Args[2:])
 	case "validate":
 		cmdValidate(os.Args[2:])
+	case "fix":
+		cmdFix(os.Args[2:])
 	default:
 		usage()
 	}
@@ -35,6 +38,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.yaml] [-o output.json]")
 	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.yaml]")
+	fmt.Fprintln(os.Stderr, "  mss fix <file.md> [-o output.md]     Fix and write (in-place if no -o)")
+	fmt.Fprintln(os.Stderr, "  mss fix <file.md> --check            Dry run: report issues, don't write")
 	os.Exit(1)
 }
 
@@ -178,6 +183,56 @@ func compileDir(dir string, res emitter.AssetResolver) ([]byte, error) {
 	}
 
 	return json.MarshalIndent(results, "", "  ")
+}
+
+func cmdFix(args []string) {
+	target, _, outputPath := parseFlags(args)
+	checkOnly := false
+	for _, a := range args {
+		if a == "--check" {
+			checkOnly = true
+		}
+	}
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "error: fix requires a file argument")
+		os.Exit(1)
+	}
+
+	src, err := os.ReadFile(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	result := fixer.Fix(string(src))
+
+	// Print fixes
+	for _, f := range result.Fixes {
+		fmt.Fprintf(os.Stderr, "fixed: %s\n", f)
+	}
+
+	// Print errors
+	for _, e := range result.Errors {
+		fmt.Fprintf(os.Stderr, "error: %s\n", e)
+	}
+
+	if !checkOnly {
+		dest := target
+		if outputPath != "" {
+			dest = outputPath
+		}
+		if err := os.WriteFile(dest, []byte(result.Fixed), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
+			os.Exit(1)
+		}
+		if len(result.Fixes) > 0 || outputPath != "" {
+			fmt.Fprintf(os.Stderr, "wrote %s\n", dest)
+		}
+	}
+
+	if len(result.Errors) > 0 {
+		os.Exit(1)
+	}
 }
 
 func cmdValidate(args []string) {
