@@ -1,4 +1,4 @@
-# NRS Directive Quick Reference
+# MSS Directive Quick Reference
 
 ## Structure Control
 

@@ -1,7 +1,7 @@
 .PHONY: build test clean
 
 build:
-	go build -o bin/nrs ./cmd/nrs
+	go build -o bin/mss ./cmd/mss
 
 test:
 	go test ./... -v

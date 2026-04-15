@@ -30,11 +30,11 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "nrs - NoRules Script interpreter")
+	fmt.Fprintln(os.Stderr, "mss - MoonShort Script interpreter")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  nrs compile <file.md|dir/> [--assets mapping.yaml] [-o output.json]")
-	fmt.Fprintln(os.Stderr, "  nrs validate <file.md> [--assets mapping.yaml]")
+	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.yaml] [-o output.json]")
+	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.yaml]")
 	os.Exit(1)
 }
 

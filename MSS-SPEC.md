@@ -1,4 +1,4 @@
-# NoRules Script (NRS) 格式设计规范 v2.1
+# MoonShort Script (MSS) 格式设计规范 v2.1
 
 > 定义 MobAI 互动视觉小说的完整脚本标记语法、文件结构、解释器职责。
 
@@ -468,7 +468,7 @@ D20 检定公式（引擎内置）：`D20(1-20) + 属性修正 + 小游戏修正
 脚本和素材映射**分离**：
 - 脚本只写语义名（如 `malias_bedroom_morning`、`neutral_smirk`）
 - 素材映射表是独立文件，由素材管线（Agent-Forge）生成维护
-- 解释器将两者结合：`nrs compile script.md --assets mapping.yaml -o output.json`
+- 解释器将两者结合：`mss compile script.md --assets mapping.yaml -o output.json`
 
 分离的好处：
 - 同一套脚本可指向不同 OSS 环境（开发/生产/测试）
@@ -542,12 +542,12 @@ assets:
 
 ### 6.1 概述
 
-Go 单二进制工具 `nrs`。
+Go 单二进制工具 `mss`。
 
 ```bash
-nrs compile 01.md --assets mapping.yaml -o ep01.json        # 单集编译
-nrs compile main/ --assets mapping.yaml -o novel.json        # 批量编译整个目录
-nrs validate 01.md --assets mapping.yaml                     # 验证（不输出 JSON）
+mss compile 01.md --assets mapping.yaml -o ep01.json        # 单集编译
+mss compile main/ --assets mapping.yaml -o novel.json        # 批量编译整个目录
+mss validate 01.md --assets mapping.yaml                     # 验证（不输出 JSON）
 ```
 
 ### 6.2 核心职责

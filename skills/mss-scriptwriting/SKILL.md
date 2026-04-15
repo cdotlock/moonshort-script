@@ -1,16 +1,16 @@
 ---
-name: nrs-scriptwriting
+name: mss-scriptwriting
 description: >
-  How to write correct NoRules Script (NRS) for MobAI interactive visual novels.
+  How to write correct MoonShort Script (MSS) for MobAI interactive visual novels.
   Use this skill whenever generating, editing, or reviewing .md script files for
   the MobAI game engine — including Dramatizer output, Remix Executor output,
-  or manual script authoring. Triggers on: NRS scripts, episode scripts,
+  or manual script authoring. Triggers on: MSS scripts, episode scripts,
   visual novel scripts, game scripts, Dramatizer output formatting,
   Remix script generation, "@episode", "@choice", "@gate", or any mention
   of the MobAI script format.
 ---
 
-# Writing NoRules Scripts
+# Writing MoonShort Scripts
 
 You are generating scripts for a mobile interactive visual novel player. Each script file is one episode — a self-contained unit of narrative that includes dialogue, visual staging, game mechanics (D20 checks, mini-games), and routing to the next episode.
 
@@ -49,7 +49,7 @@ The `branch_key` follows a strict addressing format. Read `references/addressing
 
 ## The Two Languages in One File
 
-NRS has two syntaxes that alternate freely:
+MSS has two syntaxes that alternate freely:
 
 **1. Directive lines** start with `@` — these control visuals, audio, game mechanics, and flow:
 ```
