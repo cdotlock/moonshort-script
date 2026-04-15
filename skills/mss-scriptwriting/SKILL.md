@@ -338,6 +338,8 @@ These aren't enforced by the interpreter, but they make for a good player experi
 - **Music transitions**: `crossfade` between scenes, `fadeout` before silence or big moments.
 - **One choice per episode**: This is a design constraint. The whole episode builds toward one decision point.
 
-## Quick Reference
+## References
 
-Read `references/directive-table.md` for the complete directive cheat sheet.
+- `references/directive-table.md` — directive cheat sheet, quick lookup when writing scripts
+- `references/addressing.md` — episode ID addressing rules for branch_key and file naming
+- `references/MSS-SPEC.md` — **complete format specification** with JSON output structure, asset mapping schema, interpreter behavior, and Remix compatibility details. Read this when you need to understand how the interpreter processes scripts, what JSON the frontend receives, or how the asset mapping YAML works.
