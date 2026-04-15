@@ -1,14 +1,232 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/cdotlock/moonshort-script/internal/emitter"
+	"github.com/cdotlock/moonshort-script/internal/lexer"
+	"github.com/cdotlock/moonshort-script/internal/parser"
+	"github.com/cdotlock/moonshort-script/internal/resolver"
+	"github.com/cdotlock/moonshort-script/internal/validator"
 )
 
 func main() {
-	fmt.Fprintln(os.Stderr, "nrs - NRS script interpreter")
+	if len(os.Args) < 2 {
+		usage()
+	}
+
+	switch os.Args[1] {
+	case "compile":
+		cmdCompile(os.Args[2:])
+	case "validate":
+		cmdValidate(os.Args[2:])
+	default:
+		usage()
+	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "nrs - NoRules Script interpreter")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  nrs <script.nrs>    Parse script and output JSON")
+	fmt.Fprintln(os.Stderr, "  nrs compile <file.md|dir/> [--assets mapping.yaml] [-o output.json]")
+	fmt.Fprintln(os.Stderr, "  nrs validate <file.md> [--assets mapping.yaml]")
 	os.Exit(1)
+}
+
+// parseFlags extracts --assets and -o values from args, returning the positional arg and flags.
+func parseFlags(args []string) (target, assetsPath, outputPath string) {
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--assets":
+			if i+1 < len(args) {
+				assetsPath = args[i+1]
+				i++
+			}
+		case "-o":
+			if i+1 < len(args) {
+				outputPath = args[i+1]
+				i++
+			}
+		default:
+			if target == "" {
+				target = args[i]
+			}
+		}
+	}
+	return
+}
+
+// noopResolver implements emitter.AssetResolver, returning empty strings for all assets.
+type noopResolver struct{}
+
+func (n *noopResolver) ResolveBg(name string) (string, error)                    { return "", nil }
+func (n *noopResolver) ResolveCharacter(char, poseExpr string) (string, error)   { return "", nil }
+func (n *noopResolver) ResolveMusic(name string) (string, error)                 { return "", nil }
+func (n *noopResolver) ResolveSfx(name string) (string, error)                   { return "", nil }
+func (n *noopResolver) ResolveCg(name string) (string, error)                    { return "", nil }
+func (n *noopResolver) ResolveMinigame(gameID string) (string, error)            { return "", nil }
+
+func loadResolver(assetsPath string) (emitter.AssetResolver, error) {
+	if assetsPath == "" {
+		return &noopResolver{}, nil
+	}
+	return resolver.LoadMapping(assetsPath)
+}
+
+func cmdCompile(args []string) {
+	target, assetsPath, outputPath := parseFlags(args)
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "error: compile requires a file or directory argument")
+		os.Exit(1)
+	}
+
+	res, err := loadResolver(assetsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var output []byte
+
+	if info.IsDir() {
+		output, err = compileDir(target, res)
+	} else {
+		output, err = compileFile(target, res)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if outputPath != "" {
+		if err := os.WriteFile(outputPath, output, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing output: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "wrote %s\n", outputPath)
+	} else {
+		fmt.Println(string(output))
+	}
+}
+
+func compileFile(path string, res emitter.AssetResolver) ([]byte, error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	l := lexer.New(string(src))
+	p := parser.New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+
+	// Validate -- print warnings but don't fail.
+	errs := validator.Validate(ep)
+	for _, e := range errs {
+		fmt.Fprintf(os.Stderr, "warning: %s: %s\n", path, e.Error())
+	}
+
+	em := emitter.New(res)
+	data, err := em.Emit(ep)
+	if err != nil {
+		return nil, fmt.Errorf("emit %s: %w", path, err)
+	}
+
+	// Print emitter warnings.
+	for _, w := range em.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s: %s\n", path, w.Message)
+	}
+
+	return data, nil
+}
+
+func compileDir(dir string, res emitter.AssetResolver) ([]byte, error) {
+	var results []json.RawMessage
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		data, err := compileFile(path, res)
+		if err != nil {
+			return err
+		}
+		results = append(results, json.RawMessage(data))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return json.MarshalIndent(results, "", "  ")
+}
+
+func cmdValidate(args []string) {
+	target, assetsPath, _ := parseFlags(args)
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "error: validate requires a file argument")
+		os.Exit(1)
+	}
+
+	src, err := os.ReadFile(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	l := lexer.New(string(src))
+	p := parser.New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	errs := validator.Validate(ep)
+
+	// If assets provided, also check resolution.
+	if assetsPath != "" {
+		res, err := loadResolver(assetsPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		em := emitter.New(res)
+		_, emitErr := em.Emit(ep)
+		if emitErr != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", emitErr)
+			os.Exit(1)
+		}
+		for _, w := range em.Warnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w.Message)
+		}
+	}
+
+	if len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "%s\n", e.Error())
+		}
+		os.Exit(1)
+	}
+
+	fmt.Println("OK")
 }
