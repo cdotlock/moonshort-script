@@ -468,7 +468,7 @@ D20 检定公式（引擎内置）：`D20(1-20) + 属性修正 + 小游戏修正
 脚本和素材映射**分离**：
 - 脚本只写语义名（如 `malias_bedroom_morning`、`neutral_smirk`）
 - 素材映射表是独立文件，由素材管线（Agent-Forge）生成维护
-- 解释器将两者结合：`mss compile script.md --assets mapping.yaml -o output.json`
+- 解释器将两者结合：`mss compile script.md --assets mapping.json -o output.json`
 
 分离的好处：
 - 同一套脚本可指向不同 OSS 环境（开发/生产/测试）
@@ -477,48 +477,53 @@ D20 检定公式（引擎内置）：`D20(1-20) + 属性修正 + 小游戏修正
 
 ### 5.2 映射表格式
 
-```yaml
-# mapping.yaml
-base_url: "https://oss.mobai.com/novel_001"
-
-assets:
-  bg:
-    malias_bedroom_morning: "bg/malias_bedroom_morning.png"
-    malias_bedroom_night: "bg/malias_bedroom_night.png"
-    school_front: "bg/school_front.png"
-    school_hallway: "bg/school_hallway.png"
-    school_classroom: "bg/school_classroom.png"
-    school_cafeteria: "bg/school_cafeteria.png"
-    school_gymnasium: "bg/school_gymnasium.png"
-
-  characters:
-    mauricio:
-      neutral_smirk: "characters/mauricio_neutral_smirk.png"
-      arms_crossed_angry: "characters/mauricio_arms_crossed_angry.png"
-    malia:
-      neutral_phone: "characters/malia_neutral_phone.png"
-      neutral_flat: "characters/malia_neutral_flat.png"
-      worried: "characters/malia_worried.png"
-      shocked: "characters/malia_shocked.png"
-    easton:
-      vulnerable_hopeful: "characters/easton_vulnerable_hopeful.png"
-      relieved: "characters/easton_relieved.png"
-      hurt: "characters/easton_hurt.png"
-
-  music:
-    calm_morning: "music/calm_morning.mp3"
-    upbeat_school: "music/upbeat_school.mp3"
-    tense_strings: "music/tense_strings.mp3"
-
-  sfx:
-    crowd_noise: "sfx/crowd_noise.mp3"
-    phone_buzz: "sfx/phone_buzz.mp3"
-
-  cg:
-    window_stare: "cg/window_stare.png"
-
-  minigames:
-    qte_challenge: "minigames/qte_challenge/index.html"
+```json
+{
+  "base_url": "https://oss.mobai.com/novel_001",
+  "assets": {
+    "bg": {
+      "malias_bedroom_morning": "bg/malias_bedroom_morning.png",
+      "malias_bedroom_night": "bg/malias_bedroom_night.png",
+      "school_front": "bg/school_front.png",
+      "school_hallway": "bg/school_hallway.png",
+      "school_classroom": "bg/school_classroom.png",
+      "school_cafeteria": "bg/school_cafeteria.png",
+      "school_gymnasium": "bg/school_gymnasium.png"
+    },
+    "characters": {
+      "mauricio": {
+        "neutral_smirk": "characters/mauricio_neutral_smirk.png",
+        "arms_crossed_angry": "characters/mauricio_arms_crossed_angry.png"
+      },
+      "malia": {
+        "neutral_phone": "characters/malia_neutral_phone.png",
+        "neutral_flat": "characters/malia_neutral_flat.png",
+        "worried": "characters/malia_worried.png",
+        "shocked": "characters/malia_shocked.png"
+      },
+      "easton": {
+        "vulnerable_hopeful": "characters/easton_vulnerable_hopeful.png",
+        "relieved": "characters/easton_relieved.png",
+        "hurt": "characters/easton_hurt.png"
+      }
+    },
+    "music": {
+      "calm_morning": "music/calm_morning.mp3",
+      "upbeat_school": "music/upbeat_school.mp3",
+      "tense_strings": "music/tense_strings.mp3"
+    },
+    "sfx": {
+      "crowd_noise": "sfx/crowd_noise.mp3",
+      "phone_buzz": "sfx/phone_buzz.mp3"
+    },
+    "cg": {
+      "window_stare": "cg/window_stare.png"
+    },
+    "minigames": {
+      "qte_challenge": "minigames/qte_challenge/index.html"
+    }
+  }
+}
 ```
 
 ### 5.3 解析规则
@@ -545,9 +550,9 @@ assets:
 Go 单二进制工具 `mss`。
 
 ```bash
-mss compile 01.md --assets mapping.yaml -o ep01.json        # 单集编译
-mss compile main/ --assets mapping.yaml -o novel.json        # 批量编译整个目录
-mss validate 01.md --assets mapping.yaml                     # 验证（不输出 JSON）
+mss compile 01.md --assets mapping.json -o ep01.json        # 单集编译
+mss compile main/ --assets mapping.json -o novel.json        # 批量编译整个目录
+mss validate 01.md --assets mapping.json                     # 验证（不输出 JSON）
 ```
 
 ### 6.2 核心职责

@@ -1,17 +1,16 @@
-// Package resolver maps semantic asset names to full OSS URLs via a YAML mapping file.
+// Package resolver maps semantic asset names to full OSS URLs via a JSON mapping file.
 package resolver
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
-// mappingFile mirrors the top-level structure of the YAML mapping file.
+// mappingFile mirrors the top-level structure of the JSON mapping file.
 type mappingFile struct {
-	BaseURL string                 `yaml:"base_url"`
-	Assets  map[string]interface{} `yaml:"assets"`
+	BaseURL string                 `json:"base_url"`
+	Assets  map[string]interface{} `json:"assets"`
 }
 
 // Resolver resolves semantic asset names to full URLs using a YAML mapping.
@@ -25,7 +24,7 @@ type Resolver struct {
 	Minigames  map[string]string
 }
 
-// LoadMapping reads and parses a YAML mapping file, returning a ready Resolver.
+// LoadMapping reads and parses a JSON mapping file, returning a ready Resolver.
 func LoadMapping(path string) (*Resolver, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -33,7 +32,7 @@ func LoadMapping(path string) (*Resolver, error) {
 	}
 
 	var mf mappingFile
-	if err := yaml.Unmarshal(data, &mf); err != nil {
+	if err := json.Unmarshal(data, &mf); err != nil {
 		return nil, fmt.Errorf("resolver: parse mapping file: %w", err)
 	}
 

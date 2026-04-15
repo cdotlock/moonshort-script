@@ -8,7 +8,7 @@ import (
 
 func testdataPath() string {
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(file), "..", "..", "testdata", "mapping.yaml")
+	return filepath.Join(filepath.Dir(file), "..", "..", "testdata", "mapping.json")
 }
 
 func TestLoadMapping(t *testing.T) {

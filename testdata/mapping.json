@@ -1,0 +1,61 @@
+{
+  "base_url": "https://oss.mobai.com/novel_001",
+  "assets": {
+    "bg": {
+      "malias_bedroom_morning": "bg/malias_bedroom_morning.png",
+      "malias_bedroom_night": "bg/malias_bedroom_night.png",
+      "school_front": "bg/school_front.png",
+      "school_hallway": "bg/school_hallway.png",
+      "school_classroom": "bg/school_classroom.png",
+      "school_cafeteria": "bg/school_cafeteria.png",
+      "school_gymnasium": "bg/school_gymnasium.png"
+    },
+    "characters": {
+      "mauricio": {
+        "neutral_smirk": "characters/mauricio_neutral_smirk.png",
+        "arms_crossed_angry": "characters/mauricio_arms_crossed_angry.png"
+      },
+      "malia": {
+        "neutral_phone": "characters/malia_neutral_phone.png",
+        "neutral_flat": "characters/malia_neutral_flat.png",
+        "worried": "characters/malia_worried.png",
+        "shocked": "characters/malia_shocked.png"
+      },
+      "easton": {
+        "vulnerable_hopeful": "characters/easton_vulnerable_hopeful.png",
+        "relieved": "characters/easton_relieved.png",
+        "hurt": "characters/easton_hurt.png"
+      },
+      "josie": {
+        "cheerful_wave": "characters/josie_cheerful_wave.png",
+        "nervous_whisper": "characters/josie_nervous_whisper.png",
+        "excited": "characters/josie_excited.png"
+      },
+      "mark": {
+        "grin_confident": "characters/mark_grin_confident.png",
+        "grin_mischief": "characters/mark_grin_mischief.png"
+      },
+      "elias": {
+        "neutral_calm": "characters/elias_neutral_calm.png"
+      }
+    },
+    "music": {
+      "calm_morning": "music/calm_morning.mp3",
+      "upbeat_school": "music/upbeat_school.mp3",
+      "tense_strings": "music/tense_strings.mp3",
+      "casual_lunch": "music/casual_lunch.mp3",
+      "ambient_gym": "music/ambient_gym.mp3",
+      "night_piano": "music/night_piano.mp3"
+    },
+    "sfx": {
+      "crowd_noise": "sfx/crowd_noise.mp3",
+      "phone_buzz": "sfx/phone_buzz.mp3"
+    },
+    "cg": {
+      "window_stare": "cg/window_stare.png"
+    },
+    "minigames": {
+      "qte_challenge": "minigames/qte_challenge/index.html"
+    }
+  }
+}

@@ -36,8 +36,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "mss - MoonShort Script interpreter")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage:")
-	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.yaml] [-o output.json]")
-	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.yaml]")
+	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.json] [-o output.json]")
+	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.json]")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> [-o output.md]     Fix and write (in-place if no -o)")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> --check            Dry run: report issues, don't write")
 	os.Exit(1)
@@ -138,10 +138,13 @@ func compileFile(path string, res emitter.AssetResolver) ([]byte, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	// Validate -- print warnings but don't fail.
+	// Validate -- fail if there are errors; suggest mss fix.
 	errs := validator.Validate(ep)
-	for _, e := range errs {
-		fmt.Fprintf(os.Stderr, "warning: %s: %s\n", path, e.Error())
+	if len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintf(os.Stderr, "error: %s: %s\n", path, e.Error())
+		}
+		return nil, fmt.Errorf("compile %s: validation errors — run `mss fix %s` to attempt auto-repair", path, path)
 	}
 
 	em := emitter.New(res)

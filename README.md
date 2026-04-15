@@ -14,10 +14,10 @@ go build -o bin/mss ./cmd/mss
 
 ```bash
 # Compile a single episode
-mss compile episode.md --assets mapping.yaml -o output.json
+mss compile episode.md --assets mapping.json -o output.json
 
 # Compile an entire novel directory
-mss compile novel_001/main/ --assets mapping.yaml -o novel.json
+mss compile novel_001/main/ --assets mapping.json -o novel.json
 
 # Validate syntax only
 mss validate episode.md
