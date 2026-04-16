@@ -414,7 +414,7 @@ func (e *Emitter) emitAffection(n *ast.AffectionNode) map[string]interface{} {
 func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
 	m := map[string]interface{}{
 		"type":      "if",
-		"condition": n.Condition,
+		"condition": e.emitCondition(n.Condition),
 		"then":      e.emitNodes(n.Then),
 	}
 	if len(n.Else) > 0 {
@@ -423,16 +423,44 @@ func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
 	return m
 }
 
-func (e *Emitter) emitGate(g *ast.GateBlock) []interface{} {
-	routes := make([]interface{}, 0, len(g.Routes))
-	for _, r := range g.Routes {
-		m := map[string]interface{}{"next": r.Target}
-		if r.Condition != "" {
-			m["condition"] = r.Condition
-		}
-		routes = append(routes, m)
+func (e *Emitter) emitGate(g *ast.GateBlock) interface{} {
+	return e.emitGateRoute(g.Routes, 0)
+}
+
+// emitGateRoute recursively builds a nested if/else chain from gate routes.
+func (e *Emitter) emitGateRoute(routes []*ast.GateRoute, idx int) map[string]interface{} {
+	if idx >= len(routes) {
+		return nil
 	}
-	return routes
+
+	r := routes[idx]
+	m := map[string]interface{}{"next": r.Target}
+
+	if r.Condition != nil {
+		m["if"] = e.emitCondition(r.Condition)
+		if idx+1 < len(routes) {
+			m["else"] = e.emitGateRoute(routes, idx+1)
+		}
+	}
+
+	return m
+}
+
+// emitCondition converts a structured Condition to a JSON map.
+func (e *Emitter) emitCondition(c *ast.Condition) map[string]interface{} {
+	m := map[string]interface{}{"type": c.Type}
+	switch c.Type {
+	case "choice":
+		m["option"] = c.Option
+		m["result"] = c.Result
+	case "flag":
+		m["name"] = c.Name
+	case "comparison", "compound":
+		m["expr"] = c.Expr
+	case "influence":
+		m["description"] = c.Description
+	}
+	return m
 }
 
 func (e *Emitter) warn(format string, args ...interface{}) {

@@ -51,10 +51,21 @@ type GateBlock struct {
 
 func (g *GateBlock) nodeType() string { return "gate" }
 
+// Condition represents a semi-structured condition expression.
+// Type determines which fields are populated.
+type Condition struct {
+	Type        string // "choice", "flag", "comparison", "influence", "compound"
+	Option      string // choice: option ID (e.g. "A", "B")
+	Result      string // choice: "success" or "fail"
+	Name        string // flag: signal name (e.g. "EP01_COMPLETE")
+	Expr        string // comparison/compound: expression (e.g. "affection.easton >= 5")
+	Description string // influence: LLM evaluation text
+}
+
 // GateRoute is a single condition→target pair inside a @gate block.
 type GateRoute struct {
-	Condition string // raw condition expression; empty = unconditional/fallback
-	Target    string // destination episode key, e.g. "main/bad/001:01"
+	Condition *Condition // nil = unconditional/fallback
+	Target    string     // destination episode key, e.g. "main/bad/001:01"
 }
 
 // LabelNode marks a jump target inside the episode body.
@@ -323,9 +334,10 @@ func (b *ButterflyNode) nodeType() string { return "butterfly" }
 // ----------------------------------------------------------------------------
 
 // IfNode is a conditional block. Else may be nil.
+// For @else @if chains, Else contains a single IfNode.
 type IfNode struct {
 	ConcurrentFlag
-	Condition string // raw condition expression, e.g. "affection.easton >= 5 && CHA >= 14"
+	Condition *Condition
 	Then      []Node
 	Else      []Node // nil when there is no @else branch
 }

@@ -160,16 +160,15 @@ func TestEmitMinimal(t *testing.T) {
 	}
 
 	// Check gate.
-	gate, ok := result["gate"].([]interface{})
+	gate, ok := result["gate"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("gate is not an array: %T", result["gate"])
+		t.Fatalf("gate should be an object, got %T", result["gate"])
 	}
-	if len(gate) != 1 {
-		t.Fatalf("len(gate) = %d, want 1", len(gate))
+	if gate["next"] != "main:02" {
+		t.Errorf("gate.next = %v, want main:02", gate["next"])
 	}
-	route := gate[0].(map[string]interface{})
-	if route["next"] != "main:02" {
-		t.Errorf("gate[0].next = %v, want main:02", route["next"])
+	if gate["if"] != nil {
+		t.Error("gate.if should be nil for unconditional route")
 	}
 
 	// No warnings expected.

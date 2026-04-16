@@ -782,12 +782,14 @@ func (p *Parser) parseButterfly() (ast.Node, error) {
 	return &ast.ButterflyNode{Description: desc.Literal}, nil
 }
 
-// parseIf parses: @if <condition> { body } [@else { body }]
+// parseIf parses: @if (condition) { body } [@else @if (...) { } | @else { }]
 func (p *Parser) parseIf() (ast.Node, error) {
 	p.advance() // consume "if"
 
-	// Collect the condition as a raw string until we hit LBRACE.
-	condition := p.readUntilLBrace()
+	cond, err := p.readCondition()
+	if err != nil {
+		return nil, err
+	}
 
 	if _, err := p.expect(token.LBRACE); err != nil {
 		return nil, err
@@ -801,45 +803,118 @@ func (p *Parser) parseIf() (ast.Node, error) {
 	}
 
 	node := &ast.IfNode{
-		Condition: condition,
+		Condition: cond,
 		Then:      then,
 	}
 
-	// Check for @else.
+	// Check for @else @if (chain) or @else { } (plain).
 	if p.cur.Type == token.AT && p.peek.Literal == "else" {
 		p.advance() // consume AT
 		p.advance() // consume "else"
-		if _, err := p.expect(token.LBRACE); err != nil {
-			return nil, err
+
+		if p.cur.Type == token.AT && p.peek.Literal == "if" {
+			// @else @if — recursive chain
+			p.advance() // consume AT so parseIf sees "if" as cur
+			elseIf, err := p.parseIf()
+			if err != nil {
+				return nil, err
+			}
+			node.Else = []ast.Node{elseIf}
+		} else {
+			// plain @else { }
+			if _, err := p.expect(token.LBRACE); err != nil {
+				return nil, err
+			}
+			els, err := p.parseBlock()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(token.RBRACE); err != nil {
+				return nil, err
+			}
+			node.Else = els
 		}
-		els, err := p.parseBlock()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(token.RBRACE); err != nil {
-			return nil, err
-		}
-		node.Else = els
 	}
 
 	return node, nil
 }
 
-// readUntilLBrace collects token literals until LBRACE, building a raw condition string.
-func (p *Parser) readUntilLBrace() string {
-	var parts []string
-	for p.cur.Type != token.LBRACE && p.cur.Type != token.EOF {
-		parts = append(parts, p.cur.Literal)
+// readCondition reads a parenthesized condition and classifies it into a Condition.
+// Shared by body @if and gate @if.
+func (p *Parser) readCondition() (*ast.Condition, error) {
+	if _, err := p.expect(token.LPAREN); err != nil {
+		return nil, err
+	}
+
+	var toks []token.Token
+	for p.cur.Type != token.RPAREN && p.cur.Type != token.EOF {
+		toks = append(toks, p.cur)
 		p.advance()
 	}
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += " "
-		}
-		result += part
+
+	if _, err := p.expect(token.RPAREN); err != nil {
+		return nil, err
 	}
-	return result
+
+	return classifyCondition(toks), nil
+}
+
+// classifyCondition determines the condition type from a token list.
+func classifyCondition(toks []token.Token) *ast.Condition {
+	expr := buildExpr(toks)
+
+	// 1. Compound: has && or ||
+	for _, t := range toks {
+		if t.Type == token.AND || t.Type == token.OR {
+			return &ast.Condition{Type: "compound", Expr: expr}
+		}
+	}
+
+	// 2. Influence: influence "description"
+	if len(toks) >= 2 && toks[0].Type == token.IDENT && toks[0].Literal == "influence" && toks[1].Type == token.STRING {
+		return &ast.Condition{Type: "influence", Description: toks[1].Literal}
+	}
+
+	// 3. Choice: IDENT.result (e.g., A.fail, B.success)
+	if len(toks) == 3 && toks[0].Type == token.IDENT && toks[1].Type == token.DOT && toks[2].Type == token.IDENT {
+		result := toks[2].Literal
+		if result == "success" || result == "fail" {
+			return &ast.Condition{Type: "choice", Option: toks[0].Literal, Result: result}
+		}
+	}
+
+	// 4. Comparison: has operator
+	for _, t := range toks {
+		switch t.Type {
+		case token.GTE, token.LTE, token.GT, token.LT, token.EQ, token.NEQ:
+			return &ast.Condition{Type: "comparison", Expr: expr}
+		}
+	}
+
+	// 5. Flag: single identifier
+	return &ast.Condition{Type: "flag", Name: expr}
+}
+
+// buildExpr joins condition tokens into a string, preserving dot notation
+// (no spaces around dots).
+func buildExpr(toks []token.Token) string {
+	var sb strings.Builder
+	for i, t := range toks {
+		if i > 0 {
+			prev := toks[i-1]
+			if t.Type != token.DOT && prev.Type != token.DOT {
+				sb.WriteString(" ")
+			}
+		}
+		if t.Type == token.STRING {
+			sb.WriteString(`"`)
+			sb.WriteString(t.Literal)
+			sb.WriteString(`"`)
+		} else {
+			sb.WriteString(t.Literal)
+		}
+	}
+	return sb.String()
 }
 
 // parseLabel parses: @label <name>
@@ -1045,7 +1120,7 @@ func (p *Parser) parseGateIf() (*ast.GateRoute, error) {
 	p.advance() // consume AT
 	p.advance() // consume "if"
 
-	cond, err := p.readConditionInParens()
+	cond, err := p.readCondition()
 	if err != nil {
 		return nil, err
 	}
@@ -1082,7 +1157,7 @@ func (p *Parser) parseGateElse() (*ast.GateRoute, error) {
 		return nil, err
 	}
 
-	return &ast.GateRoute{Condition: "", Target: target}, nil
+	return &ast.GateRoute{Condition: nil, Target: target}, nil
 }
 
 // parseGateNext parses a bare: @next <target> (unconditional jump)
@@ -1091,7 +1166,7 @@ func (p *Parser) parseGateNext() (*ast.GateRoute, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ast.GateRoute{Condition: "", Target: target}, nil
+	return &ast.GateRoute{Condition: nil, Target: target}, nil
 }
 
 // parseGateNextTarget consumes @next <target> and returns the target string.
@@ -1111,30 +1186,6 @@ func (p *Parser) parseGateNextTarget() (string, error) {
 		return "", err
 	}
 	return target.Literal, nil
-}
-
-// readConditionInParens reads a condition expression wrapped in parentheses.
-// STRING tokens have their quotes preserved.
-func (p *Parser) readConditionInParens() (string, error) {
-	if _, err := p.expect(token.LPAREN); err != nil {
-		return "", err
-	}
-
-	var parts []string
-	for p.cur.Type != token.RPAREN && p.cur.Type != token.EOF {
-		if p.cur.Type == token.STRING {
-			parts = append(parts, "\""+p.cur.Literal+"\"")
-		} else {
-			parts = append(parts, p.cur.Literal)
-		}
-		p.advance()
-	}
-
-	if _, err := p.expect(token.RPAREN); err != nil {
-		return "", err
-	}
-
-	return strings.Join(parts, " "), nil
 }
 
 // isDirectiveStart returns true if cur looks like the start of a new directive

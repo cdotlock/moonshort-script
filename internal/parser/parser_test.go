@@ -79,8 +79,8 @@ func TestParseMinimal(t *testing.T) {
 		t.Fatalf("Gate.Routes count: got %d, want 1", len(ep.Gate.Routes))
 	}
 	def := ep.Gate.Routes[0]
-	if def.Condition != "" {
-		t.Errorf("GateRoute.Condition: got %q, want %q", def.Condition, "")
+	if def.Condition != nil {
+		t.Errorf("GateRoute.Condition: got %v, want nil", def.Condition)
 	}
 	if def.Target != "main:02" {
 		t.Errorf("GateRoute.Target: got %q, want %q", def.Target, "main:02")
@@ -466,7 +466,7 @@ func TestParsePhone(t *testing.T) {
 // TestParseIfElse tests @if with condition and @else block.
 func TestParseIfElse(t *testing.T) {
 	src := `@episode main:01 "Branch" {
-	@if affection.easton >= 5 {
+	@if (affection.easton >= 5) {
 		NARRATOR: Easton smiles at you warmly.
 		@affection easton +1
 	}
@@ -485,8 +485,11 @@ func TestParseIfElse(t *testing.T) {
 	if !ok {
 		t.Fatalf("Body[0]: expected *IfNode, got %T", ep.Body[0])
 	}
-	if ifNode.Condition != "affection . easton >= 5" {
-		t.Errorf("IfNode.Condition: got %q, want %q", ifNode.Condition, "affection . easton >= 5")
+	if ifNode.Condition.Type != "comparison" {
+		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	}
+	if ifNode.Condition.Expr != "affection.easton >= 5" {
+		t.Errorf("Condition.Expr: got %q, want %q", ifNode.Condition.Expr, "affection.easton >= 5")
 	}
 	if len(ifNode.Then) != 2 {
 		t.Fatalf("Then length: got %d, want 2", len(ifNode.Then))
@@ -514,6 +517,55 @@ func TestParseIfElse(t *testing.T) {
 	}
 	if elseNarr.Text != "Easton barely notices you." {
 		t.Errorf("Else narr: got %q", elseNarr.Text)
+	}
+}
+
+// TestParseElseIf tests @if / @else @if / @else chaining.
+func TestParseElseIf(t *testing.T) {
+	src := `@episode main:01 "ElseIf" {
+    @if (affection.easton >= 5) {
+        NARRATOR: High affection.
+    } @else @if (CHA >= 14) {
+        NARRATOR: High charisma.
+    } @else {
+        NARRATOR: Default.
+    }
+    @gate { @next main:02 }
+}`
+	ep := parseOrFail(t, src)
+	if len(ep.Body) != 1 {
+		t.Fatalf("Body length: got %d, want 1", len(ep.Body))
+	}
+
+	ifNode, ok := ep.Body[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *IfNode, got %T", ep.Body[0])
+	}
+	if ifNode.Condition.Type != "comparison" {
+		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	}
+	if len(ifNode.Then) != 1 {
+		t.Fatalf("Then length: got %d, want 1", len(ifNode.Then))
+	}
+
+	// Else should contain exactly one IfNode (the else-if)
+	if len(ifNode.Else) != 1 {
+		t.Fatalf("Else length: got %d, want 1", len(ifNode.Else))
+	}
+	elseIf, ok := ifNode.Else[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("Else[0]: expected *IfNode, got %T", ifNode.Else[0])
+	}
+	if elseIf.Condition.Type != "comparison" {
+		t.Errorf("ElseIf.Condition.Type: got %q, want comparison", elseIf.Condition.Type)
+	}
+	if len(elseIf.Then) != 1 {
+		t.Fatalf("ElseIf.Then length: got %d, want 1", len(elseIf.Then))
+	}
+
+	// Final else
+	if len(elseIf.Else) != 1 {
+		t.Fatalf("ElseIf.Else length: got %d, want 1", len(elseIf.Else))
 	}
 }
 
@@ -656,7 +708,7 @@ func TestParseGates(t *testing.T) {
 	src := `@episode main:01 "Gates" {
 	NARRATOR: The story branches.
 	@gate {
-		@if (choice.A.success):
+		@if (A.success):
 			@next main/good/001:01
 		@else @if (affection.easton >= 10):
 			@next main/bad/001:01
@@ -673,19 +725,28 @@ func TestParseGates(t *testing.T) {
 		t.Fatalf("Gate.Routes count: got %d, want 3", len(ep.Gate.Routes))
 	}
 
-	// Conditional route 0: choice.A.success
+	// Conditional route 0: choice A.success
 	r0 := ep.Gate.Routes[0]
-	if r0.Condition != "choice . A . success" {
-		t.Errorf("Route[0].Condition: got %q, want %q", r0.Condition, "choice . A . success")
+	if r0.Condition.Type != "choice" {
+		t.Errorf("Route[0].Condition.Type: got %q, want %q", r0.Condition.Type, "choice")
+	}
+	if r0.Condition.Option != "A" {
+		t.Errorf("Route[0].Condition.Option: got %q, want %q", r0.Condition.Option, "A")
+	}
+	if r0.Condition.Result != "success" {
+		t.Errorf("Route[0].Condition.Result: got %q, want %q", r0.Condition.Result, "success")
 	}
 	if r0.Target != "main/good/001:01" {
 		t.Errorf("Route[0].Target: got %q, want %q", r0.Target, "main/good/001:01")
 	}
 
-	// Conditional route 1: affection.easton >= 10
+	// Conditional route 1: comparison affection.easton >= 10
 	r1 := ep.Gate.Routes[1]
-	if r1.Condition != "affection . easton >= 10" {
-		t.Errorf("Route[1].Condition: got %q, want %q", r1.Condition, "affection . easton >= 10")
+	if r1.Condition.Type != "comparison" {
+		t.Errorf("Route[1].Condition.Type: got %q, want %q", r1.Condition.Type, "comparison")
+	}
+	if r1.Condition.Expr != "affection.easton >= 10" {
+		t.Errorf("Route[1].Condition.Expr: got %q, want %q", r1.Condition.Expr, "affection.easton >= 10")
 	}
 	if r1.Target != "main/bad/001:01" {
 		t.Errorf("Route[1].Target: got %q, want %q", r1.Target, "main/bad/001:01")
@@ -693,8 +754,8 @@ func TestParseGates(t *testing.T) {
 
 	// Fallback route 2: unconditional
 	r2 := ep.Gate.Routes[2]
-	if r2.Condition != "" {
-		t.Errorf("Route[2].Condition: got %q, want %q (empty)", r2.Condition, "")
+	if r2.Condition != nil {
+		t.Errorf("Route[2].Condition: got %v, want nil", r2.Condition)
 	}
 	if r2.Target != "main:02" {
 		t.Errorf("Route[2].Target: got %q, want %q", r2.Target, "main:02")

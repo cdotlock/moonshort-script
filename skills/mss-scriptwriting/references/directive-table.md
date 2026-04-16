@@ -6,7 +6,8 @@
 |-----------|---------|
 | `@episode <key> <title> { }` | `@episode main:01 "Butterfly" { }` |
 | `@gate { }` | Must be last in episode |
-| `@if (<cond>): @next <key>` | `@if (A fail): @next main/bad/001:01` |
+| `@if (<cond>): @next <key>` | `@if (A.fail): @next main/bad/001:01` — parens required, dot notation |
+| `@else @if (<cond>): @next <key>` | `@else @if ("player showed empathy"): @next main/route/001:01` |
 | `@else: @next <key>` | `@else: @next main:02` |
 | `@label <name>` | `@label AFTER_FIGHT` |
 | `@goto <name>` | `@goto AFTER_FIGHT` |
@@ -80,15 +81,17 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | Directive | Example |
 |-----------|---------|
 | `@affection <char> <+/-N>` | `@affection easton +2` |
-| `@signal <event>` | `@signal EP01_COMPLETE` — also stores as persistent boolean flag; check with `@if EP01_COMPLETE { }` |
+| `@signal <event>` | `@signal EP01_COMPLETE` — also stores as persistent boolean flag; check with `@if (EP01_COMPLETE) { }` |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
 
 ## Flow Control
 
 | Directive | Example |
 |-----------|---------|
-| `@if <cond> { }` | `@if affection.easton >= 5 && CHA >= 14 { }` |
+| `@if (<cond>) { }` | `@if (affection.easton >= 5 && CHA >= 14) { }` — parens required |
+| `@else @if (<cond>) { }` | `} @else @if (affection.easton >= 3) { }` — chained condition |
 | `@else { }` | `} @else { }` |
 
-Conditions: flags/signals (`SIGNAL_NAME` — true if emitted), comparisons (`affection.char >= N`, engine values like `san <= N`, `ATK > 14`), logic (`&&`, `||`)
+Conditions (5 types): choice (`A.fail`), flag (`SIGNAL_NAME`), comparison (`affection.char >= N`), influence (`"description"`), compound (`san <= N || FLAG`)
 Operators: `>=` `<=` `>` `<` `==` `!=`
+Logic: `&&` (and), `||` (or)

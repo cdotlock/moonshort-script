@@ -24,7 +24,7 @@
 | `seq` | number | 集序号（从 1 开始） |
 | `title` | string | 集标题 |
 | `steps` | array | 步骤数组（混合类型，见下文） |
-| `gate` | array\|null | 路由规则数组，集末尾的跳转声明（可选） |
+| `gate` | object\|null | 路由规则（嵌套 if/else 链），集末尾的跳转声明（可选） |
 
 ---
 
@@ -536,7 +536,7 @@ for element in steps:
 
 1. 脚本发出 `@signal EVENT_NAME`
 2. 引擎收到 `{"type": "signal", "event": "EVENT_NAME"}`，执行事件处理并存储该事件名
-3. 后续脚本中 `@if EVENT_NAME { }` 编译为 `{"type": "if", "condition": "EVENT_NAME", "then": [...]}`
+3. 后续脚本中 `@if (EVENT_NAME) { }` 编译为 `{"type": "if", "condition": {"type": "flag", "name": "EVENT_NAME"}, "then": [...]}`
 4. 引擎求值：在已存储的 signal 中查找 `EVENT_NAME` → 找到返回 true，否则返回 false
 
 示例：
@@ -549,11 +549,11 @@ for element in steps:
 
 ```
 // Episode 3: 检查 signal
-@if MINIGAME_PERFECT_EP01 {
+@if (MINIGAME_PERFECT_EP01) {
   NARRATOR: You remember that perfect run.
 }
 ```
-→ JSON: `{"type": "if", "condition": "MINIGAME_PERFECT_EP01", "then": [{"type": "narrator", "text": "You remember that perfect run."}]}`
+→ JSON: `{"type": "if", "condition": {"type": "flag", "name": "MINIGAME_PERFECT_EP01"}, "then": [{"type": "narrator", "text": "You remember that perfect run."}]}`
 
 引擎在求值 `condition: "MINIGAME_PERFECT_EP01"` 时查找已存储的 signal 列表，如果 Episode 1 中触发过该 signal 则返回 true。
 
@@ -573,20 +573,39 @@ for element in steps:
 
 #### `if` — 条件分支
 
+条件为结构化对象，含 `type` 字段标识条件类型。`else` 可以是步骤数组（简单 else）或嵌套的 `if` 对象（`@else @if` 链）。
+
 ```json
 {
   "type": "if",
-  "condition": "affection.easton >= 5 && CHA >= 14",
+  "condition": {"type": "compound", "expr": "affection.easton >= 5 && CHA >= 14"},
   "then": [ ... ],
-  "else": [ ... ]
+  "else": {
+    "type": "if",
+    "condition": {"type": "comparison", "expr": "affection.easton >= 3"},
+    "then": [ ... ],
+    "else": [ ... ]
+  }
 }
 ```
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `condition` | string | 是 | 条件表达式 |
+| `condition` | object | 是 | 结构化条件对象（见条件类型参考） |
 | `then` | array | 是 | 条件成立时执行的步骤 |
-| `else` | array | 否 | 条件不成立时执行的步骤 |
+| `else` | array\|object | 否 | 步骤数组（简单 else）或嵌套 `if` 对象（`@else @if` 链） |
+
+#### 条件类型参考
+
+条件对象包含 `type` 字段和类型特有字段：
+
+| type | 字段 | MSS 语法示例 | JSON 示例 |
+|------|------|-------------|----------|
+| `choice` | `option`, `result` | `A.fail` | `{"type": "choice", "option": "A", "result": "fail"}` |
+| `flag` | `name` | `EP01_COMPLETE` | `{"type": "flag", "name": "EP01_COMPLETE"}` |
+| `comparison` | `expr` | `affection.easton >= 5` | `{"type": "comparison", "expr": "affection.easton >= 5"}` |
+| `influence` | `description` | `"玩家展现过..."` | `{"type": "influence", "description": "玩家展现过..."}` |
+| `compound` | `expr` | `san <= 20 \|\| FAILED_TWICE` | `{"type": "compound", "expr": "san <= 20 \|\| FAILED_TWICE"}` |
 
 #### `label` — 跳转锚点
 
@@ -655,45 +674,47 @@ JSON 输出：
 
 ## 6. Gate 路由
 
-`gate` 是集末尾的路由声明，决定玩家完成本集后跳转到哪一集。
+`gate` 是集末尾的路由声明，决定玩家完成本集后跳转到哪一集。采用嵌套 if/else 链结构，条件为结构化对象。
 
 ```json
-"gate": [
-  {
-    "condition": "A fail",
-    "next": "main/bad/001:01"
-  },
-  {
-    "condition": "玩家展现过对Easton的持续接纳",
-    "next": "main/route/001:01"
-  },
-  {
-    "next": "main:02"
+"gate": {
+  "if": {"type": "choice", "option": "A", "result": "fail"},
+  "next": "main/bad/001:01",
+  "else": {
+    "if": {"type": "influence", "description": "玩家展现过对Easton的持续接纳"},
+    "next": "main/route/001:01",
+    "else": {"next": "main:02"}
   }
-]
+}
 ```
 
 ### 6.1 判定规则
 
-- 引擎从上到下逐条判定 `condition`
-- 第一个命中的路由生效
-- 无 `condition` 的路由为兜底（fallback），全不命中时走这里
+- 引擎按 if → else.if → else 链式判定
+- 第一个命中的条件生效，使用对应的 `next` 跳转
+- 最内层的 `else` 只有 `next` 字段，为兜底路线（fallback）
 
 ### 6.2 条件类型
 
-| 格式 | 类型 | 说明 |
-|------|------|------|
-| `"A fail"` | choice | 选项 ID + 检定结果（success / fail / any） |
-| `"A success"` | choice | 选项 A 检定成功 |
-| `"玩家展现过..."` | influence | 中文描述，LLM 根据蝴蝶效应记录判定 |
-| （无 condition） | fallback | 兜底路线 |
+Gate 中的条件使用与 body `@if` 相同的结构化对象格式（见 4.8 条件类型参考），所有五种类型均可使用：
 
-### 6.3 路由对象
+| type | 说明 | JSON 示例 |
+|------|------|----------|
+| `choice` | 选项检定结果 | `{"type": "choice", "option": "A", "result": "fail"}` |
+| `flag` | 信号布尔标记 | `{"type": "flag", "name": "EP01_COMPLETE"}` |
+| `comparison` | 数值比较 | `{"type": "comparison", "expr": "affection.easton >= 5"}` |
+| `influence` | LLM 蝴蝶效应判定 | `{"type": "influence", "description": "玩家展现过..."}` |
+| `compound` | 复合条件 | `{"type": "compound", "expr": "san <= 20 \|\| FAILED_TWICE"}` |
+
+### 6.3 Gate 节点结构
+
+每个 gate 节点包含以下字段：
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `condition` | string | 否 | 条件表达式（省略 = 兜底） |
-| `next` | string | 是 | 目标集的 episode_id |
+| `if` | object | 否 | 结构化条件对象（兜底节点无此字段） |
+| `next` | string | 是 | 条件命中时跳转的目标 episode_id |
+| `else` | object | 否 | 下一个 gate 节点（嵌套 if/else）或仅含 `next` 的兜底节点 |
 
 ---
 
@@ -858,7 +879,7 @@ JSON 输出：
     },
     {
       "type": "if",
-      "condition": "affection.easton >= 5 && CHA >= 14",
+      "condition": {"type": "compound", "expr": "affection.easton >= 5 && CHA >= 14"},
       "then": [
         {"type": "dialogue", "character": "easton", "text": "You remembered."}
       ],
@@ -868,18 +889,14 @@ JSON 输出：
     },
     {"type": "signal", "event": "EP01_COMPLETE"}
   ],
-  "gate": [
-    {
-      "condition": "A fail",
-      "next": "main/bad/001:01"
-    },
-    {
-      "condition": "玩家展现过对Easton的持续接纳",
-      "next": "main/route/001:01"
-    },
-    {
-      "next": "main:02"
+  "gate": {
+    "if": {"type": "choice", "option": "A", "result": "fail"},
+    "next": "main/bad/001:01",
+    "else": {
+      "if": {"type": "influence", "description": "玩家展现过对Easton的持续接纳"},
+      "next": "main/route/001:01",
+      "else": {"next": "main:02"}
     }
-  ]
+  }
 }
 ```

@@ -40,6 +40,7 @@ Every script follows this skeleton:
   // Routing — MUST be last
   @gate {
     @if (<condition>): @next <target>
+    @else @if (<condition>): @next <target>
     @else: @next <fallback>
   }
 }
@@ -281,11 +282,11 @@ These are declarations — the game engine handles the actual math.
 @butterfly "Accepted Easton's approach"    // Recorded for LLM-based route evaluation
 ```
 
-> **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if san <= 20 { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
+> **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
 **`@signal` has two roles:**
 1. **Engine notification**: emits a named event for achievements, UI triggers, analytics, etc.
-2. **Persistent boolean flag**: the engine stores every signal permanently. You can check if a signal was emitted using `@if SIGNAL_NAME { }` — this evaluates to TRUE if the signal exists, FALSE otherwise. This is how hidden storylines are triggered.
+2. **Persistent boolean flag**: the engine stores every signal permanently. You can check if a signal was emitted using `@if (SIGNAL_NAME) { }` — this evaluates to TRUE if the signal exists, FALSE otherwise. This is how hidden storylines are triggered.
 
 Example — signal emitted in Episode 1, checked in Episode 3:
 ```
@@ -293,7 +294,7 @@ Example — signal emitted in Episode 1, checked in Episode 3:
 @signal MINIGAME_PERFECT_EP01
 
 // Episode 3
-@if MINIGAME_PERFECT_EP01 {
+@if (MINIGAME_PERFECT_EP01) {
   NARRATOR: You remember that perfect run.
 }
 ```
@@ -304,30 +305,39 @@ Example — signal emitted in Episode 1, checked in Episode 3:
 
 ### Conditional content
 
-Use `@if` to show different content based on game state. The engine evaluates conditions at runtime.
+Use `@if` to show different content based on game state. **Parentheses `()` are mandatory** around the condition. The engine evaluates conditions at runtime. Use `@else @if` to chain multiple conditions.
 
 ```
-@if affection.easton >= 5 && CHA >= 14 {
+@if (affection.easton >= 5 && CHA >= 14) {
   EASTON: You remembered.
+} @else @if (affection.easton >= 3) {
+  EASTON: ...I wasn't sure you'd come.
 } @else {
   EASTON: ...Hey.
 }
 
-@if san <= 20 || FAILED_TWICE {
+@if (san <= 20 || FAILED_TWICE) {
   YOU: I can barely keep it together.
 }
 ```
 
-**Condition syntax:**
-- Flags/signals (boolean): `SIGNAL_NAME` (true if the signal was ever emitted, false otherwise)
-- Numeric comparisons: `affection.<char>` or any engine-managed value name (e.g., `san`, `xp`, `hp` — names defined by engine) + operator + number
-- Operators: `>=` `<=` `>` `<` `==` `!=`
-- Logic: `&&` (and), `||` (or)
+**Condition types (5 kinds):**
+
+| Type | Syntax | Example |
+|------|--------|---------|
+| flag | `SIGNAL_NAME` | `@if (EP01_COMPLETE) { }` |
+| comparison | `value op number` | `@if (affection.easton >= 5) { }` |
+| compound | `expr && expr` / `expr \|\| expr` | `@if (san <= 20 \|\| FAILED_TWICE) { }` |
+| choice | `OPTION.result` | `@if (A.fail) { }` (body @if only, rare) |
+| influence | `"description"` | `@if ("player showed empathy") { }` (body @if only, rare) |
+
+**Operators:** `>=` `<=` `>` `<` `==` `!=`
+**Logic:** `&&` (and), `||` (or)
 
 ### Labels and goto (advanced, avoid if possible)
 
 ```
-@if SKIP_FIGHT {
+@if (SKIP_FIGHT) {
   @goto AFTER_FIGHT
 }
 // ... fight content ...
@@ -339,24 +349,32 @@ Only use `@goto`/`@label` when structured nesting can't express the flow. Prefer
 
 ## Routing (Gate)
 
-The `@gate` block at the end of every episode declares where the player goes next. The engine evaluates conditions top-to-bottom — first match wins. If nothing matches, `@else` is the fallback.
+The `@gate` block at the end of every episode declares where the player goes next. Use `@if` → `@else @if` → `@else` chains. First match wins. `@else` is the fallback.
 
 ```
 @gate {
-  // Choice-based: route based on the player's choice
-  @if (A fail): @next main/bad/001:01
+  // Choice-based: route based on the player's choice (dot notation)
+  @if (A.fail): @next main/bad/001:01
 
   // Influence-based: route based on accumulated butterfly effects (LLM evaluates)
-  @if ("Player has repeatedly shown empathy toward Easton"): @next main/route/001:01
+  @else @if ("Player has repeatedly shown empathy toward Easton"): @next main/route/001:01
 
   // Fallback
   @else: @next main:02
 }
 ```
 
-**Choice condition format:** `<option_id> <result>`
+**Choice condition format:** `<option_id>.<result>` (dot notation, no space)
 - option_id: A, B, C... (matches the option's ID)
 - result: `success` | `fail` | `any`
+- Example: `A.fail`, `B.success`, `C.any`
+
+**All 5 condition types work in gate:**
+- Choice: `@if (A.fail): @next ...`
+- Flag: `@if (EP01_COMPLETE): @next ...`
+- Comparison: `@if (affection.easton >= 5): @next ...`
+- Influence: `@if ("player showed empathy"): @next ...`
+- Compound: `@if (san <= 20 || FAILED_TWICE): @next ...`
 
 **Influence condition:** A quoted natural language description. At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
 
@@ -376,7 +394,9 @@ The `@gate` block at the end of every episode declares where the player goes nex
 10. **Nested `@choice` blocks** — Only one `@choice` per episode. Multiple choices in one episode is not supported.
 11. **Using `&` on block structures** — `&choice`, `&cg show`, `&minigame`, `&phone show`, `&if`, `&gate` are all errors. Block structures always use `@`.
 12. **Forgetting to use `&` for scene setup** — When a scene starts with bg + music + character entrances, the first directive uses `@` and the rest should use `&` so they execute together. Writing all of them with `@` makes them sequential, which looks choppy.
-13. **Trying to set engine values from scripts** — `@xp`, `@san` are not valid directives. The engine manages these values internally. Scripts can only check them in `@if` conditions (e.g., `@if san <= 20 { }`), not modify them.
+13. **Trying to set engine values from scripts** — `@xp`, `@san` are not valid directives. The engine manages these values internally. Scripts can only check them in `@if` conditions (e.g., `@if (san <= 20) { }`), not modify them.
+14. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
+15. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
 
 ## Remix Scripts
 

@@ -1,19 +1,24 @@
 {
   "branch_key": "main",
   "episode_id": "main:01",
-  "gate": [
-    {
-      "condition": "choice . A . fail",
-      "next": "main/bad/001:01"
-    },
-    {
-      "condition": "influence \"Player has repeatedly shown empathy toward Easton\"",
+  "gate": {
+    "else": {
+      "else": {
+        "next": "main:02"
+      },
+      "if": {
+        "description": "Player has repeatedly shown empathy toward Easton",
+        "type": "influence"
+      },
       "next": "main/route/001:01"
     },
-    {
-      "next": "main:02"
-    }
-  ],
+    "if": {
+      "option": "A",
+      "result": "fail",
+      "type": "choice"
+    },
+    "next": "main/bad/001:01"
+  },
   "seq": 1,
   "steps": [
     [
