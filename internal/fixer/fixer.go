@@ -41,10 +41,11 @@ var knownKeywords = map[string]bool{
 	"episode":   true,
 	"on":        true,
 	"check":     true,
+	"pause":     true,
 }
 
-// allCapsColonRe matches lines like "@NARRATOR: text" or "@MAURICIO: text".
-var allCapsColonRe = regexp.MustCompile(`^@([A-Z][A-Z0-9_]+):`)
+// allCapsColonRe matches lines like "@NARRATOR: text" or "&NARRATOR: text".
+var allCapsColonRe = regexp.MustCompile(`^[@&]([A-Z][A-Z0-9_]+):`)
 
 // Fix applies all auto-repairs to input and then runs error checks on the result.
 func Fix(input string) *FixResult {
@@ -62,19 +63,20 @@ func Fix(input string) *FixResult {
 			line = trimmed
 		}
 
-		// 2. Extra @ on dialogue lines: @ALLCAPS: text → ALLCAPS: text
+		// 2. Extra @/& on dialogue lines: @ALLCAPS: text → ALLCAPS: text
 		if m := allCapsColonRe.FindStringSubmatch(line); m != nil {
 			name := m[1]
 			if !knownKeywords[strings.ToLower(name)] {
+				prefix := string(line[0])
 				old := line
-				line = line[1:] // strip leading @
-				r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: removed @ from dialogue line @%s:", lineNum, name))
+				line = line[1:] // strip leading @/&
+				r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: removed %s from dialogue line %s%s:", lineNum, prefix, prefix, name))
 				_ = old
 			}
 		}
 
-		// 3. Character name casing in directives: @Mauricio show → @mauricio show
-		if strings.HasPrefix(line, "@") && !allCapsColonRe.MatchString("@"+line[1:]) {
+		// 3. Character name casing in directives: @Mauricio/@mauricio, &Mauricio/&mauricio
+		if (strings.HasPrefix(line, "@") || strings.HasPrefix(line, "&")) && !allCapsColonRe.MatchString(line) {
 			line = fixDirectiveCasing(line, lineNum, r)
 		}
 
@@ -98,15 +100,16 @@ func Fix(input string) *FixResult {
 	return r
 }
 
-// fixDirectiveCasing lowercases the word after @ if it's not a known keyword.
+// fixDirectiveCasing lowercases the word after @/& if it's not a known keyword.
 func fixDirectiveCasing(line string, lineNum int, r *FixResult) string {
-	// line starts with "@"
+	// line starts with "@" or "&"
+	prefix := string(line[0])
 	rest := line[1:]
 	if len(rest) == 0 {
 		return line
 	}
 
-	// Extract the first word after @
+	// Extract the first word after @/&
 	idx := strings.IndexFunc(rest, func(r rune) bool {
 		return r == ' ' || r == '\t' || r == '{' || r == ':'
 	})
@@ -130,16 +133,16 @@ func fixDirectiveCasing(line string, lineNum int, r *FixResult) string {
 	if knownKeywords[lower] {
 		// Still fix casing if the keyword itself was wrong-cased (e.g., @BG → @bg)
 		if word != lower {
-			r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: keyword casing @%s → @%s", lineNum, word, lower))
-			return "@" + lower + after
+			r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: keyword casing %s%s → %s%s", lineNum, prefix, word, prefix, lower))
+			return prefix + lower + after
 		}
 		return line
 	}
 
 	// Not a known keyword — this is a character name. Lowercase it.
 	if word != lower {
-		r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: character name casing @%s → @%s", lineNum, word, lower))
-		return "@" + lower + after
+		r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: character name casing %s%s → %s%s", lineNum, prefix, word, prefix, lower))
+		return prefix + lower + after
 	}
 
 	return line
@@ -149,7 +152,7 @@ func fixDirectiveCasing(line string, lineNum int, r *FixResult) string {
 func fixUnquotedArgs(line string, lineNum int, r *FixResult) string {
 	trimmed := strings.TrimSpace(line)
 
-	for _, directive := range []string{"@butterfly", "@signal"} {
+	for _, directive := range []string{"@butterfly", "@signal", "&butterfly", "&signal"} {
 		if !strings.HasPrefix(trimmed, directive+" ") && !strings.HasPrefix(trimmed, directive+"\t") {
 			continue
 		}

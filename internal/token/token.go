@@ -34,10 +34,11 @@ const (
 	OR  Type = "OR"  // ||
 
 	// Punctuation
-	AT      Type = "AT"      // @
-	COLON   Type = "COLON"   // :
-	DOT     Type = "DOT"     // .
-	COMMENT Type = "COMMENT" // // ...
+	AT        Type = "AT"        // @
+	AMPERSAND Type = "AMPERSAND" // &
+	COLON     Type = "COLON"     // :
+	DOT       Type = "DOT"       // .
+	COMMENT   Type = "COMMENT"   // // ...
 )
 
 // String returns a human-readable name for the token type.
@@ -87,6 +88,8 @@ func (t Type) String() string {
 		return "OR"
 	case AT:
 		return "AT"
+	case AMPERSAND:
+		return "AMPERSAND"
 	case COLON:
 		return "COLON"
 	case DOT:

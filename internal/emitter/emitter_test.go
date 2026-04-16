@@ -316,3 +316,83 @@ func TestEmitChoice(t *testing.T) {
 		t.Errorf("optB.steps[0].type = %v", stepsB[0].(map[string]interface{})["type"])
 	}
 }
+
+func TestEmitConcurrentGrouping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "Concurrent",
+		Body: []ast.Node{
+			// Group: bg (leader) + music (concurrent) + char_show (concurrent)
+			&ast.BgSetNode{Name: "school_classroom", Transition: "fade"},
+			func() ast.Node {
+				n := &ast.MusicPlayNode{Track: "calm_morning"}
+				n.SetConcurrent(true)
+				return n
+			}(),
+			func() ast.Node {
+				n := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk", Position: "right"}
+				n.SetConcurrent(true)
+				return n
+			}(),
+			// Standalone dialogue
+			&ast.NarratorNode{Text: "Hello."},
+			// Pause
+			&ast.PauseNode{Clicks: 1},
+		},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{{Target: "main:02"}},
+		},
+	}
+
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("JSON unmarshal failed: %v", err)
+	}
+
+	steps := result["steps"].([]interface{})
+	if len(steps) != 3 {
+		t.Fatalf("len(steps) = %d, want 3 (1 group + 1 narrator + 1 pause)", len(steps))
+	}
+
+	// Step 0: concurrent group (array of 3 items)
+	group, ok := steps[0].([]interface{})
+	if !ok {
+		t.Fatalf("steps[0] should be an array (concurrent group), got %T", steps[0])
+	}
+	if len(group) != 3 {
+		t.Fatalf("concurrent group length: got %d, want 3", len(group))
+	}
+	bgStep := group[0].(map[string]interface{})
+	if bgStep["type"] != "bg" {
+		t.Errorf("group[0].type = %v, want bg", bgStep["type"])
+	}
+	musicStep := group[1].(map[string]interface{})
+	if musicStep["type"] != "music_play" {
+		t.Errorf("group[1].type = %v, want music_play", musicStep["type"])
+	}
+	charStep := group[2].(map[string]interface{})
+	if charStep["type"] != "char_show" {
+		t.Errorf("group[2].type = %v, want char_show", charStep["type"])
+	}
+
+	// Step 1: narrator (standalone object)
+	narr := steps[1].(map[string]interface{})
+	if narr["type"] != "narrator" {
+		t.Errorf("steps[1].type = %v, want narrator", narr["type"])
+	}
+
+	// Step 2: pause
+	pauseStep := steps[2].(map[string]interface{})
+	if pauseStep["type"] != "pause" {
+		t.Errorf("steps[2].type = %v, want pause", pauseStep["type"])
+	}
+	if pauseStep["clicks"] != float64(1) {
+		t.Errorf("steps[2].clicks = %v, want 1", pauseStep["clicks"])
+	}
+}

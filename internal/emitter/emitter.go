@@ -53,15 +53,56 @@ func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 	return json.MarshalIndent(out, "", "  ")
 }
 
-// emitNodes converts a slice of AST nodes into a slice of step maps.
+// isConcurrent checks if a node carries the concurrent (&) flag.
+func isConcurrent(n ast.Node) bool {
+	if hc, ok := n.(ast.HasConcurrent); ok {
+		return hc.GetConcurrent()
+	}
+	return false
+}
+
+// emitNodes converts a slice of AST nodes into a slice of steps, grouping
+// consecutive concurrent (&-prefixed) nodes into sub-arrays.
+//
+// Grouping rule:
+//   - A non-concurrent node (@-prefixed or dialogue) starts a potential group.
+//   - Following &-concurrent nodes join the group.
+//   - When the next non-concurrent node arrives, the group is flushed.
+//   - Single-item groups are emitted as plain objects.
+//   - Multi-item groups are emitted as arrays (concurrent execution).
 func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
-	steps := make([]interface{}, 0, len(nodes))
+	var steps []interface{}
+	var group []interface{} // current group being accumulated
+
+	flush := func() {
+		if len(group) == 0 {
+			return
+		}
+		if len(group) == 1 {
+			steps = append(steps, group[0])
+		} else {
+			steps = append(steps, group)
+		}
+		group = nil
+	}
+
 	for _, n := range nodes {
 		step := e.emitNode(n)
-		if step != nil {
-			steps = append(steps, step)
+		if step == nil {
+			continue
+		}
+
+		if isConcurrent(n) {
+			// & node: join the current group
+			group = append(group, step)
+		} else {
+			// @ or dialogue node: flush previous group, start new
+			flush()
+			group = append(group, step)
 		}
 	}
+	flush()
+
 	return steps
 }
 
@@ -120,6 +161,8 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		return e.emitIf(v)
 	case *ast.LabelNode:
 		return map[string]interface{}{"type": "label", "name": v.Name}
+	case *ast.PauseNode:
+		return map[string]interface{}{"type": "pause", "clicks": v.Clicks}
 	case *ast.GotoNode:
 		return map[string]interface{}{"type": "goto", "target": v.Name}
 	default:

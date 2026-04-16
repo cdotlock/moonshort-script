@@ -10,6 +10,16 @@
 | `@else: @next <key>` | `@else: @next main:02` |
 | `@label <name>` | `@label AFTER_FIGHT` |
 | `@goto <name>` | `@goto AFTER_FIGHT` |
+| `@pause for <N>` | `@pause for 1` — Wait for N player clicks before advancing |
+
+## Concurrency
+
+| Prefix | Meaning | Example |
+|--------|---------|---------|
+| `@` | Sequential (new group) | `@bg set classroom fade` |
+| `&` | Concurrent (join group) | `&music play calm_morning` |
+
+`&` cannot be used on: `choice`, `cg show`, `minigame`, `phone show`, `if`, `gate`, `episode`
 
 ## Visual (object-action)
 

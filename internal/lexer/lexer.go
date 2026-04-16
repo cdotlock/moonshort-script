@@ -233,6 +233,10 @@ func (l *Lexer) NextToken() token.Token {
 		l.advance(); l.advance()
 		return l.makeToken(token.AND, "&&", line, col)
 
+	case ch == '&':
+		l.advance()
+		return l.makeToken(token.AMPERSAND, "&", line, col)
+
 	case ch == '|' && l.peekAt(1) == '|':
 		l.advance(); l.advance()
 		return l.makeToken(token.OR, "||", line, col)

@@ -727,3 +727,76 @@ func TestParseGates(t *testing.T) {
 		t.Errorf("Route[2].Target: got %q, want %q", r2.Target, "main:02")
 	}
 }
+
+// TestParseConcurrent tests that & prefix produces nodes with Concurrent=true.
+func TestParseConcurrent(t *testing.T) {
+	src := `@episode main:01 "Concurrent" {
+    @bg set classroom fade
+    &music play theme_main
+    &malia show neutral at left
+    NARRATOR: Hello.
+    @gate { @next main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 4 {
+		t.Fatalf("Body length: got %d, want 4", len(ep.Body))
+	}
+
+	// Body[0]: bg (non-concurrent, leader)
+	bg, ok := ep.Body[0].(*ast.BgSetNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *BgSetNode, got %T", ep.Body[0])
+	}
+	if bg.GetConcurrent() {
+		t.Error("BgSetNode should not be concurrent (leader)")
+	}
+
+	// Body[1]: music (concurrent)
+	mp, ok := ep.Body[1].(*ast.MusicPlayNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *MusicPlayNode, got %T", ep.Body[1])
+	}
+	if !mp.GetConcurrent() {
+		t.Error("MusicPlayNode should be concurrent")
+	}
+
+	// Body[2]: char show (concurrent)
+	cs, ok := ep.Body[2].(*ast.CharShowNode)
+	if !ok {
+		t.Fatalf("Body[2]: expected *CharShowNode, got %T", ep.Body[2])
+	}
+	if !cs.GetConcurrent() {
+		t.Error("CharShowNode should be concurrent")
+	}
+
+	// Body[3]: narrator (not concurrent)
+	narr, ok := ep.Body[3].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("Body[3]: expected *NarratorNode, got %T", ep.Body[3])
+	}
+	_ = narr
+}
+
+// TestParsePause tests @pause for N.
+func TestParsePause(t *testing.T) {
+	src := `@episode main:01 "Pause" {
+    @bg set classroom
+    @pause for 2
+    NARRATOR: Hello.
+    @gate { @next main:02 }
+}`
+	ep := parseOrFail(t, src)
+
+	if len(ep.Body) != 3 {
+		t.Fatalf("Body length: got %d, want 3", len(ep.Body))
+	}
+
+	pause, ok := ep.Body[1].(*ast.PauseNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *PauseNode, got %T", ep.Body[1])
+	}
+	if pause.Clicks != 2 {
+		t.Errorf("PauseNode.Clicks: got %d, want 2", pause.Clicks)
+	}
+}

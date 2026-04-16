@@ -18,7 +18,7 @@ var knownKeywords = map[string]bool{
 	"xp": true, "san": true, "affection": true, "signal": true,
 	"butterfly": true, "if": true, "else": true, "label": true,
 	"goto": true, "episode": true, "on": true,
-	"option": true, "gate": true, "next": true,
+	"option": true, "gate": true, "next": true, "pause": true,
 }
 
 // Parser consumes tokens from a Lexer and produces an AST.
@@ -139,6 +139,11 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 			body = append(body, node)
 		}
 	}
+	// Drain final pending node if any.
+	if p.pending != nil {
+		body = append(body, p.pending)
+		p.pending = nil
+	}
 	return body, gates, nil
 }
 
@@ -174,6 +179,9 @@ func (p *Parser) parseStatement() (ast.Node, error) {
 	if p.cur.Type == token.AT {
 		return p.parseDirective()
 	}
+	if p.cur.Type == token.AMPERSAND {
+		return p.parseConcurrentDirective()
+	}
 	if p.cur.Type == token.IDENT && p.peek.Type == token.COLON {
 		return p.parseDialogue()
 	}
@@ -183,6 +191,20 @@ func (p *Parser) parseStatement() (ast.Node, error) {
 	// Skip unexpected tokens to avoid infinite loops.
 	p.advance()
 	return nil, nil
+}
+
+// parseConcurrentDirective handles &-prefixed directives. It parses the
+// directive the same way as @-prefixed ones, then marks the resulting node
+// as concurrent.
+func (p *Parser) parseConcurrentDirective() (ast.Node, error) {
+	node, err := p.parseDirective() // parseDirective consumes AT/AMPERSAND via advance
+	if err != nil {
+		return nil, err
+	}
+	if hc, ok := node.(ast.HasConcurrent); ok {
+		hc.SetConcurrent(true)
+	}
+	return node, nil
 }
 
 // parseDialogue handles IDENT COLON text lines (NARRATOR, YOU, or character).
@@ -304,9 +326,9 @@ func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
 	}, nil
 }
 
-// parseDirective parses an @-prefixed directive.
+// parseDirective parses an @-prefixed or &-prefixed directive.
 func (p *Parser) parseDirective() (ast.Node, error) {
-	p.advance() // consume AT
+	p.advance() // consume AT or AMPERSAND
 	keyword := p.cur.Literal
 
 	switch keyword {
@@ -342,6 +364,8 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 		return p.parseLabel()
 	case "goto":
 		return p.parseGoto()
+	case "pause":
+		return p.parsePause()
 	default:
 		// Not a known keyword — treat as character directive.
 		return p.parseCharDirective(keyword)
@@ -862,6 +886,27 @@ func (p *Parser) parseGoto() (ast.Node, error) {
 	return &ast.GotoNode{Name: name.Literal}, nil
 }
 
+// parsePause parses: @pause for <N>
+func (p *Parser) parsePause() (ast.Node, error) {
+	p.advance() // consume "pause"
+	// Expect "for"
+	if p.cur.Type != token.IDENT || p.cur.Literal != "for" {
+		return nil, fmt.Errorf("line %d col %d: expected 'for' after 'pause', got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+	p.advance() // consume "for"
+	n, err := p.expect(token.NUMBER)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: expected number after 'pause for', got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+	clicks, _ := strconv.Atoi(n.Literal)
+	if clicks < 1 {
+		clicks = 1
+	}
+	return &ast.PauseNode{Clicks: clicks}, nil
+}
+
 // parseCharDirective parses character directives like:
 //
 //	@mauricio show neutral at center
@@ -1121,9 +1166,9 @@ func (p *Parser) readConditionInParens() (string, error) {
 // optional trailing IDENTs.
 func (p *Parser) isDirectiveStart() bool {
 	// We only need this for optional-ident lookahead. If the current IDENT
-	// is followed by AT or followed by COLON (dialogue), it's a new statement.
-	if p.peek.Type == token.AT {
-		return false // The current ident is before an AT — it's likely a param.
+	// is followed by AT/AMPERSAND or followed by COLON (dialogue), it's a new statement.
+	if p.peek.Type == token.AT || p.peek.Type == token.AMPERSAND {
+		return false // The current ident is before an @/& — it's likely a param.
 	}
 	if p.peek.Type == token.COLON {
 		// Current IDENT + COLON = dialogue start. Don't consume.

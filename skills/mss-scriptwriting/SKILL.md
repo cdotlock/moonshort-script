@@ -47,18 +47,25 @@ Every script follows this skeleton:
 
 The `branch_key` follows a strict addressing format. Read `references/addressing.md` for the full scheme.
 
-## The Two Languages in One File
+## The Three Syntaxes in One File
 
-MSS has two syntaxes that alternate freely:
+MSS has three syntaxes that alternate freely:
 
-**1. Directive lines** start with `@` — these control visuals, audio, game mechanics, and flow:
+**1. Directive lines** start with `@` — these control visuals, audio, game mechanics, and flow. Each `@` starts a new sequential step:
 ```
 @bg set school_hallway fade
 @mauricio show neutral_smirk at right
 @music play tense_strings
 ```
 
-**2. Dialogue lines** start with a CHARACTER NAME in caps followed by colon — these are what the player reads:
+**2. Concurrent directives** start with `&` — these execute simultaneously with the preceding `@` directive. Use `&` to group actions that should happen at the same time (e.g. scene setup):
+```
+@bg set school_hallway fade          // @ starts a new step group
+&music crossfade tense_strings       // & concurrent with bg
+&mauricio show neutral_smirk at right // & concurrent with bg
+```
+
+**3. Dialogue lines** start with a CHARACTER NAME in caps followed by colon — these are what the player reads:
 ```
 MAURICIO: Hey, Butterfly.
 NARRATOR: Senior year. Day one.
@@ -79,6 +86,15 @@ MAURICIO [arms_crossed_angry]: Your call, Butterfly.
 ## Visual Directives
 
 All visual directives use **object-action** order: `@<object> <action> [params]`.
+
+**Scene setup** — use `&` to group the background, music, and character entrances that happen together at the start of a scene:
+
+```
+@bg set school_front fade
+&music crossfade upbeat_school
+&malia show neutral_flat at left
+&josie show cheerful_wave at right
+```
 
 ### Characters
 
@@ -117,6 +133,49 @@ CG replaces the entire screen. Nest dialogue inside the block — it plays over 
   NARRATOR: She stood there for what felt like hours.
 }
 ```
+
+## Concurrency (@ vs &)
+
+**`@`** = sequential. Each `@` directive starts a new step that executes after the previous one completes.
+
+**`&`** = concurrent. A `&` directive joins the previous `@` directive's step group — they execute simultaneously.
+
+**Dialogue** = always standalone. Each dialogue line is its own step that waits for the player to tap.
+
+### Rules
+
+- `&` CANNOT be used on block structures: `choice`, `cg`, `minigame`, `phone`, `if`, `gate`, `episode`. These always use `@`.
+- A `&` line must follow an `@` line or another `&` line — it cannot appear at the start of a sequence with no preceding `@`.
+
+### When to use `&`
+
+- **Scene setup**: bg + music + characters entering at the start of a scene should fire together:
+  ```
+  @bg set school_cafeteria fade
+  &music crossfade casual_lunch
+  &mark show grin_confident at right
+  &malia show neutral_flat at left
+  ```
+- **State changes that happen together**: multiple stat changes after a single event.
+
+### When to use `@`
+
+- **Standalone actions**: anything that needs to visually complete before the next step (e.g. a character entrance the player should notice individually).
+- **Anything that needs to complete before the next step**: a background change that sets the mood before characters appear.
+
+### `@pause for N`
+
+Wait for N player clicks before advancing to the next step. Use this to give the player a moment to absorb a new scene before dialogue starts.
+
+```
+@bg set malias_bedroom_morning
+&music play calm_morning
+&malia show neutral_phone at left
+@pause for 1
+NARRATOR: Senior year. Day one.
+```
+
+The player sees the scene load (background, music, and character all at once), then must tap once before the narrator line appears. This creates a natural beat — the player takes in the visuals before reading.
 
 ## Audio
 
@@ -306,6 +365,8 @@ The `@gate` block at the end of every episode declares where the player goes nex
 8. **Forgetting `@butterfly` in choice outcomes** — Every choice outcome should record what happened for the influence system.
 9. **Writing asset paths instead of semantic names** — Scripts use names like `classroom_morning`, not URLs or file paths. The interpreter handles mapping.
 10. **Nested `@choice` blocks** — Only one `@choice` per episode. Multiple choices in one episode is not supported.
+11. **Using `&` on block structures** — `&choice`, `&cg show`, `&minigame`, `&phone show`, `&if`, `&gate` are all errors. Block structures always use `@`.
+12. **Forgetting to use `&` for scene setup** — When a scene starts with bg + music + character entrances, the first directive uses `@` and the rest should use `&` so they execute together. Writing all of them with `@` makes them sequential, which looks choppy.
 
 ## Remix Scripts
 
@@ -340,6 +401,7 @@ These aren't enforced by the interpreter, but they make for a good player experi
 - **Bubbles**: Use sparingly for emotional punctuation, not on every line.
 - **Music transitions**: `crossfade` between scenes, `fadeout` before silence or big moments.
 - **One choice per episode**: This is a design constraint. The whole episode builds toward one decision point.
+- **Use `@pause for 1` after scene setup** to let the player absorb the new scene before dialogue starts. A scene that jumps straight from setup to narration feels rushed.
 
 ## References
 
