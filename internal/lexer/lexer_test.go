@@ -257,6 +257,42 @@ func TestLexBrackets(t *testing.T) {
 	}
 }
 
+// TestLexAmpersandVsAnd tests & (concurrent prefix) vs && (logical AND).
+func TestLexAmpersandVsAnd(t *testing.T) {
+	// Single & followed by ident
+	got := toks("& foo")
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 tokens, got %d", len(got))
+	}
+	if got[0].Type != token.AMPERSAND {
+		t.Errorf("token[0]: got %s, want AMPERSAND", got[0].Type)
+	}
+	if got[1].Type != token.IDENT {
+		t.Errorf("token[1]: got %s, want IDENT", got[1].Type)
+	}
+
+	// Double && should be AND
+	got2 := toks("&&")
+	if len(got2) != 1 {
+		t.Fatalf("expected 1 token for &&, got %d", len(got2))
+	}
+	if got2[0].Type != token.AND {
+		t.Errorf("token[0]: got %s, want AND", got2[0].Type)
+	}
+
+	// Two separate & & should be two AMPERSANDs
+	got3 := toks("& &")
+	if len(got3) != 2 {
+		t.Fatalf("expected 2 tokens for '& &', got %d", len(got3))
+	}
+	if got3[0].Type != token.AMPERSAND {
+		t.Errorf("token[0]: got %s, want AMPERSAND", got3[0].Type)
+	}
+	if got3[1].Type != token.AMPERSAND {
+		t.Errorf("token[1]: got %s, want AMPERSAND", got3[1].Type)
+	}
+}
+
 // TestLexOperators: verify all comparison and logical operators.
 func TestLexOperators(t *testing.T) {
 	cases := []struct {

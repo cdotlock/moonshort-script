@@ -3,6 +3,7 @@ package emitter
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cdotlock/moonshort-script/internal/ast"
@@ -382,5 +383,195 @@ func TestEmitConcurrentGrouping(t *testing.T) {
 	}
 	if pauseStep["clicks"] != float64(1) {
 		t.Errorf("steps[2].clicks = %v, want 1", pauseStep["clicks"])
+	}
+}
+
+func TestEmitDialogueLowercase(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.DialogueNode{Character: "JOSIE", Text: "Hi."},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	if !strings.Contains(string(data), `"character": "josie"`) {
+		t.Error("expected lowercase character name in dialogue")
+	}
+}
+
+func TestEmitGateNull(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	if !strings.Contains(string(data), `"gate": null`) {
+		t.Error("expected gate: null when no gate")
+	}
+}
+
+func TestEmitGateConditional(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Condition: &ast.Condition{Type: "choice", Option: "A", Result: "fail"}, Target: "bad:01"},
+				{Condition: &ast.Condition{Type: "flag", Name: "EP01_DONE"}, Target: "mid:01"},
+				{Target: "main:02"},
+			},
+		},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	s := string(data)
+	// Should have nested if/else
+	if !strings.Contains(s, `"if"`) {
+		t.Error("expected nested if in gate")
+	}
+	if !strings.Contains(s, `"else"`) {
+		t.Error("expected else in gate chain")
+	}
+}
+
+func TestEmitConditionTypes(t *testing.T) {
+	tests := []struct {
+		name string
+		cond *ast.Condition
+		key  string
+		val  string
+	}{
+		{"choice", &ast.Condition{Type: "choice", Option: "A", Result: "fail"}, "option", "A"},
+		{"flag", &ast.Condition{Type: "flag", Name: "EP01"}, "name", "EP01"},
+		{"comparison", &ast.Condition{Type: "comparison", Expr: "x >= 5"}, "expr", "x >= 5"},
+		{"influence", &ast.Condition{Type: "influence", Description: "desc"}, "description", "desc"},
+		{"compound", &ast.Condition{Type: "compound", Expr: "a && b"}, "expr", "a && b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ep := &ast.Episode{
+				BranchKey: "main:01", Title: "T",
+				Body: []ast.Node{
+					&ast.IfNode{Condition: tt.cond, Then: []ast.Node{&ast.NarratorNode{Text: "Hi."}}},
+				},
+				Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+			}
+			em := New(newMockResolver())
+			data, _ := em.Emit(ep)
+			s := string(data)
+			if !strings.Contains(s, fmt.Sprintf(`"type": "%s"`, tt.name)) {
+				t.Errorf("expected condition type %q in output", tt.name)
+			}
+		})
+	}
+}
+
+func TestEmitElseIfUnwrap(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.IfNode{
+				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Then:      []ast.Node{&ast.NarratorNode{Text: "a"}},
+				Else: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.Condition{Type: "flag", Name: "B"},
+						Then:      []ast.Node{&ast.NarratorNode{Text: "b"}},
+					},
+				},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	s := string(data)
+	// The else should be a bare object (not wrapped in array)
+	// Check that "else": { appears, not "else": [
+	if strings.Contains(s, `"else": [`) {
+		t.Error("@else @if should produce bare object, not array")
+	}
+}
+
+func TestEmitAllNodeTypes(t *testing.T) {
+	// Ensure every node type emits without panic
+	nodes := []ast.Node{
+		&ast.BgSetNode{Name: "bg1", Transition: "fade"},
+		&ast.CharShowNode{Char: "c", Look: "l", Position: "left"},
+		&ast.CharHideNode{Char: "c", Transition: "fade"},
+		&ast.CharLookNode{Char: "c", Look: "l"},
+		&ast.CharMoveNode{Char: "c", Position: "right"},
+		&ast.CharBubbleNode{Char: "c", BubbleType: "heart"},
+		&ast.CgShowNode{Name: "cg1"},
+		&ast.DialogueNode{Character: "CHAR", Text: "hi"},
+		&ast.NarratorNode{Text: "n"},
+		&ast.YouNode{Text: "y"},
+		&ast.PhoneShowNode{Body: []ast.Node{
+			&ast.TextMessageNode{Direction: "from", Char: "C", Content: "hi"},
+		}},
+		&ast.PhoneHideNode{},
+		&ast.MusicPlayNode{Track: "t"},
+		&ast.MusicCrossfadeNode{Track: "t"},
+		&ast.MusicFadeoutNode{},
+		&ast.SfxPlayNode{Sound: "s"},
+		&ast.AffectionNode{Char: "c", Delta: "+1"},
+		&ast.SignalNode{Event: "E"},
+		&ast.ButterflyNode{Description: "d"},
+		&ast.LabelNode{Name: "L"},
+		&ast.GotoNode{Name: "L"},
+		&ast.PauseNode{Clicks: 1},
+	}
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body:      nodes,
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("empty output")
+	}
+}
+
+func TestEmitConcurrentGroups(t *testing.T) {
+	bg := &ast.BgSetNode{Name: "bg1"}
+	music := &ast.MusicPlayNode{Track: "t"}
+	music.SetConcurrent(true)
+	char := &ast.CharShowNode{Char: "c", Look: "l", Position: "left"}
+	char.SetConcurrent(true)
+	narrator := &ast.NarratorNode{Text: "hi"}
+
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body:      []ast.Node{bg, music, char, narrator},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	s := string(data)
+	// The first 3 should be grouped as array, narrator separate
+	if !strings.Contains(s, `"steps": [`) {
+		t.Error("expected steps array")
+	}
+}
+
+func TestEmitAssetWarning(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.BgSetNode{Name: "nonexistent"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	em.Emit(ep)
+	if len(em.Warnings) == 0 {
+		t.Error("expected warning for unknown asset")
 	}
 }

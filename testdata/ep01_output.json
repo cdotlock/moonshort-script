@@ -51,13 +51,13 @@
     {
       "messages": [
         {
-          "character": "EASTON",
+          "character": "easton",
           "direction": "from",
           "text": "Can we talk? I miss you.",
           "type": "text_message"
         },
         {
-          "character": "EASTON",
+          "character": "easton",
           "direction": "from",
           "text": "I know I messed up.",
           "type": "text_message"
@@ -106,7 +106,7 @@
       }
     ],
     {
-      "character": "JOSIE",
+      "character": "josie",
       "text": "Malia! Over here!",
       "type": "dialogue"
     },
@@ -116,12 +116,12 @@
       "type": "bubble"
     },
     {
-      "character": "MALIA",
+      "character": "malia",
       "text": "Hey, Jo.",
       "type": "dialogue"
     },
     {
-      "character": "JOSIE",
+      "character": "josie",
       "text": "New year, new Malia. That's the plan, right?",
       "type": "dialogue"
     },
@@ -144,7 +144,7 @@
       }
     ],
     {
-      "character": "JOSIE",
+      "character": "josie",
       "text": "Don't look. Three o'clock.",
       "type": "dialogue"
     },
@@ -162,7 +162,7 @@
       }
     ],
     {
-      "character": "MAURICIO",
+      "character": "mauricio",
       "text": "Hey, Butterfly.",
       "type": "dialogue"
     },
@@ -257,7 +257,7 @@
       }
     ],
     {
-      "character": "MARK",
+      "character": "mark",
       "text": "Yo, Malia! Sit with us!",
       "type": "dialogue"
     },
@@ -300,18 +300,18 @@
               "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
             },
             {
-              "character": "MALIA",
+              "character": "malia",
               "text": "I... I can't do this.",
               "type": "dialogue"
             },
             {
-              "character": "EASTON",
+              "character": "easton",
               "text": "Malia, please",
               "type": "dialogue"
             },
             [
               {
-                "character": "MALIA",
+                "character": "malia",
                 "text": "Not here. Not now.",
                 "type": "dialogue"
               },
@@ -329,12 +329,12 @@
               "url": "https://oss.mobai.com/novel_001/characters/easton_relieved.png"
             },
             {
-              "character": "EASTON",
+              "character": "easton",
               "text": "Can I sit?",
               "type": "dialogue"
             },
             {
-              "character": "MALIA",
+              "character": "malia",
               "text": "You have two minutes.",
               "type": "dialogue"
             },
@@ -371,7 +371,7 @@
               }
             ],
             {
-              "character": "MARK",
+              "character": "mark",
               "text": "HEY EASTON! You want some of my mystery casserole?",
               "type": "dialogue"
             },
@@ -424,7 +424,7 @@
       }
     ],
     {
-      "character": "JOSIE",
+      "character": "josie",
       "text": "Did you see Elias in practice today?",
       "type": "dialogue"
     },
@@ -481,7 +481,7 @@
     {
       "messages": [
         {
-          "character": "UNKNOWN",
+          "character": "unknown",
           "direction": "from",
           "text": "nice curtains, Butterfly",
           "type": "text_message"

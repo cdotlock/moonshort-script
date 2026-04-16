@@ -7,7 +7,7 @@ import (
 	"github.com/cdotlock/moonshort-script/internal/token"
 )
 
-// Lexer tokenizes an NRS script source string.
+// Lexer tokenizes an MSS script source string.
 type Lexer struct {
 	src  []rune
 	pos  int // current read position
@@ -101,12 +101,12 @@ func (l *Lexer) readComment(line, col int) token.Token {
 	return l.makeToken(token.COMMENT, strings.TrimSpace(sb.String()), line, col)
 }
 
-// isIdentStart returns true for runes that can start an NRS identifier.
+// isIdentStart returns true for runes that can start an MSS identifier.
 func isIdentStart(ch rune) bool {
 	return unicode.IsLetter(ch) || ch == '_'
 }
 
-// isIdentContinue returns true for runes that can continue an NRS identifier
+// isIdentContinue returns true for runes that can continue an MSS identifier
 // (letters, digits, underscore, hyphen, forward-slash). Colon is handled
 // separately: it is only consumed as part of an identifier when immediately
 // followed by another word character (e.g. "main:01"), distinguishing it from

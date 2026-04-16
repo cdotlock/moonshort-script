@@ -27,6 +27,7 @@ type Parser struct {
 	cur     token.Token
 	peek    token.Token
 	pending ast.Node // set by parseDialogueWithExpr; drained on next parseStatement call
+	depth   int      // block nesting depth for recursion limit
 }
 
 // New creates a Parser that reads tokens from the given Lexer.
@@ -124,6 +125,9 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 			continue
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
+			if gates != nil {
+				return nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
+			}
 			g, err := p.parseGateBlock()
 			if err != nil {
 				return nil, nil, err
@@ -149,6 +153,11 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 
 // parseBlock parses body nodes until RBRACE (but does NOT consume the RBRACE).
 func (p *Parser) parseBlock() ([]ast.Node, error) {
+	p.depth++
+	defer func() { p.depth-- }()
+	if p.depth > 50 {
+		return nil, fmt.Errorf("line %d col %d: maximum nesting depth exceeded (50)", p.cur.Line, p.cur.Col)
+	}
 	var nodes []ast.Node
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr.
@@ -197,8 +206,33 @@ func (p *Parser) parseStatement() (ast.Node, error) {
 // directive the same way as @-prefixed ones, then marks the resulting node
 // as concurrent.
 func (p *Parser) parseConcurrentDirective() (ast.Node, error) {
+	// Check if this looks like dialogue with & prefix (e.g., &NARRATOR: text)
+	// We peek ahead: if AMPERSAND is followed by an IDENT+COLON pattern, it's a dialogue mistake.
+	if p.peek.Type == token.IDENT {
+		// Check if the ident is all-caps and followed by colon (dialogue pattern)
+		name := p.peek.Literal
+		isUpper := true
+		for _, r := range name {
+			if r < 'A' || r > 'Z' {
+				if r != '_' && (r < '0' || r > '9') {
+					isUpper = false
+					break
+				}
+			}
+		}
+		if isUpper && len(name) > 0 {
+			// Save state to check for colon - we need to peek 2 ahead
+			// The lexer has already loaded peek, so we'd need the token after peek
+			// Instead, just try parsing and catch the error with a better message
+		}
+	}
+
 	node, err := p.parseDirective() // parseDirective consumes AT/AMPERSAND via advance
 	if err != nil {
+		// If the error is about expecting IDENT but got COLON, this is likely &DIALOGUE: text
+		if strings.Contains(err.Error(), "got COLON") || strings.Contains(err.Error(), "got \":\"") {
+			return nil, fmt.Errorf("%v (hint: & prefix cannot be used with dialogue lines, remove the &)", err)
+		}
 		return nil, err
 	}
 	if hc, ok := node.(ast.HasConcurrent); ok {
@@ -617,6 +651,10 @@ func (p *Parser) parseChoice() (ast.Node, error) {
 		}
 	}
 
+	if len(node.Options) == 0 {
+		return nil, fmt.Errorf("line %d col %d: @choice block has no @option entries", p.cur.Line, p.cur.Col)
+	}
+
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
 	}
@@ -698,7 +736,10 @@ func (p *Parser) parseBraveOptionBody(opt *ast.OptionNode) error {
 						if err != nil {
 							return err
 						}
-						dc, _ := strconv.Atoi(val.Literal)
+						dc, dcErr := strconv.Atoi(val.Literal)
+						if dcErr != nil {
+							return fmt.Errorf("line %d col %d: invalid dc value %q", val.Line, val.Col, val.Literal)
+						}
 						check.DC = dc
 					default:
 						p.advance() // skip unknown key values
@@ -765,11 +806,18 @@ func (p *Parser) parseAffection() (ast.Node, error) {
 // parseSignal parses: @signal <event>
 func (p *Parser) parseSignal() (ast.Node, error) {
 	p.advance() // consume "signal"
-	event, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
+	var event string
+	if p.cur.Type == token.STRING {
+		event = p.cur.Literal
+		p.advance()
+	} else {
+		tok, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		event = tok.Literal
 	}
-	return &ast.SignalNode{Event: event.Literal}, nil
+	return &ast.SignalNode{Event: event}, nil
 }
 
 // parseButterfly parses: @butterfly "<desc>"
@@ -847,13 +895,27 @@ func (p *Parser) readCondition() (*ast.Condition, error) {
 	}
 
 	var toks []token.Token
-	for p.cur.Type != token.RPAREN && p.cur.Type != token.EOF {
+	depth := 1
+	for p.cur.Type != token.EOF {
+		if p.cur.Type == token.LPAREN {
+			depth++
+		}
+		if p.cur.Type == token.RPAREN {
+			depth--
+			if depth == 0 {
+				break
+			}
+		}
 		toks = append(toks, p.cur)
 		p.advance()
 	}
 
 	if _, err := p.expect(token.RPAREN); err != nil {
 		return nil, err
+	}
+
+	if len(toks) == 0 {
+		return nil, fmt.Errorf("line %d col %d: empty condition", p.cur.Line, p.cur.Col)
 	}
 
 	return classifyCondition(toks), nil
@@ -870,15 +932,18 @@ func classifyCondition(toks []token.Token) *ast.Condition {
 		}
 	}
 
-	// 2. Influence: influence "description"
+	// 2. Influence: influence "description" OR bare "description"
 	if len(toks) >= 2 && toks[0].Type == token.IDENT && toks[0].Literal == "influence" && toks[1].Type == token.STRING {
 		return &ast.Condition{Type: "influence", Description: toks[1].Literal}
 	}
+	if len(toks) == 1 && toks[0].Type == token.STRING {
+		return &ast.Condition{Type: "influence", Description: toks[0].Literal}
+	}
 
-	// 3. Choice: IDENT.result (e.g., A.fail, B.success)
+	// 3. Choice: IDENT.result (e.g., A.fail, B.success, C.any)
 	if len(toks) == 3 && toks[0].Type == token.IDENT && toks[1].Type == token.DOT && toks[2].Type == token.IDENT {
 		result := toks[2].Literal
-		if result == "success" || result == "fail" {
+		if result == "success" || result == "fail" || result == "any" {
 			return &ast.Condition{Type: "choice", Option: toks[0].Literal, Result: result}
 		}
 	}
@@ -951,7 +1016,10 @@ func (p *Parser) parsePause() (ast.Node, error) {
 		return nil, fmt.Errorf("line %d col %d: expected number after 'pause for', got %s (%q)",
 			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
 	}
-	clicks, _ := strconv.Atoi(n.Literal)
+	clicks, err2 := strconv.Atoi(n.Literal)
+	if err2 != nil {
+		return nil, fmt.Errorf("line %d col %d: invalid pause count %q", n.Line, n.Col, n.Literal)
+	}
 	if clicks < 1 {
 		clicks = 1
 	}
@@ -1109,6 +1177,10 @@ func (p *Parser) parseGateBlock() (*ast.GateBlock, error) {
 		}
 	}
 
+	if len(block.Routes) == 0 {
+		return nil, fmt.Errorf("line %d col %d: @gate block has no routes", p.cur.Line, p.cur.Col)
+	}
+
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
 	}
@@ -1199,6 +1271,10 @@ func (p *Parser) isDirectiveStart() bool {
 	}
 	if p.peek.Type == token.COLON {
 		// Current IDENT + COLON = dialogue start. Don't consume.
+		return true
+	}
+	if p.peek.Type == token.LBRACKET {
+		// Current IDENT + LBRACKET = dialogue sugar (CHARACTER [look]: text). Don't consume.
 		return true
 	}
 	return false

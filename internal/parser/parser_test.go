@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cdotlock/moonshort-script/internal/ast"
@@ -832,5 +833,503 @@ func TestParsePause(t *testing.T) {
 	}
 	if pause.Clicks != 2 {
 		t.Errorf("PauseNode.Clicks: got %d, want 2", pause.Clicks)
+	}
+}
+
+// --- Error path tests ---
+
+func TestParseError_EmptyCondition(t *testing.T) {
+	src := `@episode main:01 "T" { @if () { NARRATOR: Hi. } @gate { @next main:02 } }`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected error for empty condition")
+	}
+	if !strings.Contains(err.Error(), "empty condition") {
+		t.Errorf("expected 'empty condition' in error, got: %v", err)
+	}
+}
+
+func TestParseError_EmptyChoice(t *testing.T) {
+	src := `@episode main:01 "T" { @choice { } @gate { @next main:02 } }`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected error for empty choice")
+	}
+}
+
+func TestParseError_EmptyGate(t *testing.T) {
+	src := `@episode main:01 "T" { @gate { } }`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected error for empty gate")
+	}
+}
+
+func TestParseError_DuplicateGate(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: Hi.
+		@gate { @next main:02 }
+		@gate { @next main:03 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected error for duplicate gate")
+	}
+}
+
+func TestParseError_InvalidPauseCount(t *testing.T) {
+	src := `@episode main:01 "T" { @pause for abc @gate { @next main:02 } }`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected error for invalid pause count")
+	}
+}
+
+// --- Condition type tests ---
+
+func TestParseConditionFlag(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (EP01_COMPLETE) {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "flag" {
+		t.Errorf("want type=flag, got %s", ifNode.Condition.Type)
+	}
+	if ifNode.Condition.Name != "EP01_COMPLETE" {
+		t.Errorf("want name=EP01_COMPLETE, got %s", ifNode.Condition.Name)
+	}
+}
+
+func TestParseConditionInfluence(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (influence "Player shows empathy") {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "influence" {
+		t.Errorf("want type=influence, got %s", ifNode.Condition.Type)
+	}
+	if ifNode.Condition.Description != "Player shows empathy" {
+		t.Errorf("want description, got %s", ifNode.Condition.Description)
+	}
+}
+
+func TestParseConditionInfluenceBareString(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if ("Player shows empathy") {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "influence" {
+		t.Errorf("want type=influence, got %s", ifNode.Condition.Type)
+	}
+}
+
+func TestParseConditionCompound(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (affection.easton >= 5 && CHA >= 14) {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "compound" {
+		t.Errorf("want type=compound, got %s", ifNode.Condition.Type)
+	}
+}
+
+func TestParseConditionChoiceAny(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (A.any) {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "choice" {
+		t.Errorf("want type=choice, got %s", ifNode.Condition.Type)
+	}
+	if ifNode.Condition.Result != "any" {
+		t.Errorf("want result=any, got %s", ifNode.Condition.Result)
+	}
+}
+
+// --- Nested parentheses ---
+
+func TestParseNestedParenCondition(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (affection.easton >= (5 + 3)) {
+			NARRATOR: Done.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Condition.Type != "comparison" {
+		t.Errorf("want type=comparison, got %s", ifNode.Condition.Type)
+	}
+}
+
+// --- CG show ---
+
+func TestParseCgShow(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@cg show sunset fade {
+			NARRATOR: Beautiful.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	cg := ep.Body[0].(*ast.CgShowNode)
+	if cg.Name != "sunset" {
+		t.Errorf("want name=sunset, got %s", cg.Name)
+	}
+	if cg.Transition != "fade" {
+		t.Errorf("want transition=fade, got %s", cg.Transition)
+	}
+	if len(cg.Body) != 1 {
+		t.Errorf("want 1 body node, got %d", len(cg.Body))
+	}
+}
+
+// --- Label and Goto ---
+
+func TestParseLabelGoto(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@label AFTER_FIGHT
+		NARRATOR: Middle.
+		@goto AFTER_FIGHT
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	label := ep.Body[0].(*ast.LabelNode)
+	if label.Name != "AFTER_FIGHT" {
+		t.Errorf("want AFTER_FIGHT, got %s", label.Name)
+	}
+	gotoNode := ep.Body[2].(*ast.GotoNode)
+	if gotoNode.Name != "AFTER_FIGHT" {
+		t.Errorf("want AFTER_FIGHT, got %s", gotoNode.Name)
+	}
+}
+
+// --- Signal accepts STRING ---
+
+func TestParseSignalString(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@signal "EP01_COMPLETE"
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	sig := ep.Body[0].(*ast.SignalNode)
+	if sig.Event != "EP01_COMPLETE" {
+		t.Errorf("want EP01_COMPLETE, got %s", sig.Event)
+	}
+}
+
+// --- Bg without transition ---
+
+func TestParseBgNoTransition(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@bg set classroom
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	bg := ep.Body[0].(*ast.BgSetNode)
+	if bg.Name != "classroom" {
+		t.Errorf("want name=classroom, got %s", bg.Name)
+	}
+	if bg.Transition != "" {
+		t.Errorf("want empty transition, got %s", bg.Transition)
+	}
+}
+
+// --- CG without body ---
+
+func TestParseCgNoBody(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@cg show sunset
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	cg := ep.Body[0].(*ast.CgShowNode)
+	if cg.Name != "sunset" {
+		t.Errorf("want name=sunset, got %s", cg.Name)
+	}
+	if len(cg.Body) != 0 {
+		t.Errorf("want 0 body nodes, got %d", len(cg.Body))
+	}
+}
+
+// --- CharShow without transition ---
+
+func TestParseCharShowNoTransition(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@mauricio show neutral at center
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	show := ep.Body[0].(*ast.CharShowNode)
+	if show.Transition != "" {
+		t.Errorf("want empty transition, got %s", show.Transition)
+	}
+}
+
+// --- CharLook with transition ---
+
+func TestParseCharLookWithTransition(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@mauricio look angry fade
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	look := ep.Body[0].(*ast.CharLookNode)
+	if look.Look != "angry" {
+		t.Errorf("want look=angry, got %s", look.Look)
+	}
+	if look.Transition != "fade" {
+		t.Errorf("want transition=fade, got %s", look.Transition)
+	}
+}
+
+// --- CharHide without transition ---
+
+func TestParseCharHideNoTransition(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@mauricio hide
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	hide := ep.Body[0].(*ast.CharHideNode)
+	if hide.Transition != "" {
+		t.Errorf("want empty transition, got %s", hide.Transition)
+	}
+}
+
+// --- Gate with @next and target containing slashes ---
+
+func TestParseGateNextSlashTarget(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: Hi.
+		@gate {
+			@next main/good/001:01
+		}
+	}`
+	ep := parseOrFail(t, src)
+	if ep.Gate.Routes[0].Target != "main/good/001:01" {
+		t.Errorf("want target=main/good/001:01, got %s", ep.Gate.Routes[0].Target)
+	}
+}
+
+// --- Brave option with body after check/on blocks ---
+
+func TestParseBraveOptionWithBody(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@choice {
+			@option A brave "Fight" {
+				check {
+					attr: STR
+					dc: 14
+				}
+				@on success {
+					NARRATOR: You win.
+				}
+				@on fail {
+					NARRATOR: You lose.
+				}
+				NARRATOR: The dust settles.
+			}
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	choice := ep.Body[0].(*ast.ChoiceNode)
+	optA := choice.Options[0]
+	if len(optA.Body) != 1 {
+		t.Fatalf("expected 1 body node after on blocks, got %d", len(optA.Body))
+	}
+	narr, ok := optA.Body[0].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *NarratorNode, got %T", optA.Body[0])
+	}
+	if narr.Text != "The dust settles." {
+		t.Errorf("narr text: got %q", narr.Text)
+	}
+}
+
+// --- Gate with plain @else (no @if chain) ---
+
+func TestParseGatePlainElse(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: Hi.
+		@gate {
+			@if (EP01_DONE):
+				@next main:03
+			@else:
+				@next main:02
+		}
+	}`
+	ep := parseOrFail(t, src)
+	if len(ep.Gate.Routes) != 2 {
+		t.Fatalf("expected 2 routes, got %d", len(ep.Gate.Routes))
+	}
+	// First route should be conditional
+	if ep.Gate.Routes[0].Condition == nil {
+		t.Error("expected conditional first route")
+	}
+	// Second route should be unconditional fallback
+	if ep.Gate.Routes[1].Condition != nil {
+		t.Error("expected unconditional fallback route")
+	}
+	if ep.Gate.Routes[1].Target != "main:02" {
+		t.Errorf("fallback target: got %q, want main:02", ep.Gate.Routes[1].Target)
+	}
+}
+
+// --- @pause for 1 (single click) ---
+
+func TestParsePauseSingle(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@pause for 1
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	pause := ep.Body[0].(*ast.PauseNode)
+	if pause.Clicks != 1 {
+		t.Errorf("want clicks=1, got %d", pause.Clicks)
+	}
+}
+
+// --- Multiple episodes should error (Parse only returns first) ---
+
+func TestParseComments(t *testing.T) {
+	src := `@episode main:01 "T" {
+		// This is a comment
+		NARRATOR: Hello.
+		// Another comment
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	if len(ep.Body) != 1 {
+		t.Fatalf("Body length: got %d, want 1 (comments should be skipped)", len(ep.Body))
+	}
+}
+
+// --- @pause for 0 (clamped to 1) ---
+
+func TestParsePauseZeroClamped(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@pause for 0
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	pause := ep.Body[0].(*ast.PauseNode)
+	if pause.Clicks != 1 {
+		t.Errorf("want clicks=1 (clamped from 0), got %d", pause.Clicks)
+	}
+}
+
+// --- Affection with negative delta ---
+
+func TestParseAffectionNegative(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@affection mauricio -5
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	aff := ep.Body[0].(*ast.AffectionNode)
+	if aff.Delta != "-5" {
+		t.Errorf("want delta=-5, got %s", aff.Delta)
+	}
+}
+
+// --- Gate with direct @next (no condition) ---
+
+func TestParseGateDirectNext(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: Hi.
+		@gate {
+			@next main:02
+		}
+	}`
+	ep := parseOrFail(t, src)
+	if len(ep.Gate.Routes) != 1 {
+		t.Fatalf("expected 1 route, got %d", len(ep.Gate.Routes))
+	}
+	if ep.Gate.Routes[0].Condition != nil {
+		t.Error("expected nil condition for direct @next")
+	}
+}
+
+// --- Multiple nodes in a single @if then block ---
+
+func TestParseIfMultipleBodyNodes(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (EP01_COMPLETE) {
+			@bg set classroom
+			NARRATOR: Hello.
+			@affection mauricio +1
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if len(ifNode.Then) != 3 {
+		t.Errorf("want 3 then nodes, got %d", len(ifNode.Then))
+	}
+}
+
+// --- Phone hide standalone ---
+
+func TestParsePhoneHide(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@phone hide
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	_, ok := ep.Body[0].(*ast.PhoneHideNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *PhoneHideNode, got %T", ep.Body[0])
+	}
+}
+
+// --- Music fadeout standalone ---
+
+func TestParseMusicFadeout(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@music fadeout
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	_, ok := ep.Body[0].(*ast.MusicFadeoutNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *MusicFadeoutNode, got %T", ep.Body[0])
+	}
+}
+
+// --- Standalone @if (no else) ---
+
+func TestParseIfNoElse(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@if (EP01_COMPLETE) {
+			NARRATOR: Hi.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	if ifNode.Else != nil {
+		t.Errorf("expected nil Else, got %v", ifNode.Else)
 	}
 }

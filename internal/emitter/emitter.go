@@ -1,4 +1,4 @@
-// Package emitter converts an NRS AST into player-ready JSON with resolved asset URLs.
+// Package emitter converts an MSS AST into player-ready JSON with resolved asset URLs.
 package emitter
 
 import (
@@ -48,6 +48,8 @@ func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 
 	if ep.Gate != nil {
 		out["gate"] = e.emitGate(ep.Gate)
+	} else {
+		out["gate"] = nil
 	}
 
 	return json.MarshalIndent(out, "", "  ")
@@ -162,6 +164,7 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 	case *ast.GotoNode:
 		return map[string]interface{}{"type": "goto", "target": v.Name}
 	default:
+		e.warn("unknown node type: %T", n)
 		return nil
 	}
 }
@@ -270,7 +273,7 @@ func (e *Emitter) emitCgShow(n *ast.CgShowNode) map[string]interface{} {
 func (e *Emitter) emitDialogue(n *ast.DialogueNode) map[string]interface{} {
 	return map[string]interface{}{
 		"type":      "dialogue",
-		"character": n.Character,
+		"character": strings.ToLower(n.Character),
 		"text":      n.Text,
 	}
 }
@@ -303,7 +306,7 @@ func (e *Emitter) emitTextMessage(n *ast.TextMessageNode) map[string]interface{}
 	return map[string]interface{}{
 		"type":      "text_message",
 		"direction": n.Direction,
-		"character": n.Char,
+		"character": strings.ToLower(n.Char),
 		"text":      n.Content,
 	}
 }
@@ -404,10 +407,14 @@ func (e *Emitter) emitChoice(n *ast.ChoiceNode) map[string]interface{} {
 }
 
 func (e *Emitter) emitAffection(n *ast.AffectionNode) map[string]interface{} {
+	delta := parseDelta(n.Delta)
+	if delta == 0 && n.Delta != "0" && n.Delta != "+0" && n.Delta != "-0" {
+		e.warn("affection %q: invalid delta %q, defaulting to 0", n.Char, n.Delta)
+	}
 	return map[string]interface{}{
 		"type":      "affection",
 		"character": n.Char,
-		"delta":     parseDelta(n.Delta),
+		"delta":     delta,
 	}
 }
 
@@ -418,6 +425,13 @@ func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
 		"then":      e.emitNodes(n.Then),
 	}
 	if len(n.Else) > 0 {
+		// If else branch is a single IfNode (@else @if chain), emit as bare object
+		if len(n.Else) == 1 {
+			if elseIf, ok := n.Else[0].(*ast.IfNode); ok {
+				m["else"] = e.emitIf(elseIf)
+				return m
+			}
+		}
 		m["else"] = e.emitNodes(n.Else)
 	}
 	return m

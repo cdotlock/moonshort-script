@@ -26,7 +26,7 @@
 
 | Directive | Example |
 |-----------|---------|
-| `@<char> show <pose> at <pos>` | `@mauricio show neutral_smirk at right` |
+| `@<char> show <look> at <pos>` | `@mauricio show neutral_smirk at right` |
 | `@<char> hide [trans]` | `@mauricio hide fade` |
 | `@<char> look <look> [trans]` | `@mauricio look angry dissolve` |
 | `@<char> move to <pos>` | `@mauricio move to left` |

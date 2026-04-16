@@ -328,8 +328,8 @@ Use `@if` to show different content based on game state. **Parentheses `()` are 
 | flag | `SIGNAL_NAME` | `@if (EP01_COMPLETE) { }` |
 | comparison | `value op number` | `@if (affection.easton >= 5) { }` |
 | compound | `expr && expr` / `expr \|\| expr` | `@if (san <= 20 \|\| FAILED_TWICE) { }` |
-| choice | `OPTION.result` | `@if (A.fail) { }` (body @if only, rare) |
-| influence | `"description"` | `@if ("player showed empathy") { }` (body @if only, rare) |
+| choice | `OPTION.result` | `@if (A.fail) { }` — result: `success` / `fail` / `any` |
+| influence | `influence "desc"` or `"desc"` | `@if (influence "player showed empathy") { }` or `@if ("player showed empathy") { }` — both forms accepted |
 
 **Operators:** `>=` `<=` `>` `<` `==` `!=`
 **Logic:** `&&` (and), `||` (or)
@@ -357,7 +357,8 @@ The `@gate` block at the end of every episode declares where the player goes nex
   @if (A.fail): @next main/bad/001:01
 
   // Influence-based: route based on accumulated butterfly effects (LLM evaluates)
-  @else @if ("Player has repeatedly shown empathy toward Easton"): @next main/route/001:01
+  // Both forms accepted: influence "desc" or bare "desc"
+  @else @if (influence "Player has repeatedly shown empathy toward Easton"): @next main/route/001:01
 
   // Fallback
   @else: @next main:02
@@ -366,17 +367,17 @@ The `@gate` block at the end of every episode declares where the player goes nex
 
 **Choice condition format:** `<option_id>.<result>` (dot notation, no space)
 - option_id: A, B, C... (matches the option's ID)
-- result: `success` | `fail` | `any`
+- result: `success` | `fail` | `any` (`any` = regardless of check outcome)
 - Example: `A.fail`, `B.success`, `C.any`
 
 **All 5 condition types work in gate:**
 - Choice: `@if (A.fail): @next ...`
 - Flag: `@if (EP01_COMPLETE): @next ...`
 - Comparison: `@if (affection.easton >= 5): @next ...`
-- Influence: `@if ("player showed empathy"): @next ...`
+- Influence: `@if (influence "player showed empathy"): @next ...` or `@if ("player showed empathy"): @next ...`
 - Compound: `@if (san <= 20 || FAILED_TWICE): @next ...`
 
-**Influence condition:** A quoted natural language description. At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
+**Influence condition:** A natural language description. Two syntax forms: `@if (influence "description")` or `@if ("description")` (bare string). At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
 
 **`@else` is mandatory.** Every episode must have a fallback route.
 
@@ -437,4 +438,4 @@ These aren't enforced by the interpreter, but they make for a good player experi
 
 - `references/directive-table.md` — directive cheat sheet, quick lookup when writing scripts
 - `references/addressing.md` — episode ID addressing rules for branch_key and file naming
-- `references/MSS-SPEC.md` — **complete format specification** with JSON output structure, asset mapping schema, interpreter behavior, and Remix compatibility details. Read this when you need to understand how the interpreter processes scripts, what JSON the frontend receives, or how the asset mapping YAML works.
+- `references/MSS-SPEC.md` — **complete format specification** with JSON output structure, asset mapping schema, interpreter behavior, and Remix compatibility details. Read this when you need to understand how the interpreter processes scripts, what JSON the frontend receives, or how the asset mapping JSON works.

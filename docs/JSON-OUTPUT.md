@@ -24,7 +24,7 @@
 | `seq` | number | 集序号（从 1 开始） |
 | `title` | string | 集标题 |
 | `steps` | array | 步骤数组（混合类型，见下文） |
-| `gate` | object\|null | 路由规则（嵌套 if/else 链），集末尾的跳转声明（可选） |
+| `gate` | object\|null | 路由规则（嵌套 if/else 链），集末尾的跳转声明。**始终存在**：有路由时为 object，无路由时为 `null`（不会缺省） |
 
 ---
 
@@ -303,8 +303,10 @@ for element in steps:
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `character` | string | 是 | 角色 ID（小写） |
+| `character` | string | 是 | 角色 ID（**始终小写**，脚本中 `MAURICIO:` → JSON 中 `"mauricio"`） |
 | `text` | string | 是 | 对白内容 |
+
+> **注意：** 所有步骤类型中的 `character` 字段在 JSON 输出中统一为小写，包括 `dialogue`、`text_message`、`char_show`、`char_look`、`char_hide`、`char_move`、`bubble`、`affection` 等。
 
 #### `narrator` — 旁白
 
@@ -498,8 +500,8 @@ for element in steps:
   "attr": "ATK",
   "on_results": {
     "S": [ ... ],
-    "A,B": [ ... ],
-    "C,D": [ ... ]
+    "A B": [ ... ],
+    "C D": [ ... ]
   }
 }
 ```
@@ -509,7 +511,7 @@ for element in steps:
 | `game_id` | string | 是 | 小游戏 ID |
 | `game_url` | string | 是 | 已解析的小游戏 URL |
 | `attr` | string | 是 | 关联属性名 |
-| `on_results` | object | 是 | 评级 → 步骤映射，key 为逗号分隔的评级（如 `"A,B"`） |
+| `on_results` | object | 是 | 评级 → 步骤映射，key 为空格分隔的评级（如 `"A B"`） |
 
 ### 4.7 状态变更类
 
@@ -593,7 +595,7 @@ for element in steps:
 |------|------|------|------|
 | `condition` | object | 是 | 结构化条件对象（见条件类型参考） |
 | `then` | array | 是 | 条件成立时执行的步骤 |
-| `else` | array\|object | 否 | 步骤数组（简单 else）或嵌套 `if` 对象（`@else @if` 链） |
+| `else` | array\|object | 否 | 步骤数组（简单 `@else { }` → `[...]`）或裸 `if` 对象（`@else @if` 链 → `{"type": "if", ...}`）。前端需按类型判别：数组表示终端 else 分支，对象表示继续链式判定 |
 
 #### 条件类型参考
 

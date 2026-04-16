@@ -386,6 +386,102 @@ NARRATOR: Hello
 	}
 }
 
+func TestFixAmpersandOnBlock(t *testing.T) {
+	input := "&choice {\n  @option A safe \"test\" {\n  }\n}"
+	r := Fix(input)
+	if !strings.Contains(r.Fixed, "@choice") {
+		t.Error("expected & converted to @ on choice")
+	}
+	if len(r.Fixes) == 0 {
+		t.Error("expected fix recorded")
+	}
+}
+
+func TestFixIfMissingParens(t *testing.T) {
+	input := "@if affection.easton >= 5 {"
+	r := Fix(input)
+	if !strings.Contains(r.Fixed, "@if (affection.easton >= 5)") {
+		t.Errorf("expected parens added, got: %s", r.Fixed)
+	}
+}
+
+func TestFixAtCheck(t *testing.T) {
+	input := "    @check {"
+	r := Fix(input)
+	if !strings.Contains(r.Fixed, "    check {") {
+		t.Errorf("expected @check -> check, got: %s", r.Fixed)
+	}
+}
+
+func TestFixBOM(t *testing.T) {
+	input := "\xEF\xBB\xBF@episode main:01 \"T\" {"
+	r := Fix(input)
+	if strings.Contains(r.Fixed, "\xEF\xBB\xBF") {
+		t.Error("BOM should be stripped")
+	}
+}
+
+func TestFixCRLF(t *testing.T) {
+	input := "line1\r\nline2\r\nline3"
+	r := Fix(input)
+	if strings.Contains(r.Fixed, "\r") {
+		t.Error("CRLF should be normalized to LF")
+	}
+}
+
+func TestFixAffectionCharCase(t *testing.T) {
+	input := "@affection EASTON +2"
+	r := Fix(input)
+	if !strings.Contains(r.Fixed, "@affection easton +2") {
+		t.Errorf("expected lowercase, got: %s", r.Fixed)
+	}
+}
+
+func TestFixBraceCountSkipsDialogue(t *testing.T) {
+	input := "@episode main:01 \"T\" {\n  NARRATOR: He said {goodbye} and left.\n"
+	r := Fix(input)
+	// The dialogue line contains "{goodbye}" (1 open + 1 close) but the fixer
+	// should skip dialogue lines. It should append exactly 1 closing brace for @episode.
+	// Total "}" in output = 1 inside dialogue text + 1 appended = 2.
+	foundBraceFix := false
+	for _, f := range r.Fixes {
+		if strings.Contains(f, "1 missing closing }") {
+			foundBraceFix = true
+			break
+		}
+	}
+	if !foundBraceFix {
+		t.Errorf("expected fix for 1 missing closing brace, got: %v", r.Fixes)
+	}
+	// Verify it did NOT count dialogue braces (which would mean 0 appended)
+	if !strings.HasSuffix(strings.TrimRight(r.Fixed, "\n"), "}") {
+		t.Error("expected closing brace appended at end of fixed output")
+	}
+}
+
+func TestFixOldFormatDetection(t *testing.T) {
+	input := "@episode main:01 \"T\" {\n  @show malia neutral at center\n  @gate {\n    @next main:02\n  }\n}"
+	r := Fix(input)
+	foundOldFormat := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "old-format syntax") {
+			foundOldFormat = true
+			break
+		}
+	}
+	if !foundOldFormat {
+		t.Error("expected old-format syntax error for @show")
+	}
+}
+
+func TestFixAmpersandDialogue(t *testing.T) {
+	input := "&NARRATOR: Hello"
+	r := Fix(input)
+	if !strings.Contains(r.Fixed, "NARRATOR: Hello") {
+		t.Errorf("expected & removed, got: %s", r.Fixed)
+	}
+}
+
 func TestCleanFileNoChanges(t *testing.T) {
 	input := `@episode "Clean Test" {
 

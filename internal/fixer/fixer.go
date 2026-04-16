@@ -48,6 +48,15 @@ var allCapsColonRe = regexp.MustCompile(`^[@&]([A-Z][A-Z0-9_]+):`)
 // Fix applies all auto-repairs to input and then runs error checks on the result.
 func Fix(input string) *FixResult {
 	r := &FixResult{}
+
+	// Normalize encoding: strip BOM and convert CRLF to LF.
+	if strings.HasPrefix(input, "\xEF\xBB\xBF") {
+		input = strings.TrimPrefix(input, "\xEF\xBB\xBF")
+		r.Fixes = append(r.Fixes, "stripped UTF-8 BOM")
+	}
+	input = strings.ReplaceAll(input, "\r\n", "\n")
+	input = strings.ReplaceAll(input, "\r", "\n")
+
 	lines := strings.Split(input, "\n")
 
 	// Pass 1: per-line fixes
@@ -80,6 +89,18 @@ func Fix(input string) *FixResult {
 
 		// 4. Unquoted butterfly/signal arguments
 		line = fixUnquotedArgs(line, lineNum, r)
+
+		// 5. Convert & to @ on block structure directives
+		line = fixAmpersandOnBlocks(line, lineNum, r)
+
+		// 6. Add missing parentheses to @if conditions
+		line = fixIfMissingParens(line, lineNum, r)
+
+		// 7. Strip @ from @check (should be bare check)
+		line = fixAtCheck(line, lineNum, r)
+
+		// 8. Lowercase character name in @affection/@affection directives
+		line = fixAffectionCharCase(line, lineNum, r)
 
 		lines[i] = line
 	}
@@ -223,6 +244,15 @@ func normalizeBlankLines(lines []string, r *FixResult) []string {
 func fixUnclosedBlocks(lines []string, r *FixResult) []string {
 	open := 0
 	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip comment lines
+		if strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		// Skip dialogue lines (ALLCAPS: text) — they may contain { } in text
+		if isDialogueLine(trimmed) {
+			continue
+		}
 		for _, ch := range line {
 			switch ch {
 			case '{':
@@ -235,13 +265,38 @@ func fixUnclosedBlocks(lines []string, r *FixResult) []string {
 
 	if open > 0 {
 		r.Fixes = append(r.Fixes, fmt.Sprintf("appended %d missing closing }", open))
-		// Ensure there's a blank line before the closing braces if the file doesn't end with one
 		for i := 0; i < open; i++ {
 			lines = append(lines, "}")
 		}
 	}
 
 	return lines
+}
+
+// isDialogueLine returns true if the line looks like ALLCAPS: text or ALLCAPS [expr]: text.
+func isDialogueLine(line string) bool {
+	// Match pattern: optional leading spaces, then ALLCAPS IDENT, then COLON
+	for i, ch := range line {
+		if ch == ':' && i > 0 {
+			name := strings.TrimSpace(line[:i])
+			// Strip [expr] part if present
+			if bracketIdx := strings.Index(name, "["); bracketIdx >= 0 {
+				name = strings.TrimSpace(name[:bracketIdx])
+			}
+			if len(name) == 0 {
+				return false
+			}
+			allUpper := true
+			for _, r := range name {
+				if !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_') {
+					allUpper = false
+					break
+				}
+			}
+			return allUpper
+		}
+	}
+	return false
 }
 
 // --- Error checks (post-fix validation on text) ---
@@ -254,6 +309,7 @@ func checkErrors(r *FixResult) {
 	checkBraveOptions(lines, r)
 	checkGotoLabels(lines, r)
 	checkDuplicateOptionIDs(lines, r)
+	checkOldFormatSyntax(lines, r)
 }
 
 func checkMissingGate(lines []string, r *FixResult) {
@@ -407,6 +463,124 @@ func checkDuplicateOptionIDs(lines []string, r *FixResult) {
 					r.Errors = append(r.Errors, fmt.Sprintf("duplicate option ID: %s", id))
 				}
 				ctx.options[id] = true
+			}
+		}
+	}
+}
+
+// blockDirectives are directives that start blocks and must use @ not &.
+var blockDirectives = map[string]bool{
+	"choice": true, "if": true, "gate": true, "cg": true,
+	"phone": true, "minigame": true, "episode": true,
+}
+
+// fixAmpersandOnBlocks converts & to @ on block structure directives.
+func fixAmpersandOnBlocks(line string, lineNum int, r *FixResult) string {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "&") {
+		return line
+	}
+	rest := trimmed[1:]
+	// Extract the first word
+	idx := strings.IndexFunc(rest, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '{'
+	})
+	var word string
+	if idx < 0 {
+		word = rest
+	} else {
+		word = rest[:idx]
+	}
+	if blockDirectives[strings.ToLower(word)] {
+		// Find the & in the original line and replace with @
+		ampIdx := strings.Index(line, "&")
+		newLine := line[:ampIdx] + "@" + line[ampIdx+1:]
+		r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: replaced & with @ on block directive &%s", lineNum, word))
+		return newLine
+	}
+	return line
+}
+
+// ifNoParensRe matches @if followed by a non-paren character (missing parentheses).
+var ifNoParensRe = regexp.MustCompile(`^(\s*)@if\s+([^(\s].*)$`)
+
+// fixIfMissingParens wraps @if conditions in parentheses when missing.
+func fixIfMissingParens(line string, lineNum int, r *FixResult) string {
+	m := ifNoParensRe.FindStringSubmatch(line)
+	if m == nil {
+		return line
+	}
+	indent := m[1]
+	rest := m[2]
+	// rest should end with { — find it
+	braceIdx := strings.LastIndex(rest, "{")
+	if braceIdx < 0 {
+		// No brace on this line — could be multi-line, skip
+		return line
+	}
+	condition := strings.TrimSpace(rest[:braceIdx])
+	trailing := rest[braceIdx:]
+	newLine := indent + "@if (" + condition + ") " + trailing
+	r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: added missing parentheses to @if condition", lineNum))
+	return newLine
+}
+
+// atCheckRe matches @check optionally followed by { or whitespace.
+var atCheckRe = regexp.MustCompile(`^(\s*)@(check\s*\{.*)$`)
+
+// fixAtCheck strips the @ prefix from @check inside brave options.
+func fixAtCheck(line string, lineNum int, r *FixResult) string {
+	m := atCheckRe.FindStringSubmatch(line)
+	if m == nil {
+		return line
+	}
+	newLine := m[1] + m[2]
+	r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: removed @ from @check (should be bare 'check')", lineNum))
+	return newLine
+}
+
+// affectionCharRe matches @affection or &affection followed by an uppercase character name.
+var affectionCharRe = regexp.MustCompile(`^(\s*[@&]affection\s+)([A-Z][A-Z0-9_]+)(\s+.*)$`)
+
+// fixAffectionCharCase lowercases the character name in @affection directives.
+func fixAffectionCharCase(line string, lineNum int, r *FixResult) string {
+	m := affectionCharRe.FindStringSubmatch(line)
+	if m == nil {
+		return line
+	}
+	lower := strings.ToLower(m[2])
+	if lower == m[2] {
+		return line
+	}
+	newLine := m[1] + lower + m[3]
+	r.Fixes = append(r.Fixes, fmt.Sprintf("line %d: lowercased character name in affection: %s → %s", lineNum, m[2], lower))
+	return newLine
+}
+
+// oldFormatKeywords are keywords from the old MSS format that are no longer valid.
+var oldFormatKeywords = map[string]string{
+	"@show":       "use @<character> show",
+	"@hide":       "use @<character> hide",
+	"@expr":       "use @<character> look",
+	"@move":       "use @<character> move",
+	"@endep":      "use closing } for @episode block",
+	"@endbranch":  "use closing } for option blocks",
+	"@endchoice":  "use closing } for @choice block",
+	"@endgroup":   "use & prefix for concurrent directives",
+	"@branch":     "use @option inside @choice block",
+	"@gain":       "use @affection",
+	"@wait":       "use @pause for N",
+	"@timeskip":   "removed — use @bg set with transition",
+	"@group":      "use & prefix for concurrent directives",
+}
+
+func checkOldFormatSyntax(lines []string, r *FixResult) {
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		for keyword, hint := range oldFormatKeywords {
+			if strings.HasPrefix(trimmed, keyword+" ") || strings.HasPrefix(trimmed, keyword+"\t") || trimmed == keyword {
+				r.Errors = append(r.Errors, fmt.Sprintf("line %d: old-format syntax %q detected — %s", i+1, keyword, hint))
+				break
 			}
 		}
 	}

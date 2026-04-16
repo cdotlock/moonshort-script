@@ -1,4 +1,4 @@
-// Package ast defines all AST node types for the NRS (NoRules Script) format.
+// Package ast defines all AST node types for the MSS (MoonShort Script) format.
 // This file contains only type definitions — no parsing logic.
 package ast
 
@@ -31,7 +31,7 @@ func (c *ConcurrentFlag) SetConcurrent(v bool) { c.Concurrent = v }
 // Root
 // ----------------------------------------------------------------------------
 
-// Episode is the root node of every NRS script file.
+// Episode is the root node of every MSS script file.
 type Episode struct {
 	BranchKey string     // e.g. "main:01"
 	Title     string     // e.g. "Butterfly"
@@ -90,6 +90,7 @@ func (g *GotoNode) nodeType() string { return "goto" }
 
 // PauseNode inserts a click-wait point. Clicks is the number of clicks to wait.
 type PauseNode struct {
+	ConcurrentFlag
 	Clicks int
 }
 
