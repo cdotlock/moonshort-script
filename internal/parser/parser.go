@@ -174,6 +174,12 @@ func (p *Parser) parseBlock() ([]ast.Node, error) {
 			nodes = append(nodes, node)
 		}
 	}
+	// Drain final pending node if any (e.g. dialogue-with-expr was the last
+	// statement before RBRACE).
+	if p.pending != nil {
+		nodes = append(nodes, p.pending)
+		p.pending = nil
+	}
 	return nodes, nil
 }
 

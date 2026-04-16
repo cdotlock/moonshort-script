@@ -73,7 +73,7 @@ func isConcurrent(n ast.Node) bool {
 //   - Single-item groups are emitted as plain objects.
 //   - Multi-item groups are emitted as arrays (concurrent execution).
 func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
-	var steps []interface{}
+	steps := make([]interface{}, 0)
 	var group []interface{} // current group being accumulated
 
 	flush := func() {

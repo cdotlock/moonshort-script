@@ -198,8 +198,8 @@ func fixUnquotedArgs(line string, lineNum int, r *FixResult) string {
 			break
 		}
 
-		// For @signal, only quote if the argument contains spaces
-		if directive == "@signal" && !strings.Contains(arg, " ") {
+		// For @signal/@&signal, only quote if the argument contains spaces
+		if (directive == "@signal" || directive == "&signal") && !strings.Contains(arg, " ") {
 			break
 		}
 
@@ -540,7 +540,8 @@ func fixAtCheck(line string, lineNum int, r *FixResult) string {
 }
 
 // affectionCharRe matches @affection or &affection followed by an uppercase character name.
-var affectionCharRe = regexp.MustCompile(`^(\s*[@&]affection\s+)([A-Z][A-Z0-9_]+)(\s+.*)$`)
+// The trailing delta (e.g. +2) is optional so we also match `@affection EASTON` without a delta.
+var affectionCharRe = regexp.MustCompile(`^(\s*[@&]affection\s+)([A-Z][A-Z0-9_]+)(\s+.*)?$`)
 
 // fixAffectionCharCase lowercases the character name in @affection directives.
 func fixAffectionCharCase(line string, lineNum int, r *FixResult) string {
