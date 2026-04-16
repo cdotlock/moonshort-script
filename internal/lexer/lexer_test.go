@@ -156,28 +156,30 @@ func TestLexCondition(t *testing.T) {
 	)
 }
 
-// TestLexSignedNumber: @xp +3
+// TestLexSignedNumber: @affection mauricio +3
 func TestLexSignedNumber(t *testing.T) {
-	src := `@xp +3`
+	src := `@affection mauricio +3`
 	got := toks(src)
 	assertTypes(t, got,
 		token.AT,
-		token.IDENT,         // xp
+		token.IDENT,         // affection
+		token.IDENT,         // mauricio
 		token.SIGNED_NUMBER, // +3
 	)
-	if got[2].Literal != "+3" {
-		t.Errorf("signed number literal: got %q, want %q", got[2].Literal, "+3")
+	if got[3].Literal != "+3" {
+		t.Errorf("signed number literal: got %q, want %q", got[3].Literal, "+3")
 	}
 
-	src2 := `@san -20`
+	src2 := `@affection mauricio -20`
 	got2 := toks(src2)
 	assertTypes(t, got2,
 		token.AT,
 		token.IDENT,
+		token.IDENT,
 		token.SIGNED_NUMBER,
 	)
-	if got2[2].Literal != "-20" {
-		t.Errorf("signed number literal: got %q, want %q", got2[2].Literal, "-20")
+	if got2[3].Literal != "-20" {
+		t.Errorf("signed number literal: got %q, want %q", got2[3].Literal, "-20")
 	}
 }
 

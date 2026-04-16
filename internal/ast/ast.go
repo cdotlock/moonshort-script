@@ -293,22 +293,6 @@ func (c *CheckBlock) nodeType() string { return "check" }
 // State-change nodes
 // ----------------------------------------------------------------------------
 
-// XpNode grants or removes experience points.
-type XpNode struct {
-	ConcurrentFlag
-	Delta string // e.g. "+3" or "-5" (signed)
-}
-
-func (x *XpNode) nodeType() string { return "xp" }
-
-// SanNode adjusts the player's sanity score.
-type SanNode struct {
-	ConcurrentFlag
-	Delta string
-}
-
-func (s *SanNode) nodeType() string { return "san" }
-
 // AffectionNode adjusts affection toward a specific character.
 type AffectionNode struct {
 	ConcurrentFlag

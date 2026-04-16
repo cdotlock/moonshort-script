@@ -79,10 +79,8 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 
 | Directive | Example |
 |-----------|---------|
-| `@xp <+/-N>` | `@xp +3` |
-| `@san <+/-N>` | `@san -20` |
 | `@affection <char> <+/-N>` | `@affection easton +2` |
-| `@signal <event>` | `@signal EP01_COMPLETE` |
+| `@signal <event>` | `@signal EP01_COMPLETE` — also stores as persistent boolean flag; check with `@if EP01_COMPLETE { }` |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
 
 ## Flow Control
@@ -92,5 +90,5 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | `@if <cond> { }` | `@if affection.easton >= 5 && CHA >= 14 { }` |
 | `@else { }` | `} @else { }` |
 
-Conditions: flags (`FLAG_NAME`), comparisons (`affection.char >= N`, `san <= N`, `ATK > 14`), logic (`&&`, `||`)
+Conditions: flags/signals (`SIGNAL_NAME` — true if emitted), comparisons (`affection.char >= N`, engine values like `san <= N`, `ATK > 14`), logic (`&&`, `||`)
 Operators: `>=` `<=` `>` `<` `==` `!=`

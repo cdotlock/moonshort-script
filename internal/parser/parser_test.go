@@ -217,11 +217,9 @@ func TestParseAudio(t *testing.T) {
 	}
 }
 
-// TestParseStateChanges tests xp, san, affection, signal, and butterfly.
+// TestParseStateChanges tests affection, signal, and butterfly.
 func TestParseStateChanges(t *testing.T) {
 	src := `@episode main:01 "State" {
-	@xp +3
-	@san -5
 	@affection mauricio +2
 	@signal EP01_COMPLETE
 	@butterfly "Player chose kindness"
@@ -229,45 +227,29 @@ func TestParseStateChanges(t *testing.T) {
 }`
 	ep := parseOrFail(t, src)
 
-	if len(ep.Body) != 5 {
-		t.Fatalf("Body length: got %d, want 5", len(ep.Body))
+	if len(ep.Body) != 3 {
+		t.Fatalf("Body length: got %d, want 3", len(ep.Body))
 	}
 
-	xp, ok := ep.Body[0].(*ast.XpNode)
+	aff, ok := ep.Body[0].(*ast.AffectionNode)
 	if !ok {
-		t.Fatalf("Body[0]: expected *XpNode, got %T", ep.Body[0])
-	}
-	if xp.Delta != "+3" {
-		t.Errorf("XpNode.Delta: got %q, want %q", xp.Delta, "+3")
-	}
-
-	san, ok := ep.Body[1].(*ast.SanNode)
-	if !ok {
-		t.Fatalf("Body[1]: expected *SanNode, got %T", ep.Body[1])
-	}
-	if san.Delta != "-5" {
-		t.Errorf("SanNode.Delta: got %q, want %q", san.Delta, "-5")
-	}
-
-	aff, ok := ep.Body[2].(*ast.AffectionNode)
-	if !ok {
-		t.Fatalf("Body[2]: expected *AffectionNode, got %T", ep.Body[2])
+		t.Fatalf("Body[0]: expected *AffectionNode, got %T", ep.Body[0])
 	}
 	if aff.Char != "mauricio" || aff.Delta != "+2" {
 		t.Errorf("AffectionNode: got char=%q delta=%q", aff.Char, aff.Delta)
 	}
 
-	sig, ok := ep.Body[3].(*ast.SignalNode)
+	sig, ok := ep.Body[1].(*ast.SignalNode)
 	if !ok {
-		t.Fatalf("Body[3]: expected *SignalNode, got %T", ep.Body[3])
+		t.Fatalf("Body[1]: expected *SignalNode, got %T", ep.Body[1])
 	}
 	if sig.Event != "EP01_COMPLETE" {
 		t.Errorf("SignalNode.Event: got %q, want %q", sig.Event, "EP01_COMPLETE")
 	}
 
-	btf, ok := ep.Body[4].(*ast.ButterflyNode)
+	btf, ok := ep.Body[2].(*ast.ButterflyNode)
 	if !ok {
-		t.Fatalf("Body[4]: expected *ButterflyNode, got %T", ep.Body[4])
+		t.Fatalf("Body[2]: expected *ButterflyNode, got %T", ep.Body[2])
 	}
 	if btf.Description != "Player chose kindness" {
 		t.Errorf("ButterflyNode.Description: got %q, want %q", btf.Description, "Player chose kindness")
@@ -285,11 +267,9 @@ func TestParseChoice(t *testing.T) {
 			}
 			@on success {
 				NARRATOR: You overpower the guard.
-				@xp +5
 			}
 			@on fail {
 				NARRATOR: The guard throws you back.
-				@san -3
 			}
 		}
 		@option B safe "Talk it out" {
@@ -324,11 +304,11 @@ func TestParseChoice(t *testing.T) {
 	if optA.Check.Attr != "STR" || optA.Check.DC != 14 {
 		t.Errorf("Check: attr=%q dc=%d, want STR/14", optA.Check.Attr, optA.Check.DC)
 	}
-	if len(optA.OnSuccess) != 2 {
-		t.Fatalf("OnSuccess length: got %d, want 2", len(optA.OnSuccess))
+	if len(optA.OnSuccess) != 1 {
+		t.Fatalf("OnSuccess length: got %d, want 1", len(optA.OnSuccess))
 	}
-	if len(optA.OnFail) != 2 {
-		t.Fatalf("OnFail length: got %d, want 2", len(optA.OnFail))
+	if len(optA.OnFail) != 1 {
+		t.Fatalf("OnFail length: got %d, want 1", len(optA.OnFail))
 	}
 
 	// Verify success body content.
@@ -338,13 +318,6 @@ func TestParseChoice(t *testing.T) {
 	}
 	if succNarr.Text != "You overpower the guard." {
 		t.Errorf("OnSuccess narr: got %q", succNarr.Text)
-	}
-	succXp, ok := optA.OnSuccess[1].(*ast.XpNode)
-	if !ok {
-		t.Fatalf("OnSuccess[1]: expected *XpNode, got %T", optA.OnSuccess[1])
-	}
-	if succXp.Delta != "+5" {
-		t.Errorf("OnSuccess xp: got %q", succXp.Delta)
 	}
 
 	// Verify fail body content.
@@ -375,15 +348,15 @@ func TestParseMinigame(t *testing.T) {
 	@minigame arm_wrestle STR {
 		@on S {
 			NARRATOR: Perfect victory!
-			@xp +10
+			@affection mauricio +10
 		}
 		@on A B {
 			NARRATOR: Good job.
-			@xp +5
+			@affection mauricio +5
 		}
 		@on C D {
 			NARRATOR: Could be better.
-			@xp +1
+			@affection mauricio +1
 		}
 	}
 	@gate { @next main:02 }

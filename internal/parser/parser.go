@@ -15,7 +15,7 @@ import (
 var knownKeywords = map[string]bool{
 	"bg": true, "cg": true, "phone": true, "text": true,
 	"music": true, "sfx": true, "minigame": true, "choice": true,
-	"xp": true, "san": true, "affection": true, "signal": true,
+	"affection": true, "signal": true,
 	"butterfly": true, "if": true, "else": true, "label": true,
 	"goto": true, "episode": true, "on": true,
 	"option": true, "gate": true, "next": true, "pause": true,
@@ -348,10 +348,6 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 		return p.parseMinigame()
 	case "choice":
 		return p.parseChoice()
-	case "xp":
-		return p.parseXp()
-	case "san":
-		return p.parseSan()
 	case "affection":
 		return p.parseAffection()
 	case "signal":
@@ -750,26 +746,6 @@ func (p *Parser) parseBraveOptionBody(opt *ast.OptionNode) error {
 		}
 	}
 	return nil
-}
-
-// parseXp parses: @xp +/-N
-func (p *Parser) parseXp() (ast.Node, error) {
-	p.advance() // consume "xp"
-	delta, err := p.expect(token.SIGNED_NUMBER)
-	if err != nil {
-		return nil, err
-	}
-	return &ast.XpNode{Delta: delta.Literal}, nil
-}
-
-// parseSan parses: @san +/-N
-func (p *Parser) parseSan() (ast.Node, error) {
-	p.advance() // consume "san"
-	delta, err := p.expect(token.SIGNED_NUMBER)
-	if err != nil {
-		return nil, err
-	}
-	return &ast.SanNode{Delta: delta.Literal}, nil
 }
 
 // parseAffection parses: @affection <char> +/-N

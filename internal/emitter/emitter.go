@@ -147,10 +147,6 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		return e.emitMinigame(v)
 	case *ast.ChoiceNode:
 		return e.emitChoice(v)
-	case *ast.XpNode:
-		return e.emitXp(v)
-	case *ast.SanNode:
-		return e.emitSan(v)
 	case *ast.AffectionNode:
 		return e.emitAffection(v)
 	case *ast.SignalNode:
@@ -404,20 +400,6 @@ func (e *Emitter) emitChoice(n *ast.ChoiceNode) map[string]interface{} {
 	return map[string]interface{}{
 		"type":    "choice",
 		"options": options,
-	}
-}
-
-func (e *Emitter) emitXp(n *ast.XpNode) map[string]interface{} {
-	return map[string]interface{}{
-		"type":  "xp",
-		"delta": parseDelta(n.Delta),
-	}
-}
-
-func (e *Emitter) emitSan(n *ast.SanNode) map[string]interface{} {
-	return map[string]interface{}{
-		"type":  "san",
-		"delta": parseDelta(n.Delta),
 	}
 }
 

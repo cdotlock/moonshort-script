@@ -141,10 +141,8 @@ for element in steps:
 | `music_crossfade` | 交叉淡入 BGM |
 | `music_fadeout` | 淡出 BGM |
 | `sfx_play` | 播放音效 |
-| `xp` | 经验值变更 |
-| `san` | 理智值变更 |
 | `affection` | 好感度变更 |
-| `signal` | 抛出事件 |
+| `signal` | 抛出事件（同时存储为持久布尔标记） |
 | `butterfly` | 蝴蝶效应记录 |
 | `label` | 跳转锚点（引擎内部用） |
 | `goto` | 跳转（引擎内部用） |
@@ -515,18 +513,6 @@ for element in steps:
 
 ### 4.7 状态变更类
 
-#### `xp` — 经验值
-
-```json
-{ "type": "xp", "delta": 3 }
-```
-
-#### `san` — 理智值
-
-```json
-{ "type": "san", "delta": -20 }
-```
-
 #### `affection` — 好感度
 
 ```json
@@ -539,6 +525,38 @@ for element in steps:
 { "type": "signal", "event": "EP01_COMPLETE" }
 ```
 
+`@signal` 具有双重角色：
+
+1. **引擎通知**：向引擎抛出命名事件，用于成就解锁、UI 提示、数据分析等
+2. **持久布尔标记**：引擎永久存储每个 signal 的事件名。在 `@if` 条件中，signal 名称作为布尔值——被触发过为 TRUE，否则为 FALSE
+
+#### Signal 与 @if 联动
+
+完整生命周期：
+
+1. 脚本发出 `@signal EVENT_NAME`
+2. 引擎收到 `{"type": "signal", "event": "EVENT_NAME"}`，执行事件处理并存储该事件名
+3. 后续脚本中 `@if EVENT_NAME { }` 编译为 `{"type": "if", "condition": "EVENT_NAME", "then": [...]}`
+4. 引擎求值：在已存储的 signal 中查找 `EVENT_NAME` → 找到返回 true，否则返回 false
+
+示例：
+
+```
+// Episode 1: 触发 signal
+@signal MINIGAME_PERFECT_EP01
+```
+→ JSON: `{"type": "signal", "event": "MINIGAME_PERFECT_EP01"}`
+
+```
+// Episode 3: 检查 signal
+@if MINIGAME_PERFECT_EP01 {
+  NARRATOR: You remember that perfect run.
+}
+```
+→ JSON: `{"type": "if", "condition": "MINIGAME_PERFECT_EP01", "then": [{"type": "narrator", "text": "You remember that perfect run."}]}`
+
+引擎在求值 `condition: "MINIGAME_PERFECT_EP01"` 时查找已存储的 signal 列表，如果 Episode 1 中触发过该 signal 则返回 true。
+
 #### `butterfly` — 蝴蝶效应
 
 ```json
@@ -547,10 +565,8 @@ for element in steps:
 
 | 类型 | 字段 | 说明 |
 |------|------|------|
-| `xp` | `delta: number` | 经验变化量（正/负） |
-| `san` | `delta: number` | 理智变化量 |
 | `affection` | `character: string, delta: number` | 角色好感变化量 |
-| `signal` | `event: string` | 事件名 |
+| `signal` | `event: string` | 事件名（同时作为持久布尔标记） |
 | `butterfly` | `description: string` | 蝴蝶效应描述 |
 
 ### 4.8 流程控制类
@@ -806,8 +822,6 @@ JSON 输出：
             {"type": "dialogue", "character": "easton", "text": "Can I sit?"},
             {"type": "dialogue", "character": "malia", "text": "You have two minutes."},
             {"type": "affection", "character": "easton", "delta": 2},
-            {"type": "xp", "delta": 3},
-            {"type": "san", "delta": 5},
             {"type": "butterfly", "description": "在食堂正面接受了Easton的靠近"}
           ],
           "on_fail": [
@@ -818,8 +832,6 @@ JSON 输出：
               "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
             },
             {"type": "dialogue", "character": "malia", "text": "I... I can't do this."},
-            {"type": "san", "delta": -20},
-            {"type": "xp", "delta": 1},
             {"type": "butterfly", "description": "试图面对Easton但失去了勇气"}
           ]
         },
@@ -839,7 +851,6 @@ JSON 输出：
             {"type": "dialogue", "character": "mark", "text": "HEY EASTON! You want some of my mystery casserole?"},
             {"type": "bubble", "character": "mark", "bubble_type": "music"},
             {"type": "you", "text": "Thank god for Mark."},
-            {"type": "xp", "delta": 1},
             {"type": "butterfly", "description": "让Mark帮忙避开了和Easton的正面接触"}
           ]
         }

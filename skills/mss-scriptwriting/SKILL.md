@@ -240,15 +240,11 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
       EASTON: Can I sit?
       MALIA: You have two minutes.
       @affection easton +2
-      @xp +3
-      @san +5
       @butterfly "Accepted Easton's approach at the cafeteria"
     }
     @on fail {
       @easton look hurt
       MALIA: I... I can't do this.
-      @san -20
-      @xp +1
       @butterfly "Tried to face Easton but lost courage"
     }
   }
@@ -257,7 +253,6 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
     @easton hide fade
     MARK: HEY EASTON! You want some of my mystery casserole?
     YOU: Thank god for Mark.
-    @xp +1
     @butterfly "Had Mark create a diversion to avoid Easton"
   }
 }
@@ -272,21 +267,35 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
 - No check block, no @on blocks
 - Content goes directly inside the option block
 
-**Every outcome path must include:**
-- `@xp` change (brave success: +3, brave fail: +1, safe: +1)
+**Every outcome path should include:**
 - `@butterfly` description (what happened as a result of this choice)
-- Optionally: `@san`, `@affection`, `@signal`
+- Optionally: `@affection`, `@signal`
 
 ## State Changes
 
 These are declarations — the game engine handles the actual math.
 
 ```
-@xp +3                                    // Experience points
-@san -20                                   // Sanity (health)
 @affection easton +2                       // Character relationship
-@signal EP01_COMPLETE                      // Event for engine (achievements, flags, etc.)
+@signal EP01_COMPLETE                      // Event for engine + persistent boolean flag
 @butterfly "Accepted Easton's approach"    // Recorded for LLM-based route evaluation
+```
+
+> **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if san <= 20 { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
+
+**`@signal` has two roles:**
+1. **Engine notification**: emits a named event for achievements, UI triggers, analytics, etc.
+2. **Persistent boolean flag**: the engine stores every signal permanently. You can check if a signal was emitted using `@if SIGNAL_NAME { }` — this evaluates to TRUE if the signal exists, FALSE otherwise. This is how hidden storylines are triggered.
+
+Example — signal emitted in Episode 1, checked in Episode 3:
+```
+// Episode 1
+@signal MINIGAME_PERFECT_EP01
+
+// Episode 3
+@if MINIGAME_PERFECT_EP01 {
+  NARRATOR: You remember that perfect run.
+}
 ```
 
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
@@ -310,8 +319,8 @@ Use `@if` to show different content based on game state. The engine evaluates co
 ```
 
 **Condition syntax:**
-- Flags (boolean): `FLAG_NAME` (true if the signal was ever emitted)
-- Numeric comparisons: `affection.<char>`, `xp`, `san`, or any attribute name + operator + number
+- Flags/signals (boolean): `SIGNAL_NAME` (true if the signal was ever emitted, false otherwise)
+- Numeric comparisons: `affection.<char>` or any engine-managed value name (e.g., `san`, `xp`, `hp` — names defined by engine) + operator + number
 - Operators: `>=` `<=` `>` `<` `==` `!=`
 - Logic: `&&` (and), `||` (or)
 
@@ -367,6 +376,7 @@ The `@gate` block at the end of every episode declares where the player goes nex
 10. **Nested `@choice` blocks** — Only one `@choice` per episode. Multiple choices in one episode is not supported.
 11. **Using `&` on block structures** — `&choice`, `&cg show`, `&minigame`, `&phone show`, `&if`, `&gate` are all errors. Block structures always use `@`.
 12. **Forgetting to use `&` for scene setup** — When a scene starts with bg + music + character entrances, the first directive uses `@` and the rest should use `&` so they execute together. Writing all of them with `@` makes them sequential, which looks choppy.
+13. **Trying to set engine values from scripts** — `@xp`, `@san` are not valid directives. The engine manages these values internally. Scripts can only check them in `@if` conditions (e.g., `@if san <= 20 { }`), not modify them.
 
 ## Remix Scripts
 

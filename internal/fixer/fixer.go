@@ -27,8 +27,6 @@ var knownKeywords = map[string]bool{
 	"minigame":  true,
 	"choice":    true,
 	"option":    true,
-	"xp":        true,
-	"san":       true,
 	"affection": true,
 	"signal":    true,
 	"butterfly": true,

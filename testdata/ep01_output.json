@@ -304,19 +304,11 @@
               "text": "Malia, please",
               "type": "dialogue"
             },
-            {
-              "character": "MALIA",
-              "text": "Not here. Not now.",
-              "type": "dialogue"
-            },
             [
               {
-                "delta": -20,
-                "type": "san"
-              },
-              {
-                "delta": 1,
-                "type": "xp"
+                "character": "MALIA",
+                "text": "Not here. Not now.",
+                "type": "dialogue"
               },
               {
                 "description": "Tried to face Easton but lost courage",
@@ -346,14 +338,6 @@
                 "character": "easton",
                 "delta": 2,
                 "type": "affection"
-              },
-              {
-                "delta": 3,
-                "type": "xp"
-              },
-              {
-                "delta": 5,
-                "type": "san"
               },
               {
                 "description": "Accepted Easton's approach at the cafeteria",
@@ -391,14 +375,10 @@
               "character": "mark",
               "type": "bubble"
             },
-            {
-              "text": "Thank god for Mark.",
-              "type": "you"
-            },
             [
               {
-                "delta": 1,
-                "type": "xp"
+                "text": "Thank god for Mark.",
+                "type": "you"
               },
               {
                 "description": "Had Mark create a diversion to avoid Easton",

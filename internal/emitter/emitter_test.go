@@ -96,7 +96,6 @@ func TestEmitMinimal(t *testing.T) {
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "school_classroom", Transition: "fade"},
 			&ast.NarratorNode{Text: "The hallway is empty."},
-			&ast.XpNode{Delta: "+3"},
 		},
 		Gate: &ast.GateBlock{
 			Routes: []*ast.GateRoute{
@@ -135,8 +134,8 @@ func TestEmitMinimal(t *testing.T) {
 	if !ok {
 		t.Fatalf("steps is not an array: %T", result["steps"])
 	}
-	if len(steps) != 3 {
-		t.Fatalf("len(steps) = %d, want 3", len(steps))
+	if len(steps) != 2 {
+		t.Fatalf("len(steps) = %d, want 2", len(steps))
 	}
 
 	// Step 0: bg.
@@ -158,15 +157,6 @@ func TestEmitMinimal(t *testing.T) {
 	}
 	if narr["text"] != "The hallway is empty." {
 		t.Errorf("step[1].text = %v", narr["text"])
-	}
-
-	// Step 2: xp.
-	xp := steps[2].(map[string]interface{})
-	if xp["type"] != "xp" {
-		t.Errorf("step[2].type = %v, want xp", xp["type"])
-	}
-	if xp["delta"] != float64(3) {
-		t.Errorf("step[2].delta = %v, want 3", xp["delta"])
 	}
 
 	// Check gate.
@@ -209,9 +199,7 @@ func TestEmitChoice(t *testing.T) {
 						OnFail: []ast.Node{
 							&ast.DialogueNode{Character: "MAURICIO", Text: "Nice try."},
 						},
-						Body: []ast.Node{
-							&ast.XpNode{Delta: "+2"},
-						},
+						Body: nil,
 					},
 					{
 						ID:   "B",
@@ -291,9 +279,10 @@ func TestEmitChoice(t *testing.T) {
 		t.Fatalf("len(on_fail) = %d, want 1", len(onFail))
 	}
 
-	stepsA := optA["steps"].([]interface{})
-	if len(stepsA) != 1 {
-		t.Fatalf("len(steps) = %d, want 1", len(stepsA))
+	if stepsA, ok := optA["steps"]; ok && stepsA != nil {
+		if arr, ok := stepsA.([]interface{}); ok && len(arr) != 0 {
+			t.Fatalf("len(optA.steps) = %d, want 0", len(arr))
+		}
 	}
 
 	// Option B: safe.
