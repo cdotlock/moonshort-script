@@ -6,16 +6,16 @@ import (
 	"github.com/cdotlock/moonshort-script/internal/ast"
 )
 
-func TestValidGatesHasDefault(t *testing.T) {
+func TestValidGateBlock(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "Test",
 		Body: []ast.Node{
 			&ast.NarratorNode{Text: "Hello."},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}
@@ -26,22 +26,22 @@ func TestValidGatesHasDefault(t *testing.T) {
 	}
 }
 
-func TestMissingGates(t *testing.T) {
+func TestMissingGate(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "Test",
 		Body: []ast.Node{
 			&ast.NarratorNode{Text: "Hello."},
 		},
-		Gates: nil,
+		Gate: nil,
 	}
 
 	errs := Validate(ep)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
-	if errs[0].Code != MissingGates {
-		t.Errorf("error code = %q, want %q", errs[0].Code, MissingGates)
+	if errs[0].Code != MissingGate {
+		t.Errorf("error code = %q, want %q", errs[0].Code, MissingGate)
 	}
 }
 
@@ -52,9 +52,9 @@ func TestGotoWithoutLabel(t *testing.T) {
 		Body: []ast.Node{
 			&ast.GotoNode{Name: "MISSING_LABEL"},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}
@@ -81,9 +81,9 @@ func TestGotoWithLabel(t *testing.T) {
 			&ast.NarratorNode{Text: "Middle."},
 			&ast.GotoNode{Name: "AFTER_FIGHT"},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}
@@ -111,9 +111,9 @@ func TestBraveOptionWithoutCheck(t *testing.T) {
 				},
 			},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}

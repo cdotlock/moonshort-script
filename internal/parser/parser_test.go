@@ -25,8 +25,8 @@ func TestParseMinimal(t *testing.T) {
 	@bg set classroom fade
 	NARRATOR: Hello.
 	YOU: Thinking.
-	@gates {
-		@default main:02
+	@gate {
+		@next main:02
 	}
 }`
 	ep := parseOrFail(t, src)
@@ -71,19 +71,19 @@ func TestParseMinimal(t *testing.T) {
 		t.Errorf("YouNode.Text: got %q, want %q", you.Text, "Thinking.")
 	}
 
-	// Gates
-	if ep.Gates == nil {
-		t.Fatal("Gates: expected non-nil")
+	// Gate
+	if ep.Gate == nil {
+		t.Fatal("Gate: expected non-nil")
 	}
-	if len(ep.Gates.Gates) != 1 {
-		t.Fatalf("Gates count: got %d, want 1", len(ep.Gates.Gates))
+	if len(ep.Gate.Routes) != 1 {
+		t.Fatalf("Gate.Routes count: got %d, want 1", len(ep.Gate.Routes))
 	}
-	def := ep.Gates.Gates[0]
-	if def.GateType != "default" {
-		t.Errorf("Gate.GateType: got %q, want %q", def.GateType, "default")
+	def := ep.Gate.Routes[0]
+	if def.Condition != "" {
+		t.Errorf("GateRoute.Condition: got %q, want %q", def.Condition, "")
 	}
 	if def.Target != "main:02" {
-		t.Errorf("Gate.Target: got %q, want %q", def.Target, "main:02")
+		t.Errorf("GateRoute.Target: got %q, want %q", def.Target, "main:02")
 	}
 }
 
@@ -91,12 +91,12 @@ func TestParseMinimal(t *testing.T) {
 func TestParseCharDirectives(t *testing.T) {
 	src := `@episode main:01 "Chars" {
 	@mauricio show neutral at center fade
-	@mauricio expr angry
+	@mauricio look angry
 	@mauricio bubble heart
 	@mauricio move to left
 	MAURICIO: Hey there.
 	@mauricio hide fade
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -112,8 +112,8 @@ func TestParseCharDirectives(t *testing.T) {
 	if show.Char != "mauricio" {
 		t.Errorf("CharShowNode.Char: got %q, want %q", show.Char, "mauricio")
 	}
-	if show.Pose != "neutral" {
-		t.Errorf("CharShowNode.Pose: got %q, want %q", show.Pose, "neutral")
+	if show.Look != "neutral" {
+		t.Errorf("CharShowNode.Look: got %q, want %q", show.Look, "neutral")
 	}
 	if show.Position != "center" {
 		t.Errorf("CharShowNode.Position: got %q, want %q", show.Position, "center")
@@ -122,13 +122,13 @@ func TestParseCharDirectives(t *testing.T) {
 		t.Errorf("CharShowNode.Transition: got %q, want %q", show.Transition, "fade")
 	}
 
-	// expr
-	expr, ok := ep.Body[1].(*ast.CharExprNode)
+	// expr (now CharLookNode)
+	expr, ok := ep.Body[1].(*ast.CharLookNode)
 	if !ok {
-		t.Fatalf("Body[1]: expected *CharExprNode, got %T", ep.Body[1])
+		t.Fatalf("Body[1]: expected *CharLookNode, got %T", ep.Body[1])
 	}
-	if expr.Char != "mauricio" || expr.Pose != "angry" {
-		t.Errorf("CharExprNode: got char=%q pose=%q", expr.Char, expr.Pose)
+	if expr.Char != "mauricio" || expr.Look != "angry" {
+		t.Errorf("CharLookNode: got char=%q look=%q", expr.Char, expr.Look)
 	}
 
 	// bubble
@@ -175,7 +175,7 @@ func TestParseAudio(t *testing.T) {
 	@sfx play door_open
 	@music crossfade theme_battle
 	@music fadeout
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -225,7 +225,7 @@ func TestParseStateChanges(t *testing.T) {
 	@affection mauricio +2
 	@signal EP01_COMPLETE
 	@butterfly "Player chose kindness"
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -297,7 +297,7 @@ func TestParseChoice(t *testing.T) {
 			@affection guard +1
 		}
 	}
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -386,7 +386,7 @@ func TestParseMinigame(t *testing.T) {
 			@xp +1
 		}
 	}
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -440,7 +440,7 @@ func TestParsePhone(t *testing.T) {
 		@text from easton: Meet me at the park.
 	}
 	@phone hide
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -500,7 +500,7 @@ func TestParseIfElse(t *testing.T) {
 	@else {
 		NARRATOR: Easton barely notices you.
 	}
-	@gates { @default main:02 }
+	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -545,28 +545,28 @@ func TestParseIfElse(t *testing.T) {
 }
 
 // TestParseDialogueWithExpr tests that CHARACTER [pose_expr]: text expands to
-// CharExprNode + DialogueNode in the correct order.
+// CharLookNode + DialogueNode in the correct order.
 func TestParseDialogueWithExpr(t *testing.T) {
 	src := `@episode main:01 "Test" {
   MAURICIO [arms_crossed_angry]: Your call, Butterfly.
-  @gates { @default main:02 }
+  @gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
 	if len(ep.Body) != 2 {
-		t.Fatalf("Body length: got %d, want 2 (CharExprNode + DialogueNode)", len(ep.Body))
+		t.Fatalf("Body length: got %d, want 2 (CharLookNode + DialogueNode)", len(ep.Body))
 	}
 
-	// Body[0] must be CharExprNode.
-	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	// Body[0] must be CharLookNode.
+	expr, ok := ep.Body[0].(*ast.CharLookNode)
 	if !ok {
-		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+		t.Fatalf("Body[0]: expected *CharLookNode, got %T", ep.Body[0])
 	}
 	if expr.Char != "mauricio" {
-		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "mauricio")
+		t.Errorf("CharLookNode.Char: got %q, want %q", expr.Char, "mauricio")
 	}
-	if expr.Pose != "arms_crossed_angry" {
-		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "arms_crossed_angry")
+	if expr.Look != "arms_crossed_angry" {
+		t.Errorf("CharLookNode.Look: got %q, want %q", expr.Look, "arms_crossed_angry")
 	}
 
 	// Body[1] must be DialogueNode.
@@ -582,28 +582,28 @@ func TestParseDialogueWithExpr(t *testing.T) {
 	}
 }
 
-// TestParseYouWithExpr tests that YOU [pose_expr]: text expands to CharExprNode + YouNode.
+// TestParseYouWithExpr tests that YOU [pose_expr]: text expands to CharLookNode + YouNode.
 func TestParseYouWithExpr(t *testing.T) {
 	src := `@episode main:01 "Test" {
   YOU [thinking]: Why is he looking at me like that?
-  @gates { @default main:02 }
+  @gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
 	if len(ep.Body) != 2 {
-		t.Fatalf("Body length: got %d, want 2 (CharExprNode + YouNode)", len(ep.Body))
+		t.Fatalf("Body length: got %d, want 2 (CharLookNode + YouNode)", len(ep.Body))
 	}
 
-	// Body[0] must be CharExprNode for "you".
-	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	// Body[0] must be CharLookNode for "you".
+	expr, ok := ep.Body[0].(*ast.CharLookNode)
 	if !ok {
-		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+		t.Fatalf("Body[0]: expected *CharLookNode, got %T", ep.Body[0])
 	}
 	if expr.Char != "you" {
-		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "you")
+		t.Errorf("CharLookNode.Char: got %q, want %q", expr.Char, "you")
 	}
-	if expr.Pose != "thinking" {
-		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "thinking")
+	if expr.Look != "thinking" {
+		t.Errorf("CharLookNode.Look: got %q, want %q", expr.Look, "thinking")
 	}
 
 	// Body[1] must be YouNode.
@@ -617,27 +617,27 @@ func TestParseYouWithExpr(t *testing.T) {
 }
 
 // TestParseNarratorWithExpr tests that NARRATOR [pose_expr]: text expands to
-// CharExprNode + NarratorNode.
+// CharLookNode + NarratorNode.
 func TestParseNarratorWithExpr(t *testing.T) {
 	src := `@episode main:01 "Test" {
   NARRATOR [somber]: Three days passed without a word.
-  @gates { @default main:02 }
+  @gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
 	if len(ep.Body) != 2 {
-		t.Fatalf("Body length: got %d, want 2 (CharExprNode + NarratorNode)", len(ep.Body))
+		t.Fatalf("Body length: got %d, want 2 (CharLookNode + NarratorNode)", len(ep.Body))
 	}
 
-	expr, ok := ep.Body[0].(*ast.CharExprNode)
+	expr, ok := ep.Body[0].(*ast.CharLookNode)
 	if !ok {
-		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+		t.Fatalf("Body[0]: expected *CharLookNode, got %T", ep.Body[0])
 	}
 	if expr.Char != "narrator" {
-		t.Errorf("CharExprNode.Char: got %q, want %q", expr.Char, "narrator")
+		t.Errorf("CharLookNode.Char: got %q, want %q", expr.Char, "narrator")
 	}
-	if expr.Pose != "somber" {
-		t.Errorf("CharExprNode.Pose: got %q, want %q", expr.Pose, "somber")
+	if expr.Look != "somber" {
+		t.Errorf("CharLookNode.Look: got %q, want %q", expr.Look, "somber")
 	}
 
 	narr, ok := ep.Body[1].(*ast.NarratorNode)
@@ -655,7 +655,7 @@ func TestParseDialogueWithExprFollowedByMore(t *testing.T) {
 	src := `@episode main:01 "Test" {
   MAURICIO [arms_crossed_angry]: Your call, Butterfly.
   NARRATOR: She turned away.
-  @gates { @default main:02 }
+  @gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 
@@ -663,8 +663,8 @@ func TestParseDialogueWithExprFollowedByMore(t *testing.T) {
 		t.Fatalf("Body length: got %d, want 3", len(ep.Body))
 	}
 
-	if _, ok := ep.Body[0].(*ast.CharExprNode); !ok {
-		t.Fatalf("Body[0]: expected *CharExprNode, got %T", ep.Body[0])
+	if _, ok := ep.Body[0].(*ast.CharLookNode); !ok {
+		t.Fatalf("Body[0]: expected *CharLookNode, got %T", ep.Body[0])
 	}
 	if _, ok := ep.Body[1].(*ast.DialogueNode); !ok {
 		t.Fatalf("Body[1]: expected *DialogueNode, got %T", ep.Body[1])
@@ -678,67 +678,52 @@ func TestParseDialogueWithExprFollowedByMore(t *testing.T) {
 	}
 }
 
-// TestParseGates tests gates with choice gate, influence gate, and default.
+// TestParseGates tests gate block with conditional routes and a fallback.
 func TestParseGates(t *testing.T) {
 	src := `@episode main:01 "Gates" {
 	NARRATOR: The story branches.
-	@gates {
-		@gate main/good/001:01 {
-			type: choice
-			trigger: option_A success
-		}
-		@gate main/bad/001:01 {
-			type: influence
-			condition: affection.easton >= 10
-		}
-		@default main:02
+	@gate {
+		@if (choice.A.success):
+			@next main/good/001:01
+		@else @if (affection.easton >= 10):
+			@next main/bad/001:01
+		@else:
+			@next main:02
 	}
 }`
 	ep := parseOrFail(t, src)
 
-	if ep.Gates == nil {
-		t.Fatal("Gates: expected non-nil")
+	if ep.Gate == nil {
+		t.Fatal("Gate: expected non-nil")
 	}
-	if len(ep.Gates.Gates) != 3 {
-		t.Fatalf("Gates count: got %d, want 3", len(ep.Gates.Gates))
-	}
-
-	// Choice gate.
-	g0 := ep.Gates.Gates[0]
-	if g0.Target != "main/good/001:01" {
-		t.Errorf("Gate[0].Target: got %q, want %q", g0.Target, "main/good/001:01")
-	}
-	if g0.GateType != "choice" {
-		t.Errorf("Gate[0].GateType: got %q, want %q", g0.GateType, "choice")
-	}
-	if g0.Trigger == nil {
-		t.Fatal("Gate[0].Trigger: expected non-nil")
-	}
-	if g0.Trigger.OptionID != "A" {
-		t.Errorf("Gate[0].Trigger.OptionID: got %q, want %q", g0.Trigger.OptionID, "A")
-	}
-	if g0.Trigger.CheckResult != "success" {
-		t.Errorf("Gate[0].Trigger.CheckResult: got %q, want %q", g0.Trigger.CheckResult, "success")
+	if len(ep.Gate.Routes) != 3 {
+		t.Fatalf("Gate.Routes count: got %d, want 3", len(ep.Gate.Routes))
 	}
 
-	// Influence gate.
-	g1 := ep.Gates.Gates[1]
-	if g1.Target != "main/bad/001:01" {
-		t.Errorf("Gate[1].Target: got %q, want %q", g1.Target, "main/bad/001:01")
+	// Conditional route 0: choice.A.success
+	r0 := ep.Gate.Routes[0]
+	if r0.Condition != "choice . A . success" {
+		t.Errorf("Route[0].Condition: got %q, want %q", r0.Condition, "choice . A . success")
 	}
-	if g1.GateType != "influence" {
-		t.Errorf("Gate[1].GateType: got %q, want %q", g1.GateType, "influence")
-	}
-	if g1.Condition != "affection . easton >= 10" {
-		t.Errorf("Gate[1].Condition: got %q, want %q", g1.Condition, "affection . easton >= 10")
+	if r0.Target != "main/good/001:01" {
+		t.Errorf("Route[0].Target: got %q, want %q", r0.Target, "main/good/001:01")
 	}
 
-	// Default gate.
-	g2 := ep.Gates.Gates[2]
-	if g2.GateType != "default" {
-		t.Errorf("Gate[2].GateType: got %q, want %q", g2.GateType, "default")
+	// Conditional route 1: affection.easton >= 10
+	r1 := ep.Gate.Routes[1]
+	if r1.Condition != "affection . easton >= 10" {
+		t.Errorf("Route[1].Condition: got %q, want %q", r1.Condition, "affection . easton >= 10")
 	}
-	if g2.Target != "main:02" {
-		t.Errorf("Gate[2].Target: got %q, want %q", g2.Target, "main:02")
+	if r1.Target != "main/bad/001:01" {
+		t.Errorf("Route[1].Target: got %q, want %q", r1.Target, "main/bad/001:01")
+	}
+
+	// Fallback route 2: unconditional
+	r2 := ep.Gate.Routes[2]
+	if r2.Condition != "" {
+		t.Errorf("Route[2].Condition: got %q, want %q (empty)", r2.Condition, "")
+	}
+	if r2.Target != "main:02" {
+		t.Errorf("Route[2].Target: got %q, want %q", r2.Target, "main:02")
 	}
 }

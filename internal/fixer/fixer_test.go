@@ -219,7 +219,7 @@ func TestFixMultipleIssues(t *testing.T) {
 @butterfly Accepted Easton
 @bg set beach
 
-@gates {
+@gate {
 @default "end"
 }
 `
@@ -258,42 +258,21 @@ func TestFixMultipleIssues(t *testing.T) {
 	}
 }
 
-func TestErrorMissingGates(t *testing.T) {
+func TestErrorMissingGate(t *testing.T) {
 	input := `@episode "Test" {
 NARRATOR: Hello
 }`
 	r := Fix(input)
 
-	foundGatesError := false
+	foundGateError := false
 	for _, e := range r.Errors {
-		if strings.Contains(e, "missing @gates block") {
-			foundGatesError = true
+		if strings.Contains(e, "missing @gate block") {
+			foundGateError = true
 			break
 		}
 	}
-	if !foundGatesError {
-		t.Errorf("expected missing @gates error, got errors: %v", r.Errors)
-	}
-}
-
-func TestErrorMissingDefault(t *testing.T) {
-	input := `@episode "Test" {
-@gates {
-@gate "path1" {
-}
-}
-}`
-	r := Fix(input)
-
-	foundDefaultError := false
-	for _, e := range r.Errors {
-		if strings.Contains(e, "missing @default") {
-			foundDefaultError = true
-			break
-		}
-	}
-	if !foundDefaultError {
-		t.Errorf("expected missing @default error, got errors: %v", r.Errors)
+	if !foundGateError {
+		t.Errorf("expected missing @gate error, got errors: %v", r.Errors)
 	}
 }
 
@@ -307,7 +286,7 @@ NARRATOR: First
 NARRATOR: Duplicate
 }
 }
-@gates {
+@gate {
 @default "end"
 }
 }`
@@ -338,7 +317,7 @@ NARRATOR: Lose
 }
 }
 }
-@gates {
+@gate {
 @default "end"
 }
 }`
@@ -366,7 +345,7 @@ dc 12
 }
 }
 }
-@gates {
+@gate {
 @default "end"
 }
 }`
@@ -389,7 +368,7 @@ func TestErrorGotoWithoutLabel(t *testing.T) {
 @goto ending
 @label start
 NARRATOR: Hello
-@gates {
+@gate {
 @default "end"
 }
 }`
@@ -425,7 +404,7 @@ NARRATOR: Option B selected
 }
 }
 
-@gates {
+@gate {
 @default "end"
 }
 }`

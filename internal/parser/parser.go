@@ -17,8 +17,8 @@ var knownKeywords = map[string]bool{
 	"music": true, "sfx": true, "minigame": true, "choice": true,
 	"xp": true, "san": true, "affection": true, "signal": true,
 	"butterfly": true, "if": true, "else": true, "label": true,
-	"goto": true, "gates": true, "episode": true, "on": true,
-	"option": true, "gate": true, "default": true,
+	"goto": true, "episode": true, "on": true,
+	"option": true, "gate": true, "next": true,
 }
 
 // Parser consumes tokens from a Lexer and produces an AST.
@@ -102,7 +102,7 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 		return nil, err
 	}
 	episode.Body = body
-	episode.Gates = gates
+	episode.Gate = gates
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
@@ -110,21 +110,21 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 	return episode, nil
 }
 
-// parseEpisodeBody parses body nodes until RBRACE, handling @gates specially.
-func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GatesBlock, error) {
+// parseEpisodeBody parses body nodes until RBRACE, handling @gate specially.
+func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 	var body []ast.Node
-	var gates *ast.GatesBlock
+	var gates *ast.GateBlock
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr before
-		// checking for the @gates short-circuit path.
+		// checking for the @gate short-circuit path.
 		if p.pending != nil {
 			body = append(body, p.pending)
 			p.pending = nil
 			continue
 		}
-		if p.cur.Type == token.AT && p.peek.Literal == "gates" {
-			g, err := p.parseGatesBlock()
+		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
+			g, err := p.parseGateBlock()
 			if err != nil {
 				return nil, nil, err
 			}
@@ -297,10 +297,10 @@ func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
 		p.pending = &ast.DialogueNode{Character: name, Text: textTok.Literal}
 	}
 
-	// Return CharExprNode first.
-	return &ast.CharExprNode{
+	// Return CharLookNode first.
+	return &ast.CharLookNode{
 		Char: charID,
-		Pose: pose,
+		Look: pose,
 	}, nil
 }
 
@@ -880,8 +880,8 @@ func (p *Parser) parseCharDirective(char string) (ast.Node, error) {
 		return p.parseCharShow(char)
 	case "hide":
 		return p.parseCharHide(char)
-	case "expr":
-		return p.parseCharExpr(char)
+	case "look":
+		return p.parseCharLook(char)
 	case "move":
 		return p.parseCharMove(char)
 	case "bubble":
@@ -908,7 +908,7 @@ func (p *Parser) parseCharShow(char string) (ast.Node, error) {
 	}
 	node := &ast.CharShowNode{
 		Char:     char,
-		Pose:     pose.Literal,
+		Look:     pose.Literal,
 		Position: pos.Literal,
 	}
 	// Optional transition.
@@ -929,15 +929,15 @@ func (p *Parser) parseCharHide(char string) (ast.Node, error) {
 	return node, nil
 }
 
-// parseCharExpr parses: expr <pose> [transition]
-func (p *Parser) parseCharExpr(char string) (ast.Node, error) {
+// parseCharLook parses: look <pose> [transition]
+func (p *Parser) parseCharLook(char string) (ast.Node, error) {
 	pose, err := p.expect(token.IDENT)
 	if err != nil {
 		return nil, err
 	}
-	node := &ast.CharExprNode{
+	node := &ast.CharLookNode{
 		Char: char,
-		Pose: pose.Literal,
+		Look: pose.Literal,
 	}
 	if p.cur.Type == token.IDENT && !p.isDirectiveStart() {
 		node.Transition = p.cur.Literal
@@ -974,31 +974,38 @@ func (p *Parser) parseCharBubble(char string) (ast.Node, error) {
 	}, nil
 }
 
-// parseGatesBlock parses: @gates { @gate ... @default ... }
-func (p *Parser) parseGatesBlock() (*ast.GatesBlock, error) {
+// parseGateBlock parses: @gate { @if (cond): @next target ... @else: @next target }
+func (p *Parser) parseGateBlock() (*ast.GateBlock, error) {
 	p.advance() // consume AT
-	p.advance() // consume "gates"
+	p.advance() // consume "gate"
 	if _, err := p.expect(token.LBRACE); err != nil {
 		return nil, err
 	}
 
-	block := &ast.GatesBlock{}
+	block := &ast.GateBlock{}
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		if p.cur.Type == token.AT {
-			if p.peek.Literal == "gate" {
-				gate, err := p.parseGate()
+			switch p.peek.Literal {
+			case "if":
+				route, err := p.parseGateIf()
 				if err != nil {
 					return nil, err
 				}
-				block.Gates = append(block.Gates, gate)
-			} else if p.peek.Literal == "default" {
-				gate, err := p.parseDefault()
+				block.Routes = append(block.Routes, route)
+			case "else":
+				route, err := p.parseGateElse()
 				if err != nil {
 					return nil, err
 				}
-				block.Gates = append(block.Gates, gate)
-			} else {
+				block.Routes = append(block.Routes, route)
+			case "next":
+				route, err := p.parseGateNext()
+				if err != nil {
+					return nil, err
+				}
+				block.Routes = append(block.Routes, route)
+			default:
 				p.advance()
 			}
 		} else {
@@ -1012,99 +1019,101 @@ func (p *Parser) parseGatesBlock() (*ast.GatesBlock, error) {
 	return block, nil
 }
 
-// parseGate parses: @gate <key> { type: ... trigger: ... condition: ... }
-func (p *Parser) parseGate() (*ast.Gate, error) {
+// parseGateIf parses: @if (<condition>): @next <target>
+func (p *Parser) parseGateIf() (*ast.GateRoute, error) {
 	p.advance() // consume AT
-	p.advance() // consume "gate"
-	target, err := p.expect(token.IDENT)
+	p.advance() // consume "if"
+
+	cond, err := p.readConditionInParens()
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.expect(token.LBRACE); err != nil {
+
+	if _, err := p.expect(token.COLON); err != nil {
 		return nil, err
 	}
 
-	gate := &ast.Gate{Target: target.Literal}
-
-	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
-		if p.cur.Type == token.IDENT {
-			key := p.cur.Literal
-			p.advance()
-			if _, err := p.expect(token.COLON); err != nil {
-				return nil, err
-			}
-			switch key {
-			case "type":
-				val, err := p.expect(token.IDENT)
-				if err != nil {
-					return nil, err
-				}
-				gate.GateType = val.Literal
-			case "trigger":
-				gate.Trigger = &ast.GateTrigger{}
-				// Read trigger values — could be "option_A success" etc.
-				for p.cur.Type == token.IDENT {
-					lit := p.cur.Literal
-					// Check if it looks like an option reference (option_X).
-					if len(lit) > 7 && lit[:7] == "option_" {
-						gate.Trigger.OptionID = lit[7:]
-					} else if lit == "success" || lit == "fail" {
-						gate.Trigger.CheckResult = lit
-					} else {
-						gate.Trigger.OptionID = lit
-					}
-					p.advance()
-				}
-			case "condition":
-				// Read condition as raw text until next key or RBRACE.
-				cond := p.readConditionValue()
-				gate.Condition = cond
-			}
-		} else {
-			p.advance()
-		}
-	}
-
-	if _, err := p.expect(token.RBRACE); err != nil {
+	target, err := p.parseGateNextTarget()
+	if err != nil {
 		return nil, err
 	}
-	return gate, nil
+
+	return &ast.GateRoute{Condition: cond, Target: target}, nil
 }
 
-// readConditionValue reads a condition expression inside a gate block.
-// Stops at the next key: pattern (IDENT COLON at block level) or RBRACE.
-func (p *Parser) readConditionValue() string {
+// parseGateElse parses: @else @if (...): @next ... OR @else: @next ...
+func (p *Parser) parseGateElse() (*ast.GateRoute, error) {
+	p.advance() // consume AT
+	p.advance() // consume "else"
+
+	// Check for @else @if (chained condition).
+	if p.cur.Type == token.AT && p.peek.Literal == "if" {
+		return p.parseGateIf()
+	}
+
+	// Plain @else: @next <target>
+	if _, err := p.expect(token.COLON); err != nil {
+		return nil, err
+	}
+
+	target, err := p.parseGateNextTarget()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.GateRoute{Condition: "", Target: target}, nil
+}
+
+// parseGateNext parses a bare: @next <target> (unconditional jump)
+func (p *Parser) parseGateNext() (*ast.GateRoute, error) {
+	target, err := p.parseGateNextTarget()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.GateRoute{Condition: "", Target: target}, nil
+}
+
+// parseGateNextTarget consumes @next <target> and returns the target string.
+func (p *Parser) parseGateNextTarget() (string, error) {
+	if _, err := p.expect(token.AT); err != nil {
+		return "", err
+	}
+	kw, err := p.expect(token.IDENT)
+	if err != nil {
+		return "", err
+	}
+	if kw.Literal != "next" {
+		return "", fmt.Errorf("line %d col %d: expected 'next', got %q", kw.Line, kw.Col, kw.Literal)
+	}
+	target, err := p.expect(token.IDENT)
+	if err != nil {
+		return "", err
+	}
+	return target.Literal, nil
+}
+
+// readConditionInParens reads a condition expression wrapped in parentheses.
+// STRING tokens have their quotes preserved.
+func (p *Parser) readConditionInParens() (string, error) {
+	if _, err := p.expect(token.LPAREN); err != nil {
+		return "", err
+	}
+
 	var parts []string
-	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
-		// Lookahead: if current is IDENT and peek is COLON, this is a new key.
-		if p.cur.Type == token.IDENT && p.peek.Type == token.COLON {
-			break
+	for p.cur.Type != token.RPAREN && p.cur.Type != token.EOF {
+		if p.cur.Type == token.STRING {
+			parts = append(parts, "\""+p.cur.Literal+"\"")
+		} else {
+			parts = append(parts, p.cur.Literal)
 		}
-		parts = append(parts, p.cur.Literal)
 		p.advance()
 	}
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += " "
-		}
-		result += part
-	}
-	return result
-}
 
-// parseDefault parses: @default <key>
-func (p *Parser) parseDefault() (*ast.Gate, error) {
-	p.advance() // consume AT
-	p.advance() // consume "default"
-	target, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
+	if _, err := p.expect(token.RPAREN); err != nil {
+		return "", err
 	}
-	return &ast.Gate{
-		Target:   target.Literal,
-		GateType: "default",
-	}, nil
+
+	return strings.Join(parts, " "), nil
 }
 
 // isDirectiveStart returns true if cur looks like the start of a new directive

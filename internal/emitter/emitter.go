@@ -46,8 +46,8 @@ func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 		"steps":      e.emitNodes(ep.Body),
 	}
 
-	if ep.Gates != nil {
-		out["gates"] = e.emitGates(ep.Gates)
+	if ep.Gate != nil {
+		out["gate"] = e.emitGate(ep.Gate)
 	}
 
 	return json.MarshalIndent(out, "", "  ")
@@ -74,8 +74,8 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		return e.emitCharShow(v)
 	case *ast.CharHideNode:
 		return e.emitCharHide(v)
-	case *ast.CharExprNode:
-		return e.emitCharExpr(v)
+	case *ast.CharLookNode:
+		return e.emitCharLook(v)
 	case *ast.CharMoveNode:
 		return e.emitCharMove(v)
 	case *ast.CharBubbleNode:
@@ -148,12 +148,12 @@ func (e *Emitter) emitCharShow(n *ast.CharShowNode) map[string]interface{} {
 	m := map[string]interface{}{
 		"type":      "char_show",
 		"character": n.Char,
-		"pose_expr": n.Pose,
+		"look":      n.Look,
 		"position":  n.Position,
 	}
-	url, err := e.resolver.ResolveCharacter(n.Char, n.Pose)
+	url, err := e.resolver.ResolveCharacter(n.Char, n.Look)
 	if err != nil {
-		e.warn("char_show %q/%q: %v", n.Char, n.Pose, err)
+		e.warn("char_show %q/%q: %v", n.Char, n.Look, err)
 	} else {
 		m["url"] = url
 	}
@@ -174,15 +174,15 @@ func (e *Emitter) emitCharHide(n *ast.CharHideNode) map[string]interface{} {
 	return m
 }
 
-func (e *Emitter) emitCharExpr(n *ast.CharExprNode) map[string]interface{} {
+func (e *Emitter) emitCharLook(n *ast.CharLookNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type":      "char_expr",
+		"type":      "char_look",
 		"character": n.Char,
-		"pose_expr": n.Pose,
+		"look":      n.Look,
 	}
-	url, err := e.resolver.ResolveCharacter(n.Char, n.Pose)
+	url, err := e.resolver.ResolveCharacter(n.Char, n.Look)
 	if err != nil {
-		e.warn("char_expr %q/%q: %v", n.Char, n.Pose, err)
+		e.warn("char_look %q/%q: %v", n.Char, n.Look, err)
 	} else {
 		m["url"] = url
 	}
@@ -398,35 +398,16 @@ func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
 	return m
 }
 
-func (e *Emitter) emitGates(g *ast.GatesBlock) map[string]interface{} {
-	result := map[string]interface{}{}
-	rules := make([]interface{}, 0)
-	for _, gate := range g.Gates {
-		if gate.GateType == "default" {
-			result["default"] = gate.Target
-			continue
+func (e *Emitter) emitGate(g *ast.GateBlock) []interface{} {
+	routes := make([]interface{}, 0, len(g.Routes))
+	for _, r := range g.Routes {
+		m := map[string]interface{}{"next": r.Target}
+		if r.Condition != "" {
+			m["condition"] = r.Condition
 		}
-		rule := map[string]interface{}{
-			"target": gate.Target,
-			"type":   gate.GateType,
-		}
-		if gate.Condition != "" {
-			rule["condition"] = gate.Condition
-		}
-		if gate.Trigger != nil {
-			trigger := map[string]interface{}{}
-			if gate.Trigger.OptionID != "" {
-				trigger["option_id"] = gate.Trigger.OptionID
-			}
-			if gate.Trigger.CheckResult != "" {
-				trigger["check_result"] = gate.Trigger.CheckResult
-			}
-			rule["trigger"] = trigger
-		}
-		rules = append(rules, rule)
+		routes = append(routes, m)
 	}
-	result["rules"] = rules
-	return result
+	return routes
 }
 
 func (e *Emitter) warn(format string, args ...interface{}) {

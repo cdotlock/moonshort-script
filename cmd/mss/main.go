@@ -70,7 +70,7 @@ func parseFlags(args []string) (target, assetsPath, outputPath string) {
 type noopResolver struct{}
 
 func (n *noopResolver) ResolveBg(name string) (string, error)                    { return "", nil }
-func (n *noopResolver) ResolveCharacter(char, poseExpr string) (string, error)   { return "", nil }
+func (n *noopResolver) ResolveCharacter(char, look string) (string, error)       { return "", nil }
 func (n *noopResolver) ResolveMusic(name string) (string, error)                 { return "", nil }
 func (n *noopResolver) ResolveSfx(name string) (string, error)                   { return "", nil }
 func (n *noopResolver) ResolveCg(name string) (string, error)                    { return "", nil }

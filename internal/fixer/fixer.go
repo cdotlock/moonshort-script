@@ -36,9 +36,8 @@ var knownKeywords = map[string]bool{
 	"else":      true,
 	"label":     true,
 	"goto":      true,
-	"gates":     true,
 	"gate":      true,
-	"default":   true,
+	"next":      true,
 	"episode":   true,
 	"on":        true,
 	"check":     true,
@@ -250,61 +249,20 @@ func fixUnclosedBlocks(lines []string, r *FixResult) []string {
 func checkErrors(r *FixResult) {
 	lines := strings.Split(r.Fixed, "\n")
 
-	checkMissingGates(lines, r)
-	checkMissingDefault(lines, r)
+	checkMissingGate(lines, r)
 	checkBraveOptions(lines, r)
 	checkGotoLabels(lines, r)
 	checkDuplicateOptionIDs(lines, r)
 }
 
-func checkMissingGates(lines []string, r *FixResult) {
+func checkMissingGate(lines []string, r *FixResult) {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "@gates" || trimmed == "@gates {" || strings.HasPrefix(trimmed, "@gates ") {
+		if trimmed == "@gate" || trimmed == "@gate {" || strings.HasPrefix(trimmed, "@gate ") {
 			return
 		}
 	}
-	r.Errors = append(r.Errors, "missing @gates block \u2014 every episode must declare routing")
-}
-
-func checkMissingDefault(lines []string, r *FixResult) {
-	inGates := false
-	depth := 0
-	hasGates := false
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		if trimmed == "@gates" || trimmed == "@gates {" || strings.HasPrefix(trimmed, "@gates ") {
-			inGates = true
-			hasGates = true
-			if strings.Contains(trimmed, "{") {
-				depth = 1
-			}
-			continue
-		}
-
-		if inGates {
-			for _, ch := range trimmed {
-				switch ch {
-				case '{':
-					depth++
-				case '}':
-					depth--
-					if depth <= 0 {
-						inGates = false
-					}
-				}
-			}
-			if inGates && (trimmed == "@default" || strings.HasPrefix(trimmed, "@default ") || strings.HasPrefix(trimmed, "@default\t")) {
-				return
-			}
-		}
-	}
-
-	if hasGates {
-		r.Errors = append(r.Errors, "missing @default in @gates \u2014 must specify fallback route")
-	}
+	r.Errors = append(r.Errors, "missing @gate block \u2014 every episode must declare routing")
 }
 
 // braveOptionInfo tracks context while scanning for brave option problems.

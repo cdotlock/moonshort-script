@@ -21,34 +21,25 @@ type Episode struct {
 	BranchKey string     // e.g. "main:01"
 	Title     string     // e.g. "Butterfly"
 	Body      []Node     // ordered list of top-level nodes
-	Gates     *GatesBlock // optional routing table at end of episode
+	Gate      *GateBlock // optional routing table at end of episode
 }
 
 // ----------------------------------------------------------------------------
 // Structure nodes
 // ----------------------------------------------------------------------------
 
-// GatesBlock holds all @gate definitions at the end of an episode.
-type GatesBlock struct {
-	Gates []*Gate
+// GateBlock holds routing rules at the end of an episode.
+// Routes are evaluated top-to-bottom; the first matching condition wins.
+type GateBlock struct {
+	Routes []*GateRoute
 }
 
-func (g *GatesBlock) nodeType() string { return "gates" }
+func (g *GateBlock) nodeType() string { return "gate" }
 
-// Gate is a single routing rule inside a @gates block.
-type Gate struct {
-	Target    string       // destination episode key, e.g. "main/bad/001:01"
-	GateType  string       // "choice" | "check" | "signal" | "default"
-	Trigger   *GateTrigger // optional trigger descriptor
-	Condition string       // optional raw condition expression
-}
-
-func (g *Gate) nodeType() string { return "gate" }
-
-// GateTrigger describes what event activates a gate.
-type GateTrigger struct {
-	OptionID    string // option letter / id (for choice gates)
-	CheckResult string // "success" | "fail"
+// GateRoute is a single condition→target pair inside a @gate block.
+type GateRoute struct {
+	Condition string // raw condition expression; empty = unconditional/fallback
+	Target    string // destination episode key, e.g. "main/bad/001:01"
 }
 
 // LabelNode marks a jump target inside the episode body.
@@ -65,13 +56,6 @@ type GotoNode struct {
 
 func (g *GotoNode) nodeType() string { return "goto" }
 
-// DefaultNode specifies the fallthrough episode key.
-type DefaultNode struct {
-	Target string // episode key, e.g. "main:02"
-}
-
-func (d *DefaultNode) nodeType() string { return "default" }
-
 // ----------------------------------------------------------------------------
 // Visual nodes
 // ----------------------------------------------------------------------------
@@ -87,7 +71,7 @@ func (b *BgSetNode) nodeType() string { return "bg" }
 // CharShowNode brings a character sprite onto screen.
 type CharShowNode struct {
 	Char       string // character id, e.g. "mauricio"
-	Pose       string // sprite variant, e.g. "neutral_smirk"
+	Look       string // sprite variant, e.g. "neutral_smirk"
 	Position   string // "left" | "center" | "right" | "left_far" | "right_far"
 	Transition string
 }
@@ -102,14 +86,15 @@ type CharHideNode struct {
 
 func (c *CharHideNode) nodeType() string { return "char_hide" }
 
-// CharExprNode changes a character's facial expression / pose in-place.
-type CharExprNode struct {
+// CharLookNode changes a character's sprite (look) in-place.
+// Covers both expression and costume changes.
+type CharLookNode struct {
 	Char       string
-	Pose       string
+	Look       string
 	Transition string
 }
 
-func (c *CharExprNode) nodeType() string { return "char_expr" }
+func (c *CharLookNode) nodeType() string { return "char_look" }
 
 // CharMoveNode slides a character to a new screen position.
 type CharMoveNode struct {

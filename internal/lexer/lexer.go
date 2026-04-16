@@ -191,6 +191,14 @@ func (l *Lexer) NextToken() token.Token {
 		l.advance()
 		return l.makeToken(token.RBRACKET, "]", line, col)
 
+	case ch == '(':
+		l.advance()
+		return l.makeToken(token.LPAREN, "(", line, col)
+
+	case ch == ')':
+		l.advance()
+		return l.makeToken(token.RPAREN, ")", line, col)
+
 	case ch == '.':
 		l.advance()
 		return l.makeToken(token.DOT, ".", line, col)

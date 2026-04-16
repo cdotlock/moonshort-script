@@ -38,9 +38,9 @@ Every script follows this skeleton:
   // ...
 
   // Routing — MUST be last
-  @gates {
-    @gate <target> { ... }
-    @default <fallback>
+  @gate {
+    @if (<condition>): @next <target>
+    @else: @next <fallback>
   }
 }
 ```
@@ -67,11 +67,11 @@ YOU: He hasn't called me that in eight years.
 
 Three special names: `NARRATOR` (third-person scene narration), `YOU` (MC's inner monologue), and any other name (character dialogue). Character names in dialogue are case-insensitive with their `@` directive counterparts — `MAURICIO:` in dialogue = `@mauricio` in directives.
 
-**Syntax sugar — expression change + dialogue in one line:**
+**Syntax sugar — look change + dialogue in one line:**
 ```
-CHARACTER [pose_expr]: text
+CHARACTER [look]: text
 ```
-This is shorthand for `@character expr pose_expr` followed by `CHARACTER: text`. Use it to keep the script tight when a character's expression changes right before they speak:
+This is shorthand for `@character look look` followed by `CHARACTER: text`. Use it to keep the script tight when a character's look changes right before they speak:
 ```
 MAURICIO [arms_crossed_angry]: Your call, Butterfly.
 ```
@@ -84,8 +84,8 @@ All visual directives use **object-action** order: `@<object> <action> [params]`
 
 ```
 @mauricio show neutral_smirk at right     // Enter stage
-@mauricio expr arms_crossed_angry         // Change expression (instant)
-@mauricio expr arms_crossed_angry dissolve // Change expression (crossfade)
+@mauricio look arms_crossed_angry         // Change look (instant)
+@mauricio look arms_crossed_angry dissolve // Change look (crossfade)
 @mauricio move to left                    // Slide to new position
 @mauricio bubble heart                    // Emotion bubble (auto-disappears)
 @mauricio hide                            // Exit (instant)
@@ -94,7 +94,7 @@ All visual directives use **object-action** order: `@<object> <action> [params]`
 
 **Positions:** `left` | `center` | `right` | `left_far` | `right_far`
 
-**Pose/expression names** are semantic — they map to asset files via the interpreter. Use `snake_case`: `neutral_smirk`, `arms_crossed_angry`, `vulnerable_hopeful`. The name is `{pose}_{expression}` but you can use any descriptive snake_case name.
+**Look names** are semantic — they map to asset files via the interpreter. Use `snake_case`: `neutral_smirk`, `arms_crossed_angry`, `vulnerable_hopeful`. You can use any descriptive snake_case name.
 
 **Bubble types:** `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ellipsis`
 
@@ -177,7 +177,7 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
       dc: 12
     }
     @on success {
-      @easton expr relieved
+      @easton look relieved
       EASTON: Can I sit?
       MALIA: You have two minutes.
       @affection easton +2
@@ -186,7 +186,7 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
       @butterfly "Accepted Easton's approach at the cafeteria"
     }
     @on fail {
-      @easton expr hurt
+      @easton look hurt
       MALIA: I... I can't do this.
       @san -20
       @xp +1
@@ -269,45 +269,39 @@ NARRATOR: The dust settled.
 
 Only use `@goto`/`@label` when structured nesting can't express the flow. Prefer `@if`/`@else` for conditional content.
 
-## Routing (Gates)
+## Routing (Gate)
 
-The `@gates` block at the end of every episode declares where the player goes next. The engine evaluates gates top-to-bottom — first match wins. If nothing matches, `@default` is the fallback.
+The `@gate` block at the end of every episode declares where the player goes next. The engine evaluates conditions top-to-bottom — first match wins. If nothing matches, `@else` is the fallback.
 
 ```
-@gates {
-  // Type 1: Route based on the player's choice
-  @gate main/bad/001:01 {
-    type: choice
-    trigger: A fail          // Option A was chosen AND check failed
-  }
+@gate {
+  // Choice-based: route based on the player's choice
+  @if (A fail): @next main/bad/001:01
 
-  // Type 2: Route based on accumulated butterfly effects (LLM evaluates)
-  @gate main/route/001:01 {
-    type: influence
-    condition: "Player has repeatedly shown empathy toward Easton"
-  }
+  // Influence-based: route based on accumulated butterfly effects (LLM evaluates)
+  @if ("Player has repeatedly shown empathy toward Easton"): @next main/route/001:01
 
   // Fallback
-  @default main:02
+  @else: @next main:02
 }
 ```
 
-**`type: choice` trigger format:** `<option_id> <result>`
+**Choice condition format:** `<option_id> <result>`
 - option_id: A, B, C... (matches the option's ID)
 - result: `success` | `fail` | `any`
 
-**`type: influence` condition:** A natural language description. At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
+**Influence condition:** A quoted natural language description. At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
 
-**`@default` is mandatory.** Every episode must have a default route.
+**`@else` is mandatory.** Every episode must have a fallback route.
 
 ## Common Mistakes
 
-1. **Forgetting `@gates` block** — Every episode needs routing. No gates = interpreter error.
-2. **Missing `@default`** — Gates block without default = interpreter error.
+1. **Forgetting `@gate` block** — Every episode needs routing. No gate = interpreter error.
+2. **Missing `@else`** — Gate block without fallback = interpreter error.
 3. **Brave option without `check { }`** — Brave means D20 check. No check block = error.
 4. **Brave option without both `@on success` and `@on fail`** — Both outcomes must be defined.
 5. **`@goto` without matching `@label`** — The target label must exist in the same episode.
-6. **Putting `@gates` anywhere except the end** — Gates must be the last thing in `@episode`.
+6. **Putting `@gate` anywhere except the end** — Gate must be the last thing in `@episode`.
 7. **Using character names inconsistently** — `@mauricio show ...` and `MAURICIO:` must use the same name (case-insensitive).
 8. **Forgetting `@butterfly` in choice outcomes** — Every choice outcome should record what happened for the influence system.
 9. **Writing asset paths instead of semantic names** — Scripts use names like `classroom_morning`, not URLs or file paths. The interpreter handles mapping.
@@ -319,7 +313,7 @@ Remix scripts use the exact same format. The only differences:
 
 - **Branch key** uses `remix/<session_id>:01` addressing
 - **Content starts after the choice point** — the user's input replaced the original `@choice`
-- **May or may not return to main line** — `@default main:02` to rejoin, or `@default remix/<session_id>:02` to continue the remix branch
+- **May or may not return to main line** — `@else: @next main:02` to rejoin, or `@else: @next remix/<session_id>:02` to continue the remix branch
 
 ```
 @episode remix/abc123:01 "Mark's Casserole Incident" {
@@ -329,8 +323,8 @@ Remix scripts use the exact same format. The only differences:
   NARRATOR: The cafeteria descended into chaos.
   @butterfly "Mark started a food fight in the cafeteria"
 
-  @gates {
-    @default main:02
+  @gate {
+    @else: @next main:02
   }
 }
 ```

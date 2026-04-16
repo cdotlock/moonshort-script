@@ -9,8 +9,7 @@ import (
 
 // Error codes for validation failures.
 const (
-	MissingGates        = "MISSING_GATES"
-	MissingDefault      = "MISSING_DEFAULT"
+	MissingGate         = "MISSING_GATE"
 	GotoNoLabel         = "GOTO_NO_LABEL"
 	BraveNoCheck        = "BRAVE_NO_CHECK"
 	BraveMissingOutcome = "BRAVE_MISSING_OUTCOME"
@@ -30,27 +29,11 @@ func (e Error) Error() string {
 func Validate(ep *ast.Episode) []Error {
 	var errs []Error
 
-	// 1. Episode must have a Gates block.
-	if ep.Gates == nil {
+	if ep.Gate == nil {
 		errs = append(errs, Error{
-			Code:    MissingGates,
-			Message: "episode is missing a @gates block",
+			Code:    MissingGate,
+			Message: "episode is missing a @gate block",
 		})
-	} else {
-		// 2. Gates must have a Default.
-		hasDefault := false
-		for _, g := range ep.Gates.Gates {
-			if g.GateType == "default" {
-				hasDefault = true
-				break
-			}
-		}
-		if !hasDefault {
-			errs = append(errs, Error{
-				Code:    MissingDefault,
-				Message: "@gates block is missing a @default entry",
-			})
-		}
 	}
 
 	// Collect all labels defined in the episode.

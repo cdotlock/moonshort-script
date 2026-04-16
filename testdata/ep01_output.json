@@ -1,24 +1,19 @@
 {
   "branch_key": "main",
   "episode_id": "main:01",
-  "gates": {
-    "default": "main:02",
-    "rules": [
-      {
-        "target": "main/bad/001:01",
-        "trigger": {
-          "check_result": "fail",
-          "option_id": "A"
-        },
-        "type": "choice"
-      },
-      {
-        "condition": "Player has repeatedly shown empathy toward Easton",
-        "target": "main/route/001:01",
-        "type": "influence"
-      }
-    ]
-  },
+  "gate": [
+    {
+      "condition": "choice . A . fail",
+      "next": "main/bad/001:01"
+    },
+    {
+      "condition": "influence \"Player has repeatedly shown empathy toward Easton\"",
+      "next": "main/route/001:01"
+    },
+    {
+      "next": "main:02"
+    }
+  ],
   "seq": 1,
   "steps": [
     {
@@ -33,7 +28,7 @@
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_phone",
+      "look": "neutral_phone",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_phone.png"
@@ -72,8 +67,8 @@
     },
     {
       "character": "malia",
-      "pose_expr": "worried",
-      "type": "char_expr",
+      "look": "worried",
+      "type": "char_look",
       "url": "https://oss.mobai.com/novel_001/characters/malia_worried.png"
     },
     {
@@ -89,14 +84,14 @@
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_flat",
+      "look": "neutral_flat",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_flat.png"
     },
     {
       "character": "josie",
-      "pose_expr": "cheerful_wave",
+      "look": "cheerful_wave",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/josie_cheerful_wave.png"
@@ -133,8 +128,8 @@
     },
     {
       "character": "josie",
-      "pose_expr": "nervous_whisper",
-      "type": "char_expr",
+      "look": "nervous_whisper",
+      "type": "char_look",
       "url": "https://oss.mobai.com/novel_001/characters/josie_nervous_whisper.png"
     },
     {
@@ -144,7 +139,7 @@
     },
     {
       "character": "mauricio",
-      "pose_expr": "neutral_smirk",
+      "look": "neutral_smirk",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/mauricio_neutral_smirk.png"
@@ -180,7 +175,7 @@
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_flat",
+      "look": "neutral_flat",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_flat.png"
@@ -232,14 +227,14 @@
     },
     {
       "character": "mark",
-      "pose_expr": "grin_confident",
+      "look": "grin_confident",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/mark_grin_confident.png"
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_flat",
+      "look": "neutral_flat",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_flat.png"
@@ -256,7 +251,7 @@
     },
     {
       "character": "easton",
-      "pose_expr": "vulnerable_hopeful",
+      "look": "vulnerable_hopeful",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/easton_vulnerable_hopeful.png"
@@ -281,8 +276,8 @@
           "on_fail": [
             {
               "character": "easton",
-              "pose_expr": "hurt",
-              "type": "char_expr",
+              "look": "hurt",
+              "type": "char_look",
               "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
             },
             {
@@ -316,8 +311,8 @@
           "on_success": [
             {
               "character": "easton",
-              "pose_expr": "relieved",
-              "type": "char_expr",
+              "look": "relieved",
+              "type": "char_look",
               "url": "https://oss.mobai.com/novel_001/characters/easton_relieved.png"
             },
             {
@@ -356,7 +351,7 @@
           "steps": [
             {
               "character": "mark",
-              "pose_expr": "grin_mischief",
+              "look": "grin_mischief",
               "position": "right",
               "type": "char_show",
               "url": "https://oss.mobai.com/novel_001/characters/mark_grin_mischief.png"
@@ -407,14 +402,14 @@
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_flat",
+      "look": "neutral_flat",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_flat.png"
     },
     {
       "character": "josie",
-      "pose_expr": "excited",
+      "look": "excited",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/josie_excited.png"
@@ -430,7 +425,7 @@
     },
     {
       "character": "elias",
-      "pose_expr": "neutral_calm",
+      "look": "neutral_calm",
       "position": "right",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/elias_neutral_calm.png"
@@ -461,7 +456,7 @@
     },
     {
       "character": "malia",
-      "pose_expr": "neutral_phone",
+      "look": "neutral_phone",
       "position": "left",
       "type": "char_show",
       "url": "https://oss.mobai.com/novel_001/characters/malia_neutral_phone.png"
@@ -486,8 +481,8 @@
     },
     {
       "character": "malia",
-      "pose_expr": "shocked",
-      "type": "char_expr",
+      "look": "shocked",
+      "type": "char_look",
       "url": "https://oss.mobai.com/novel_001/characters/malia_shocked.png"
     },
     {

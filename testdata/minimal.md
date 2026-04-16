@@ -3,7 +3,7 @@
   NARRATOR: Hello world.
   YOU: Thinking deeply.
 
-  @gates {
-    @default main:02
+  @gate {
+    @next main:02
   }
 }

@@ -20,6 +20,8 @@ const (
 	RBRACE   Type = "RBRACE"
 	LBRACKET Type = "LBRACKET" // [
 	RBRACKET Type = "RBRACKET" // ]
+	LPAREN   Type = "LPAREN"   // (
+	RPAREN   Type = "RPAREN"   // )
 
 	// Operators / comparisons
 	GTE Type = "GTE" // >=
@@ -63,6 +65,10 @@ func (t Type) String() string {
 		return "LBRACKET"
 	case RBRACKET:
 		return "RBRACKET"
+	case LPAREN:
+		return "LPAREN"
+	case RPAREN:
+		return "RPAREN"
 	case GTE:
 		return "GTE"
 	case LTE:

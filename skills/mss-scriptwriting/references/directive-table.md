@@ -5,9 +5,9 @@
 | Directive | Example |
 |-----------|---------|
 | `@episode <key> <title> { }` | `@episode main:01 "Butterfly" { }` |
-| `@gates { }` | Must be last in episode |
-| `@gate <key> { type / trigger / condition }` | `@gate main/bad/001:01 { type: choice  trigger: A fail }` |
-| `@default <key>` | `@default main:02` |
+| `@gate { }` | Must be last in episode |
+| `@if (<cond>): @next <key>` | `@if (A fail): @next main/bad/001:01` |
+| `@else: @next <key>` | `@else: @next main:02` |
 | `@label <name>` | `@label AFTER_FIGHT` |
 | `@goto <name>` | `@goto AFTER_FIGHT` |
 
@@ -17,7 +17,7 @@
 |-----------|---------|
 | `@<char> show <pose> at <pos>` | `@mauricio show neutral_smirk at right` |
 | `@<char> hide [trans]` | `@mauricio hide fade` |
-| `@<char> expr <pose> [trans]` | `@mauricio expr angry dissolve` |
+| `@<char> look <look> [trans]` | `@mauricio look angry dissolve` |
 | `@<char> move to <pos>` | `@mauricio move to left` |
 | `@<char> bubble <type>` | `@josie bubble heart` |
 | `@bg set <name> [trans]` | `@bg set classroom fade` |
@@ -34,7 +34,7 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | `CHARACTER: text` | `MAURICIO: Hey, Butterfly.` |
 | `NARRATOR: text` | `NARRATOR: Senior year. Day one.` |
 | `YOU: text` | `YOU: He hasn't called me that in eight years.` |
-| `CHARACTER [pose_expr]: text` | `MAURICIO [arms_crossed_angry]: Your call, Butterfly.` — dialogue + expression change (syntax sugar) |
+| `CHARACTER [look]: text` | `MAURICIO [arms_crossed_angry]: Your call, Butterfly.` — dialogue + look change (syntax sugar) |
 
 ## Phone
 

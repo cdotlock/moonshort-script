@@ -18,7 +18,7 @@ main:60          → novel/main/60.md
 
 ```
 main/bad/001:01  → novel/main/bad/001/01.md
-main/bad/001:02  → novel/main/bad/001/02.md   (last episode: no @default, or @default to credits)
+main/bad/001:02  → novel/main/bad/001/02.md   (last episode: no @else, or @else: @next credits)
 ```
 
 ## Independent routes (5-10 episodes, parallel storyline)
@@ -49,6 +49,6 @@ The session ID is a unique identifier for the remix session.
 
 1. Directory structure IS the branch_key — the interpreter derives the ID from the file path
 2. Seq numbers are zero-padded to 2 digits: `01`, `02`, ... `60`
-3. Bad endings and minor branches always originate from a `@gate` in a main-line episode
+3. Bad endings and minor branches always originate from a `@gate` block in a main-line episode
 4. Remix branches use the same format but live under `remix/` instead of `main/`
-5. `@default` and `@gate` targets use the full `branch_key:seq` format
+5. `@if`/`@else` targets inside `@gate` use the full `branch_key:seq` format

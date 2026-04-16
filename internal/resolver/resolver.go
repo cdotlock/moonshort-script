@@ -78,15 +78,15 @@ func (r *Resolver) ResolveBg(name string) (string, error) {
 	return r.BaseURL + "/" + rel, nil
 }
 
-// ResolveCharacter returns the full URL for a character pose/expression.
-func (r *Resolver) ResolveCharacter(char, poseExpr string) (string, error) {
+// ResolveCharacter returns the full URL for a character look (sprite variant).
+func (r *Resolver) ResolveCharacter(char, look string) (string, error) {
 	poses, ok := r.Characters[char]
 	if !ok {
 		return "", fmt.Errorf("resolver: unknown character %q", char)
 	}
-	rel, ok := poses[poseExpr]
+	rel, ok := poses[look]
 	if !ok {
-		return "", fmt.Errorf("resolver: unknown pose %q for character %q", poseExpr, char)
+		return "", fmt.Errorf("resolver: unknown look %q for character %q", look, char)
 	}
 	return r.BaseURL + "/" + rel, nil
 }

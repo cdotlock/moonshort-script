@@ -98,9 +98,9 @@ func TestEmitMinimal(t *testing.T) {
 			&ast.NarratorNode{Text: "The hallway is empty."},
 			&ast.XpNode{Delta: "+3"},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}
@@ -169,13 +169,17 @@ func TestEmitMinimal(t *testing.T) {
 		t.Errorf("step[2].delta = %v, want 3", xp["delta"])
 	}
 
-	// Check gates.
-	gates, ok := result["gates"].(map[string]interface{})
+	// Check gate.
+	gate, ok := result["gate"].([]interface{})
 	if !ok {
-		t.Fatalf("gates is not a map: %T", result["gates"])
+		t.Fatalf("gate is not an array: %T", result["gate"])
 	}
-	if gates["default"] != "main:02" {
-		t.Errorf("gates.default = %v, want main:02", gates["default"])
+	if len(gate) != 1 {
+		t.Fatalf("len(gate) = %d, want 1", len(gate))
+	}
+	route := gate[0].(map[string]interface{})
+	if route["next"] != "main:02" {
+		t.Errorf("gate[0].next = %v, want main:02", route["next"])
 	}
 
 	// No warnings expected.
@@ -220,9 +224,9 @@ func TestEmitChoice(t *testing.T) {
 				},
 			},
 		},
-		Gates: &ast.GatesBlock{
-			Gates: []*ast.Gate{
-				{Target: "main:02", GateType: "default"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Target: "main:02"},
 			},
 		},
 	}
