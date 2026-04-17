@@ -219,7 +219,6 @@ Mini-games interrupt the reading flow. The player plays an H5 game, gets a ratin
 @minigame qte_challenge ATK {
   @on S {
     NARRATOR: Your reflexes are razor-sharp today.
-    @signal MINIGAME_PERFECT_EP01
   }
   @on A B {
     NARRATOR: Not bad. You kept up.
@@ -279,46 +278,84 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
 
 **Every outcome path should include:**
 - `@butterfly` description (what happened as a result of this choice)
-- Optionally: `@affection`, `@signal`
+- Optionally: `@affection` if the choice changes a relationship
+
+**Do NOT drop a `@signal mark` on every choice outcome.** Marks are only for key story points that a later `@if` or `@achievement.when` will actually query. See "State Changes" below.
 
 ## State Changes
 
 These are declarations — the game engine handles the actual math.
 
 ```
-@affection easton +2                       // Character relationship
-@signal mark EP01_COMPLETE                 // Persistent boolean flag
-@signal achievement FIRST_KISS             // Unlock a declared achievement
-@butterfly "Accepted Easton's approach"    // Recorded for LLM-based route evaluation
+@affection easton +2                                   // Character relationship
+@butterfly "Accepted Easton's approach"                // Flavor memory for LLM route evaluation
+@signal mark HIGH_HEEL_EP05                            // Key story point — queried later
+@signal achievement HIGH_HEEL_WARRIOR                  // Unlock a declared achievement
 ```
 
 > **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
-**`@signal <kind> <event>` — kind is mandatory.** Two kinds, each with a distinct role:
+**`@signal <kind> <event>` — kind is mandatory.** Two kinds with distinct roles:
 
 | kind | Role | Checkable in `@if`? |
 |------|------|---------------------|
-| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. Use for hidden-path triggers, conditional dialogue, arc achievement triggers, and anything else that depends on past player state. | **Yes** — becomes a `FlagCondition` in conditions |
+| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement `when` conditions. | **Yes** — becomes a `FlagCondition` in conditions |
 | `achievement` | Directly unlock a declared `@achievement` by id. Engine fires its achievement pipeline (UI popup, analytics, unlock). | **No** — achievements are outbound notifications, not story state |
 
 `event` can be a bare identifier or a double-quoted string.
 
-Example — mark emitted in Episode 1, checked in Episode 3:
-```
-// Episode 1
-@signal mark MINIGAME_PERFECT_EP01
+### Mark discipline — marks are NOT wayposts
 
-// Episode 3
-@if (MINIGAME_PERFECT_EP01) {
-  NARRATOR: You remember that perfect run.
-}
-```
+**Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@achievement`'s `when` condition references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
 
-Example — achievement fired directly when a specific moment happens:
-```
-YOU: You leaned in. He didn't pull away.
-@signal achievement FIRST_KISS
-```
+**Write the mark second.** Start from the reader:
+
+1. Identify the payoff — a hidden line of dialogue, a secret scene, an arc achievement
+2. Write the `@if` or `@achievement.when` that would unlock it
+3. *Then* trace back to where the mark should be emitted
+
+**Do NOT emit marks for things the engine already tracks:**
+
+- ❌ `@signal mark EP01_COMPLETE` at the end of every episode — the engine knows which episodes the player cleared from episode_id itself
+- ❌ `@signal mark CHOSE_OPTION_A` after a choice — the choice history is in the engine's choice log; gate `@if (A.success)` queries it directly
+- ❌ `@signal mark AFFECTION_RAISED` — `@affection` already updated the number; `@if (affection.easton >= 5)` queries the value directly
+- ❌ `@signal mark EASTON_ACKNOWLEDGED` as a character-moment marker with no follow-up — that's what `@butterfly` is for (LLM-evaluated, not boolean-queried)
+
+**DO emit marks for these cases:**
+
+- ✅ **Hidden-route trigger**: A key moment in EP05 that a later episode's dialogue references:
+  ```
+  // EP05
+  MALIA: One quick step. My heel went straight through his shoe.
+  @signal mark HIGH_HEEL_EP05
+
+  // EP10 — only players who did EP05 see this line
+  @if (HIGH_HEEL_EP05) {
+    NARRATOR: She glanced down at her shoes. She remembered.
+  }
+  ```
+- ✅ **Arc achievement trigger**: Two or more marks feed into an achievement's `when`:
+  ```
+  // EP05
+  @signal mark HIGH_HEEL_EP05
+
+  // EP24
+  @signal mark HIGH_HEEL_EP24
+
+  @achievement HIGH_HEEL_DOUBLE_KILL {
+    name: "Heel Twice Over"
+    rarity: epic
+    description: "Once is improvisation. Twice is a signature move."
+    when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+  }
+  ```
+- ✅ **Imperative achievement fire**: A singular narrative beat unlocks an achievement directly:
+  ```
+  YOU: I leaned in. He didn't pull back.
+  @signal achievement FIRST_KISS
+  ```
+
+**Name all signal events and achievement ids in `SCREAMING_SNAKE_CASE` English.** Keeps the flag store grep-able and unambiguous across the pipeline.
 
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
 
@@ -328,20 +365,20 @@ Achievements are declared with `@achievement` blocks at episode top-level (along
 
 ```
 @achievement HIGH_HEEL_DOUBLE_KILL {
-  name: "【高跟鞋双杀】"
+  name: "Heel Twice Over"
   rarity: epic
-  description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
+  description: "Once is improvisation. Twice is a signature move."
   when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
 }
 ```
 
-**Required fields (all four):**
+**Required fields (all four). Use English for all user-facing text:**
 
 | Field | Type | Rule |
 |-------|------|------|
-| `name` | quoted string | Display name. Convention: `【...】` brackets, ≤8 CJK chars |
+| `name` | quoted string | English display name. Short, concrete, evocative (≤30 chars recommended) |
 | `rarity` | identifier | One of: `uncommon` / `rare` / `epic` / `legendary`. **`common` is banned** — if every player gets it, it's not an achievement |
-| `description` | quoted string | DM-voice flavor text (1-2 sentences) |
+| `description` | quoted string | English DM-voice flavor text (1-2 sentences) |
 | `when` | condition | Trigger condition using the same grammar as `@if`. Usually references `mark` flags |
 
 **Two complementary trigger patterns:**
@@ -490,10 +527,12 @@ Example bad-path terminal:
 15. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
 16. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
 17. **Invalid `@ending` type** — Only `complete`, `to_be_continued`, `bad_ending` are accepted. Any other identifier is a parse error.
-18. **`@signal` without a kind** — The old two-arg form `@signal EVENT` is a parse error. You must write `@signal mark EVENT` (persistent flag) or `@signal achievement ID` (unlock a declared achievement). There is no fixer backfill — this is a hard break.
-19. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If it's unlockable by every player, it's not an achievement.
-20. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes via `when` condition, declare it once in the most appropriate episode (usually the terminal one).
-21. **Checking an `achievement` signal in `@if`** — `@if (FIRST_KISS)` after `@signal achievement FIRST_KISS` will always be false. Achievements are outbound notifications, not flags. For conditional logic, use `@signal mark`.
+18. **`@signal` without a kind** — `@signal <kind> <event>` requires a kind token. Write `@signal mark EVENT` (persistent flag) or `@signal achievement ID` (unlock a declared achievement). Nothing else parses.
+19. **Orphan marks** — `@signal mark X` with no reader. If no `@if (X)` and no `@achievement.when` references `X`, delete the mark. Marks that no one reads are noise: they dilute the flag store and mislead downstream tools. Never emit marks for "episode completed", "chose option A", "affection raised", or anything else the engine already tracks.
+20. **Using non-English names** — All `event` identifiers, `@achievement` ids, achievement `name`, and `description` strings must be English. Mixed-language ids cause grep/search failures and ambiguous meaning across the pipeline.
+21. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If every player gets it, it's not an achievement.
+22. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes via `when` condition, declare it once in the most appropriate episode (usually the terminal one).
+23. **Checking an `achievement` signal in `@if`** — `@if (FIRST_KISS)` after `@signal achievement FIRST_KISS` will always be false. Achievements are outbound notifications, not flags. For conditional logic, use `@signal mark`.
 
 **Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. Always run the fixer before compiling if the script was generated by an LLM.
 

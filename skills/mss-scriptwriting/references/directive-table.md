@@ -119,9 +119,9 @@ Declarative `@achievement` blocks, hoisted to episode top-level. Field names ali
 
 ```
 @achievement HIGH_HEEL_DOUBLE_KILL {
-  name: "【高跟鞋双杀】"
+  name: "Heel Twice Over"
   rarity: epic
-  description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
+  description: "Once is improvisation. Twice is a signature move."
   when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
 }
 ```
