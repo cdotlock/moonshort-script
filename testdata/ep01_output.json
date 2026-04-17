@@ -222,11 +222,6 @@
           {
             "text": "Your reflexes are razor-sharp today.",
             "type": "narrator"
-          },
-          {
-            "event": "MINIGAME_PERFECT_EP01",
-            "kind": "mark",
-            "type": "signal"
           }
         ]
       },
@@ -504,11 +499,6 @@
     {
       "text": "...How does he know which window is mine?",
       "type": "you"
-    },
-    {
-      "event": "EP01_COMPLETE",
-      "kind": "mark",
-      "type": "signal"
     }
   ],
   "title": "Butterfly"
