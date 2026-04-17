@@ -167,11 +167,15 @@ func fixDirectiveCasing(line string, lineNum int, r *FixResult) string {
 	return line
 }
 
-// fixUnquotedArgs wraps unquoted arguments for @butterfly and @signal in double quotes.
+// fixUnquotedArgs wraps unquoted @butterfly descriptions in double quotes.
+//
+// @signal intentionally does not participate: its syntax is
+// `@signal <kind> <event>` with a structured kind arg, so wrapping the
+// remainder is not meaningful.
 func fixUnquotedArgs(line string, lineNum int, r *FixResult) string {
 	trimmed := strings.TrimSpace(line)
 
-	for _, directive := range []string{"@butterfly", "@signal", "&butterfly", "&signal"} {
+	for _, directive := range []string{"@butterfly", "&butterfly"} {
 		if !strings.HasPrefix(trimmed, directive+" ") && !strings.HasPrefix(trimmed, directive+"\t") {
 			continue
 		}
@@ -195,11 +199,6 @@ func fixUnquotedArgs(line string, lineNum int, r *FixResult) string {
 
 		// Already quoted — nothing to do
 		if strings.HasPrefix(arg, "\"") {
-			break
-		}
-
-		// For @signal/@&signal, only quote if the argument contains spaces
-		if (directive == "@signal" || directive == "&signal") && !strings.Contains(arg, " ") {
 			break
 		}
 

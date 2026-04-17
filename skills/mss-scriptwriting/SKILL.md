@@ -287,20 +287,26 @@ These are declarations — the game engine handles the actual math.
 
 ```
 @affection easton +2                       // Character relationship
-@signal EP01_COMPLETE                      // Event for engine + persistent boolean flag
+@signal mark EP01_COMPLETE                 // Persistent boolean flag
+@signal achievement FIRST_KISS             // Unlock a declared achievement
 @butterfly "Accepted Easton's approach"    // Recorded for LLM-based route evaluation
 ```
 
 > **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
-**`@signal` has two roles:**
-1. **Engine notification**: emits a named event for achievements, UI triggers, analytics, etc.
-2. **Persistent boolean flag**: the engine stores every signal permanently. You can check if a signal was emitted using `@if (SIGNAL_NAME) { }` — this evaluates to TRUE if the signal exists, FALSE otherwise. This is how hidden storylines are triggered.
+**`@signal <kind> <event>` — kind is mandatory.** Two kinds, each with a distinct role:
 
-Example — signal emitted in Episode 1, checked in Episode 3:
+| kind | Role | Checkable in `@if`? |
+|------|------|---------------------|
+| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. Use for hidden-path triggers, conditional dialogue, arc achievement triggers, and anything else that depends on past player state. | **Yes** — becomes a `FlagCondition` in conditions |
+| `achievement` | Directly unlock a declared `@achievement` by id. Engine fires its achievement pipeline (UI popup, analytics, unlock). | **No** — achievements are outbound notifications, not story state |
+
+`event` can be a bare identifier or a double-quoted string.
+
+Example — mark emitted in Episode 1, checked in Episode 3:
 ```
 // Episode 1
-@signal MINIGAME_PERFECT_EP01
+@signal mark MINIGAME_PERFECT_EP01
 
 // Episode 3
 @if (MINIGAME_PERFECT_EP01) {
@@ -308,7 +314,45 @@ Example — signal emitted in Episode 1, checked in Episode 3:
 }
 ```
 
+Example — achievement fired directly when a specific moment happens:
+```
+YOU: You leaned in. He didn't pull away.
+@signal achievement FIRST_KISS
+```
+
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
+
+### Achievements — `@achievement` declarations
+
+Achievements are declared with `@achievement` blocks at episode top-level (alongside narrative content). Field names and rarity vocabulary mirror the [`cdotlock/story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill output — so the generator's table can be mechanically dropped into MSS.
+
+```
+@achievement HIGH_HEEL_DOUBLE_KILL {
+  name: "【高跟鞋双杀】"
+  rarity: epic
+  description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
+  when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+}
+```
+
+**Required fields (all four):**
+
+| Field | Type | Rule |
+|-------|------|------|
+| `name` | quoted string | Display name. Convention: `【...】` brackets, ≤8 CJK chars |
+| `rarity` | identifier | One of: `uncommon` / `rare` / `epic` / `legendary`. **`common` is banned** — if every player gets it, it's not an achievement |
+| `description` | quoted string | DM-voice flavor text (1-2 sentences) |
+| `when` | condition | Trigger condition using the same grammar as `@if`. Usually references `mark` flags |
+
+**Two complementary trigger patterns:**
+
+1. **Declarative (preferred for arcs)** — Drop `@signal mark EP05_HEEL` in Episode 5 and `@signal mark EP24_HEEL` in Episode 24. Declare the achievement with `when: (EP05_HEEL && EP24_HEEL)`. The engine watches marks and unlocks the achievement when the condition becomes true. Cross-episode arcs work naturally this way.
+
+2. **Imperative (for single-moment achievements)** — Declare the achievement with a placeholder flag, then use `@signal achievement FIRST_KISS` at the exact narrative beat. The engine unlocks the achievement by id, bypassing `when` evaluation.
+
+**Placement:** Put the `@achievement` declaration in whatever episode most naturally "owns" it — usually the episode where the achievement unlocks, or the one that introduces the arc. Order within the episode doesn't matter (achievements are hoisted to the episode level).
+
+**Generating achievements:** The [`story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill reads a finished script set and produces a curated ~15-achievement table. Dramatizer should run it after scripts are complete, then each achievement is translated into an `@achievement` block (and any required `@signal mark` instrumentation) in the appropriate episode.
 
 ## Flow Control
 
@@ -446,6 +490,10 @@ Example bad-path terminal:
 15. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
 16. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
 17. **Invalid `@ending` type** — Only `complete`, `to_be_continued`, `bad_ending` are accepted. Any other identifier is a parse error.
+18. **`@signal` without a kind** — The old two-arg form `@signal EVENT` is a parse error. You must write `@signal mark EVENT` (persistent flag) or `@signal achievement ID` (unlock a declared achievement). There is no fixer backfill — this is a hard break.
+19. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If it's unlockable by every player, it's not an achievement.
+20. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes via `when` condition, declare it once in the most appropriate episode (usually the terminal one).
+21. **Checking an `achievement` signal in `@if`** — `@if (FIRST_KISS)` after `@signal achievement FIRST_KISS` will always be false. Achievements are outbound notifications, not flags. For conditional logic, use `@signal mark`.
 
 **Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. Always run the fixer before compiling if the script was generated by an LLM.
 

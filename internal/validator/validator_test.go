@@ -887,3 +887,65 @@ func TestInvalidCompoundConditionOp(t *testing.T) {
 		t.Errorf("expected INVALID_CONDITION for invalid compound op, got %v", errs)
 	}
 }
+
+func TestDuplicateAchievementID(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Achievements: []*ast.AchievementNode{
+			{ID: "A", Name: "x", Rarity: "rare", Description: "d", Trigger: &ast.FlagCondition{Name: "F"}},
+			{ID: "A", Name: "y", Rarity: "epic", Description: "d", Trigger: &ast.FlagCondition{Name: "G"}},
+		},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == DuplicateAchievement {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected DUPLICATE_ACHIEVEMENT_ID, got %v", errs)
+	}
+}
+
+func TestInvalidRarityValidation(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "hi"}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Achievements: []*ast.AchievementNode{
+			{ID: "A", Name: "n", Rarity: "common", Description: "d", Trigger: &ast.FlagCondition{Name: "F"}},
+		},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == InvalidRarity {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INVALID_RARITY, got %v", errs)
+	}
+}
+
+func TestInvalidSignalKindValidation(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.SignalNode{Kind: "garbage", Event: "X"}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == InvalidSignalKind {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INVALID_SIGNAL_KIND, got %v", errs)
+	}
+}

@@ -19,7 +19,7 @@ var knownKeywords = map[string]bool{
 	"butterfly": true, "if": true, "else": true, "label": true,
 	"goto": true, "episode": true, "on": true,
 	"option": true, "gate": true, "next": true, "pause": true,
-	"ending": true,
+	"ending": true, "achievement": true,
 }
 
 // validEndingTypes enumerates the accepted values for @ending <type>.
@@ -27,6 +27,22 @@ var validEndingTypes = map[string]bool{
 	"complete":        true,
 	"to_be_continued": true,
 	"bad_ending":      true,
+}
+
+// validSignalKinds enumerates accepted values for the kind token in
+// @signal <kind> <event>.
+var validSignalKinds = map[string]bool{
+	"mark":        true,
+	"achievement": true,
+}
+
+// validRarities enumerates accepted achievement rarities. Common is
+// intentionally banned.
+var validRarities = map[string]bool{
+	"uncommon":  true,
+	"rare":      true,
+	"epic":      true,
+	"legendary": true,
 }
 
 // Parser consumes tokens from a Lexer and produces an AST.
@@ -106,13 +122,14 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 		Title:     title.Literal,
 	}
 
-	body, gates, ending, err := p.parseEpisodeBody()
+	body, gates, ending, achievements, err := p.parseEpisodeBody()
 	if err != nil {
 		return nil, err
 	}
 	episode.Body = body
 	episode.Gate = gates
 	episode.Ending = ending
+	episode.Achievements = achievements
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
@@ -120,16 +137,19 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 	return episode, nil
 }
 
-// parseEpisodeBody parses body nodes until RBRACE. @gate and @ending are
-// hoisted to episode-level fields; only one of the two may appear.
-func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, error) {
+// parseEpisodeBody parses body nodes until RBRACE. @gate, @ending, and
+// @achievement are hoisted to episode-level fields instead of remaining in
+// the body.  @gate and @ending are mutually exclusive terminals. Multiple
+// @achievement declarations are accumulated.
+func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, []*ast.AchievementNode, error) {
 	var body []ast.Node
 	var gates *ast.GateBlock
 	var ending *ast.EndingNode
+	var achievements []*ast.AchievementNode
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr before
-		// checking the @gate / @ending short-circuit paths.
+		// checking the @gate / @ending / @achievement short-circuit paths.
 		if p.pending != nil {
 			body = append(body, p.pending)
 			p.pending = nil
@@ -137,35 +157,43 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
 			if gates != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
 			}
 			if ending != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
 			}
 			g, err := p.parseGateBlock()
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			gates = g
 			continue
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "ending" {
 			if ending != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
 			}
 			if gates != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
 			}
 			e, err := p.parseEnding()
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			ending = e
 			continue
 		}
+		if p.cur.Type == token.AT && p.peek.Literal == "achievement" {
+			a, err := p.parseAchievement()
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			achievements = append(achievements, a)
+			continue
+		}
 		node, err := p.parseStatement()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if node != nil {
 			body = append(body, node)
@@ -176,7 +204,7 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 		body = append(body, p.pending)
 		p.pending = nil
 	}
-	return body, gates, ending, nil
+	return body, gates, ending, achievements, nil
 }
 
 // parseBlock parses body nodes until RBRACE (but does NOT consume the RBRACE).
@@ -837,9 +865,25 @@ func (p *Parser) parseAffection() (ast.Node, error) {
 	return &ast.AffectionNode{Char: char.Literal, Delta: delta.Literal}, nil
 }
 
-// parseSignal parses: @signal <event>
+// parseSignal parses: @signal <kind> <event>
+//
+// Kind is mandatory — one of:
+//   - "mark"        → persistent boolean flag (checkable in @if (NAME))
+//   - "achievement" → achievement unlock event (references a declared
+//                      @achievement by id; not a queryable flag)
+//
+// Event may be a bare IDENT or a double-quoted STRING.
 func (p *Parser) parseSignal() (ast.Node, error) {
 	p.advance() // consume "signal"
+	kindTok, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: expected signal kind (mark|achievement) after '@signal', got %s (%q)",
+			kindTok.Line, kindTok.Col, kindTok.Type, kindTok.Literal)
+	}
+	if !validSignalKinds[kindTok.Literal] {
+		return nil, fmt.Errorf("line %d col %d: invalid signal kind %q (must be 'mark' or 'achievement')",
+			kindTok.Line, kindTok.Col, kindTok.Literal)
+	}
 	var event string
 	if p.cur.Type == token.STRING {
 		event = p.cur.Literal
@@ -847,11 +891,104 @@ func (p *Parser) parseSignal() (ast.Node, error) {
 	} else {
 		tok, err := p.expect(token.IDENT)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("line %d col %d: expected event name after '@signal %s', got %s (%q)",
+				tok.Line, tok.Col, kindTok.Literal, tok.Type, tok.Literal)
 		}
 		event = tok.Literal
 	}
-	return &ast.SignalNode{Event: event}, nil
+	return &ast.SignalNode{Kind: kindTok.Literal, Event: event}, nil
+}
+
+// parseAchievement parses: @achievement <id> { name: "..." rarity: <r>
+// description: "..." when: (<condition>) }
+//
+// Keys may appear in any order. Every key is required. Only one
+// @achievement with a given id may appear across the episode (validator
+// enforces uniqueness).
+func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
+	p.advance() // consume AT
+	p.advance() // consume "achievement"
+
+	idTok, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: expected achievement id after '@achievement', got %s (%q)",
+			idTok.Line, idTok.Col, idTok.Type, idTok.Literal)
+	}
+
+	if _, err := p.expect(token.LBRACE); err != nil {
+		return nil, err
+	}
+
+	node := &ast.AchievementNode{ID: idTok.Literal}
+	seen := map[string]bool{}
+
+	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
+		if p.cur.Type != token.IDENT {
+			return nil, fmt.Errorf("line %d col %d: expected achievement field key, got %s (%q)",
+				p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+		}
+		key := p.cur.Literal
+		if seen[key] {
+			return nil, fmt.Errorf("line %d col %d: duplicate achievement field %q", p.cur.Line, p.cur.Col, key)
+		}
+		seen[key] = true
+		p.advance() // consume key
+		if _, err := p.expect(token.COLON); err != nil {
+			return nil, err
+		}
+		switch key {
+		case "name":
+			val, err := p.expect(token.STRING)
+			if err != nil {
+				return nil, fmt.Errorf("line %d col %d: achievement name must be a quoted string", val.Line, val.Col)
+			}
+			node.Name = val.Literal
+		case "description":
+			val, err := p.expect(token.STRING)
+			if err != nil {
+				return nil, fmt.Errorf("line %d col %d: achievement description must be a quoted string", val.Line, val.Col)
+			}
+			node.Description = val.Literal
+		case "rarity":
+			val, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, fmt.Errorf("line %d col %d: achievement rarity must be an identifier", val.Line, val.Col)
+			}
+			if !validRarities[val.Literal] {
+				return nil, fmt.Errorf("line %d col %d: invalid rarity %q (must be uncommon, rare, epic, or legendary)",
+					val.Line, val.Col, val.Literal)
+			}
+			node.Rarity = val.Literal
+		case "when":
+			cond, err := p.readCondition()
+			if err != nil {
+				return nil, err
+			}
+			node.Trigger = cond
+		default:
+			return nil, fmt.Errorf("line %d col %d: unknown achievement field %q (expected name, rarity, description, or when)",
+				p.cur.Line, p.cur.Col, key)
+		}
+	}
+
+	if _, err := p.expect(token.RBRACE); err != nil {
+		return nil, err
+	}
+
+	// All four fields are required.
+	if node.Name == "" {
+		return nil, fmt.Errorf("achievement %q: missing required field 'name'", node.ID)
+	}
+	if node.Rarity == "" {
+		return nil, fmt.Errorf("achievement %q: missing required field 'rarity'", node.ID)
+	}
+	if node.Description == "" {
+		return nil, fmt.Errorf("achievement %q: missing required field 'description'", node.ID)
+	}
+	if node.Trigger == nil {
+		return nil, fmt.Errorf("achievement %q: missing required field 'when'", node.ID)
+	}
+	return node, nil
 }
 
 // parseButterfly parses: @butterfly "<desc>"

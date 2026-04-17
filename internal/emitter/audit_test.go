@@ -687,7 +687,7 @@ func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
 		{"minigame", &ast.MinigameNode{ID: "g", Attr: "ATK"}, "minigame"},
 		{"choice", &ast.ChoiceNode{Options: []*ast.OptionNode{}}, "choice"},
 		{"affection", &ast.AffectionNode{Char: "c", Delta: "+1"}, "affection"},
-		{"signal", &ast.SignalNode{Event: "E"}, "signal"},
+		{"signal", &ast.SignalNode{Kind: "mark", Event: "E"}, "signal"},
 		{"butterfly", &ast.ButterflyNode{Description: "d"}, "butterfly"},
 		{"if", &ast.IfNode{
 			Condition: &ast.FlagCondition{Name: "f"},

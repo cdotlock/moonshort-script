@@ -712,10 +712,10 @@ func TestAudit_ConcurrentAffection(t *testing.T) {
 	}
 }
 
-// TestAudit_ConcurrentSignal tests &signal EVENT.
+// TestAudit_ConcurrentSignal tests &signal mark EVENT.
 func TestAudit_ConcurrentSignal(t *testing.T) {
 	src := `@episode main:01 "T" {
-	&signal EP01_DONE
+	&signal mark EP01_DONE
 	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)

@@ -41,11 +41,12 @@ func (c *ConcurrentFlag) SetConcurrent(v bool) { c.Concurrent = v }
 // Both set is disallowed: an ending is final, a gate is a router, they
 // cannot coexist in the same episode.
 type Episode struct {
-	BranchKey string      // e.g. "main:01"
-	Title     string      // e.g. "Butterfly"
-	Body      []Node      // ordered list of top-level nodes
-	Gate      *GateBlock  // optional routing table at end of episode
-	Ending    *EndingNode // optional terminal marker (mutually exclusive with Gate)
+	BranchKey    string            // e.g. "main:01"
+	Title        string            // e.g. "Butterfly"
+	Body         []Node            // ordered list of top-level nodes
+	Gate         *GateBlock        // optional routing table at end of episode
+	Ending       *EndingNode       // optional terminal marker (mutually exclusive with Gate)
+	Achievements []*AchievementNode // declarative achievement table (order-independent)
 }
 
 // ----------------------------------------------------------------------------
@@ -399,13 +400,61 @@ type AffectionNode struct {
 
 func (a *AffectionNode) nodeType() string { return "affection" }
 
-// SignalNode emits a named story signal / flag.
+// Valid signal kinds for SignalNode.Kind.
+const (
+	// SignalKindMark is a persistent boolean flag. The engine stores it
+	// forever; scripts can test it in @if (NAME) conditions (resolved as a
+	// FlagCondition). Use for hidden route triggers and story state.
+	SignalKindMark = "mark"
+	// SignalKindAchievement is an achievement notification. The engine
+	// fires its achievement pipeline (UI popup, analytics, unlock). It is
+	// NOT queryable via @if — achievements are outbound notifications,
+	// not story state.
+	SignalKindAchievement = "achievement"
+)
+
+// SignalNode emits a named story signal. The Kind field disambiguates the
+// two roles that used to share the @signal directive:
+//   - "mark"         → persistent boolean flag (checkable in @if)
+//   - "achievement"  → outbound achievement notification (not checkable)
 type SignalNode struct {
 	ConcurrentFlag
+	Kind  string // SignalKindMark | SignalKindAchievement
 	Event string // e.g. "EP01_COMPLETE"
 }
 
 func (s *SignalNode) nodeType() string { return "signal" }
+
+// Valid achievement rarities. Aligned with the story-achievement-generator
+// schema (cdotlock/story-achievement-generator). "common" is intentionally
+// excluded — achievements must require deliberate player action.
+const (
+	RarityUncommon  = "uncommon"
+	RarityRare      = "rare"
+	RarityEpic      = "epic"
+	RarityLegendary = "legendary"
+)
+
+// AchievementNode is a declarative achievement definition hoisted to the
+// episode level (Episode.Achievements). Not a runtime step — the engine
+// loads all declared achievements and fires them when the Trigger condition
+// is satisfied. Fields mirror the story-achievement-generator output schema:
+//   - ID: stable identifier referenced by @signal achievement <id>
+//   - Name: display name (may contain 【】 brackets, up to ~8 CJK chars)
+//   - Rarity: uncommon | rare | epic | legendary (no "common")
+//   - Description: DM-voice 1–2 sentence flavor text
+//   - Trigger: Condition AST — typically a FlagCondition referencing one
+//     or more marks (use CompoundCondition for arc achievements that span
+//     multiple episodes)
+type AchievementNode struct {
+	ID          string
+	Name        string
+	Rarity      string
+	Description string
+	Trigger     Condition
+}
+
+func (a *AchievementNode) nodeType() string { return "achievement" }
 
 // ButterflyNode records a butterfly-effect narrative branch decision.
 type ButterflyNode struct {

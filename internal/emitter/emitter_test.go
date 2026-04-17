@@ -524,7 +524,7 @@ func TestEmitAllNodeTypes(t *testing.T) {
 		&ast.MusicFadeoutNode{},
 		&ast.SfxPlayNode{Sound: "s"},
 		&ast.AffectionNode{Char: "c", Delta: "+1"},
-		&ast.SignalNode{Event: "E"},
+		&ast.SignalNode{Kind: "mark", Event: "E"},
 		&ast.ButterflyNode{Description: "d"},
 		&ast.LabelNode{Name: "L"},
 		&ast.GotoNode{Name: "L"},
@@ -639,5 +639,99 @@ func TestEmitEndingAbsent(t *testing.T) {
 	}
 	if parsed["ending"] != nil {
 		t.Errorf("ending: got %v, want nil", parsed["ending"])
+	}
+}
+
+func TestEmitAchievements(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Achievements: []*ast.AchievementNode{
+			{
+				ID:          "HEEL_WARRIOR",
+				Name:        "【高跟鞋战士】",
+				Rarity:      ast.RarityRare,
+				Description: "desc",
+				Trigger:     &ast.FlagCondition{Name: "HEEL_EP05"},
+			},
+		},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	ach, ok := parsed["achievements"].([]interface{})
+	if !ok {
+		t.Fatalf("achievements: got %T, want []interface{}", parsed["achievements"])
+	}
+	if len(ach) != 1 {
+		t.Fatalf("achievements len: got %d, want 1", len(ach))
+	}
+	a := ach[0].(map[string]interface{})
+	for _, key := range []string{"id", "name", "rarity", "description", "when"} {
+		if _, ok := a[key]; !ok {
+			t.Errorf("achievement missing %q key", key)
+		}
+	}
+	if a["rarity"] != "rare" {
+		t.Errorf("rarity: got %v", a["rarity"])
+	}
+	when := a["when"].(map[string]interface{})
+	if when["type"] != "flag" || when["name"] != "HEEL_EP05" {
+		t.Errorf("when: got %+v, want flag/HEEL_EP05", when)
+	}
+}
+
+func TestEmitAchievementsAlwaysArray(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	if !strings.Contains(string(out), `"achievements": []`) {
+		t.Errorf("achievements should always be an array (possibly empty):\n%s", string(out))
+	}
+}
+
+func TestEmitSignalKind(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.SignalNode{Kind: "mark", Event: "A"},
+			&ast.SignalNode{Kind: "achievement", Event: "B"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `"kind": "mark"`) {
+		t.Errorf("missing mark kind:\n%s", s)
+	}
+	if !strings.Contains(s, `"kind": "achievement"`) {
+		t.Errorf("missing achievement kind:\n%s", s)
 	}
 }

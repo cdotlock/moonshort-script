@@ -335,10 +335,10 @@ func TestUnclosedBlocks_MoreClosingThanOpening(t *testing.T) {
 
 // F2. Braces inside a non-dialogue @signal or @butterfly line — these are directive
 // lines, not dialogue. The fixer does NOT skip them (only dialogue is skipped).
-// `@signal quest_{complete}` — the { } would be counted. Is this a problem?
+// `@signal mark quest_{complete}` — the { } would be counted. Is this a problem?
 // In practice, signal arguments should be quoted, so this is an edge case.
 func TestUnclosedBlocks_BracesInDirective(t *testing.T) {
-	input := "@episode main:01 \"T\" {\n@signal quest_{complete}\n}"
+	input := "@episode main:01 \"T\" {\n@signal mark quest_{complete}\n}"
 	r := Fix(input)
 
 	// The { in signal and } in signal cancel out (net 0 from that line).
@@ -512,27 +512,26 @@ func TestUnquotedArgs_AmpersandButterfly(t *testing.T) {
 	}
 }
 
-// EDGE: fixUnquotedArgs with &signal that has spaces.
+// EDGE: fixUnquotedArgs with &signal — the fixer no longer touches any
+// @signal / &signal line (the directive's new syntax is structured:
+// `@signal <kind> <event>`). Verify the line is passed through unchanged.
 func TestUnquotedArgs_AmpersandSignalWithSpaces(t *testing.T) {
 	input := "&signal quest complete"
 	r := Fix(input)
 	got := strings.TrimRight(r.Fixed, "\n")
 
-	if !strings.Contains(got, `"quest complete"`) {
-		t.Errorf("&signal with spaces should be quoted: %q", got)
+	want := "&signal quest complete"
+	if got != want {
+		t.Errorf("&signal must not be reshaped by fixer.\n  got:  %q\n  want: %q", got, want)
 	}
 }
 
-// EDGE: What happens to @signal without spaces but with & prefix?
-// &signal should NOT trigger quoting for single-word args.
-// But wait: the code checks `if directive == "@signal"` for the spaces check.
-// It does NOT check `&signal`. BUG?
+// EDGE: &signal single-word — also untouched by the fixer.
 func TestUnquotedArgs_AmpersandSignalNoSpaces(t *testing.T) {
 	input := "&signal done"
 	r := Fix(input)
 	got := strings.TrimRight(r.Fixed, "\n")
 
-	// &signal with single-word arg should NOT be quoted (consistent with @signal).
 	want := "&signal done"
 	if got != want {
 		t.Errorf("&signal single-word should not be quoted.\n  got:  %q\n  want: %q", got, want)

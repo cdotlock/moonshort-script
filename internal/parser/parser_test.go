@@ -222,7 +222,7 @@ func TestParseAudio(t *testing.T) {
 func TestParseStateChanges(t *testing.T) {
 	src := `@episode main:01 "State" {
 	@affection mauricio +2
-	@signal EP01_COMPLETE
+	@signal mark EP01_COMPLETE
 	@butterfly "Player chose kindness"
 	@gate { @next main:02 }
 }`
@@ -243,6 +243,9 @@ func TestParseStateChanges(t *testing.T) {
 	sig, ok := ep.Body[1].(*ast.SignalNode)
 	if !ok {
 		t.Fatalf("Body[1]: expected *SignalNode, got %T", ep.Body[1])
+	}
+	if sig.Kind != "mark" {
+		t.Errorf("SignalNode.Kind: got %q, want %q", sig.Kind, "mark")
 	}
 	if sig.Event != "EP01_COMPLETE" {
 		t.Errorf("SignalNode.Event: got %q, want %q", sig.Event, "EP01_COMPLETE")
@@ -1043,13 +1046,41 @@ func TestParseLabelGoto(t *testing.T) {
 
 func TestParseSignalString(t *testing.T) {
 	src := `@episode main:01 "T" {
-		@signal "EP01_COMPLETE"
+		@signal mark "EP01_COMPLETE"
 		@gate { @next main:02 }
 	}`
 	ep := parseOrFail(t, src)
 	sig := ep.Body[0].(*ast.SignalNode)
+	if sig.Kind != "mark" {
+		t.Errorf("want Kind=mark, got %s", sig.Kind)
+	}
 	if sig.Event != "EP01_COMPLETE" {
 		t.Errorf("want EP01_COMPLETE, got %s", sig.Event)
+	}
+}
+
+// TestParseSignalMissingKind verifies the parser rejects @signal without a kind.
+func TestParseSignalMissingKind(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@signal EP01_COMPLETE
+		@gate { @next main:02 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for @signal without kind")
+	}
+}
+
+// TestParseSignalInvalidKind verifies the parser rejects @signal with an
+// unknown kind token.
+func TestParseSignalInvalidKind(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@signal foo EP01_COMPLETE
+		@gate { @next main:02 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for @signal with invalid kind 'foo'")
 	}
 }
 
@@ -1553,4 +1584,111 @@ func conditionOp(c ast.Condition) string {
 		return cc.Op
 	}
 	return ""
+}
+
+// ---- @achievement directive + @signal kind tests ----
+
+func TestParseAchievementBasic(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: Hi.
+		@achievement HIGH_HEEL_WARRIOR {
+			name: "【高跟鞋战士】"
+			rarity: rare
+			description: "用高跟鞋当武器，一次是即兴，签名招式从此诞生。"
+			when: (HIGH_HEEL_EP05)
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	if len(ep.Achievements) != 1 {
+		t.Fatalf("Achievements: got %d, want 1", len(ep.Achievements))
+	}
+	a := ep.Achievements[0]
+	if a.ID != "HIGH_HEEL_WARRIOR" {
+		t.Errorf("ID: got %q", a.ID)
+	}
+	if a.Name != "【高跟鞋战士】" {
+		t.Errorf("Name: got %q", a.Name)
+	}
+	if a.Rarity != ast.RarityRare {
+		t.Errorf("Rarity: got %q, want %q", a.Rarity, ast.RarityRare)
+	}
+	if a.Description == "" {
+		t.Error("Description: empty")
+	}
+	fc, ok := a.Trigger.(*ast.FlagCondition)
+	if !ok || fc.Name != "HIGH_HEEL_EP05" {
+		t.Errorf("Trigger: got %T %+v, want FlagCondition{Name:HIGH_HEEL_EP05}", a.Trigger, a.Trigger)
+	}
+}
+
+func TestParseAchievementArcTrigger(t *testing.T) {
+	src := `@episode main:24 "Arc" {
+		NARRATOR: hi.
+		@achievement HIGH_HEEL_DOUBLE_KILL {
+			name: "【高跟鞋双杀】"
+			rarity: epic
+			description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
+			when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+		}
+		@ending complete
+	}`
+	ep := parseOrFail(t, src)
+	a := ep.Achievements[0]
+	cc, ok := a.Trigger.(*ast.CompoundCondition)
+	if !ok || cc.Op != "&&" {
+		t.Fatalf("Trigger: got %T, want CompoundCondition(&&)", a.Trigger)
+	}
+}
+
+func TestParseAchievementRejectsInvalidRarity(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: hi.
+		@achievement A1 {
+			name: "x"
+			rarity: common
+			description: "y"
+			when: (X)
+		}
+		@gate { @next main:02 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for rarity 'common'")
+	}
+	if !strings.Contains(err.Error(), "invalid rarity") {
+		t.Errorf("err = %v, want one mentioning 'invalid rarity'", err)
+	}
+}
+
+func TestParseAchievementRejectsMissingField(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: hi.
+		@achievement A1 {
+			name: "x"
+			rarity: rare
+			when: (X)
+		}
+		@gate { @next main:02 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for missing description")
+	}
+}
+
+func TestParseSignalAchievementKind(t *testing.T) {
+	src := `@episode main:01 "T" {
+		NARRATOR: hi.
+		@signal achievement FIRST_KISS
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	sig := ep.Body[1].(*ast.SignalNode)
+	if sig.Kind != ast.SignalKindAchievement {
+		t.Errorf("Kind: got %q, want %q", sig.Kind, ast.SignalKindAchievement)
+	}
+	if sig.Event != "FIRST_KISS" {
+		t.Errorf("Event: got %q", sig.Event)
+	}
 }

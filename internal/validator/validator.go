@@ -21,7 +21,23 @@ const (
 	InvalidOptionMode   = "INVALID_OPTION_MODE"
 	InvalidEndingType   = "INVALID_ENDING_TYPE"
 	InvalidCondition    = "INVALID_CONDITION"
+	InvalidSignalKind   = "INVALID_SIGNAL_KIND"
+	InvalidRarity       = "INVALID_RARITY"
+	DuplicateAchievement = "DUPLICATE_ACHIEVEMENT_ID"
+	AchievementMissingField = "ACHIEVEMENT_MISSING_FIELD"
 )
+
+var validSignalKinds = map[string]bool{
+	ast.SignalKindMark:        true,
+	ast.SignalKindAchievement: true,
+}
+
+var validRarities = map[string]bool{
+	ast.RarityUncommon:  true,
+	ast.RarityRare:      true,
+	ast.RarityEpic:      true,
+	ast.RarityLegendary: true,
+}
 
 // MissingGate is kept as an alias for backward compatibility of external
 // tooling that references the old code. Prefer MissingTerminal.
@@ -101,7 +117,93 @@ func Validate(ep *ast.Episode) []Error {
 		}
 	}
 
+	// Validate signal kinds (recursive over whole body).
+	checkSignals(ep.Body, &errs)
+
+	// Validate achievements.
+	checkAchievements(ep.Achievements, &errs)
+
 	return errs
+}
+
+// checkSignals walks the body and ensures every SignalNode has a valid kind.
+func checkSignals(nodes []ast.Node, errs *[]Error) {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case *ast.SignalNode:
+			if !validSignalKinds[v.Kind] {
+				*errs = append(*errs, Error{
+					Code:    InvalidSignalKind,
+					Message: fmt.Sprintf("@signal %q has invalid kind %q (must be 'mark' or 'achievement')", v.Event, v.Kind),
+				})
+			}
+		case *ast.CgShowNode:
+			checkSignals(v.Body, errs)
+		case *ast.ChoiceNode:
+			for _, opt := range v.Options {
+				checkSignals(opt.OnSuccess, errs)
+				checkSignals(opt.OnFail, errs)
+				checkSignals(opt.Body, errs)
+			}
+		case *ast.IfNode:
+			checkSignals(v.Then, errs)
+			checkSignals(v.Else, errs)
+		case *ast.MinigameNode:
+			for _, sub := range v.OnResult {
+				checkSignals(sub, errs)
+			}
+		case *ast.PhoneShowNode:
+			checkSignals(v.Body, errs)
+		}
+	}
+}
+
+// checkAchievements validates rarity whitelist, required fields, duplicate ids,
+// and recurses into the Trigger condition.
+func checkAchievements(list []*ast.AchievementNode, errs *[]Error) {
+	seen := map[string]bool{}
+	for _, a := range list {
+		if a.ID == "" {
+			*errs = append(*errs, Error{
+				Code:    AchievementMissingField,
+				Message: "achievement has empty id",
+			})
+			continue
+		}
+		if seen[a.ID] {
+			*errs = append(*errs, Error{
+				Code:    DuplicateAchievement,
+				Message: fmt.Sprintf("duplicate @achievement id %q", a.ID),
+			})
+		}
+		seen[a.ID] = true
+		if a.Name == "" {
+			*errs = append(*errs, Error{
+				Code:    AchievementMissingField,
+				Message: fmt.Sprintf("achievement %q missing 'name'", a.ID),
+			})
+		}
+		if a.Description == "" {
+			*errs = append(*errs, Error{
+				Code:    AchievementMissingField,
+				Message: fmt.Sprintf("achievement %q missing 'description'", a.ID),
+			})
+		}
+		if !validRarities[a.Rarity] {
+			*errs = append(*errs, Error{
+				Code:    InvalidRarity,
+				Message: fmt.Sprintf("achievement %q has invalid rarity %q (must be uncommon, rare, epic, or legendary)", a.ID, a.Rarity),
+			})
+		}
+		if a.Trigger == nil {
+			*errs = append(*errs, Error{
+				Code:    AchievementMissingField,
+				Message: fmt.Sprintf("achievement %q missing 'when' trigger", a.ID),
+			})
+		} else {
+			checkCondition(a.Trigger, errs)
+		}
+	}
 }
 
 // validCompoundOps and validComparisonOps enumerate accepted operators in

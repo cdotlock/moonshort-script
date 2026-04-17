@@ -82,8 +82,9 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | Directive | Example |
 |-----------|---------|
 | `@affection <char> <+/-N>` | `@affection easton +2` |
-| `@signal <event>` | `@signal EP01_COMPLETE` — also stores as persistent boolean flag; check with `@if (EP01_COMPLETE) { }` |
+| `@signal <kind> <event>` | `@signal mark EP01_COMPLETE` (persistent boolean flag, check with `@if (EP01_COMPLETE) { }`) or `@signal achievement FIRST_KISS` (unlock declared achievement) |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
+| `@achievement <id> { name/rarity/description/when }` | Declarative achievement (see Achievements section) |
 
 ## Flow Control
 
@@ -111,3 +112,26 @@ Every episode must end with exactly one of:
 - `@ending <type>` — terminal state (no next episode)
 
 The two are mutually exclusive. Missing both is a validator error.
+
+## Achievements
+
+Declarative `@achievement` blocks, hoisted to episode top-level. Field names align with the `cdotlock/story-achievement-generator` skill output.
+
+```
+@achievement HIGH_HEEL_DOUBLE_KILL {
+  name: "【高跟鞋双杀】"
+  rarity: epic
+  description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
+  when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+}
+```
+
+- `rarity` must be one of `uncommon` / `rare` / `epic` / `legendary` (no `common`)
+- `when` uses the same condition grammar as `@if` — typically references one or more `mark` flags
+- Two trigger models:
+  - declarative: engine watches `mark` signals, unlocks when `when` becomes true (preferred for arcs)
+  - imperative: `@signal achievement <id>` unlocks a declared achievement directly
+
+`@signal` kind field is mandatory:
+- `@signal mark <event>` — persistent boolean flag, checkable in `@if (NAME)`
+- `@signal achievement <id>` — unlock a declared achievement (not a queryable flag)

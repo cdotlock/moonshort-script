@@ -1,4 +1,5 @@
 {
+  "achievements": [],
   "branch_key": "main",
   "ending": null,
   "episode_id": "main:01",
@@ -224,6 +225,7 @@
           },
           {
             "event": "MINIGAME_PERFECT_EP01",
+            "kind": "mark",
             "type": "signal"
           }
         ]
@@ -505,6 +507,7 @@
     },
     {
       "event": "EP01_COMPLETE",
+      "kind": "mark",
       "type": "signal"
     }
   ],

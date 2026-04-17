@@ -58,7 +58,26 @@ func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 		out["ending"] = nil
 	}
 
+	out["achievements"] = e.emitAchievements(ep.Achievements)
+
 	return json.MarshalIndent(out, "", "  ")
+}
+
+// emitAchievements serialises declared achievements. The result is always
+// a concrete slice (never nil) so the JSON key stays stable as [] when no
+// achievements are declared — simpler for backend consumers.
+func (e *Emitter) emitAchievements(list []*ast.AchievementNode) []interface{} {
+	out := make([]interface{}, 0, len(list))
+	for _, a := range list {
+		out = append(out, map[string]interface{}{
+			"id":          a.ID,
+			"name":        a.Name,
+			"rarity":      a.Rarity,
+			"description": a.Description,
+			"when":        e.emitCondition(a.Trigger),
+		})
+	}
+	return out
 }
 
 // isConcurrent checks if a node carries the concurrent (&) flag.
@@ -158,7 +177,11 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 	case *ast.AffectionNode:
 		return e.emitAffection(v)
 	case *ast.SignalNode:
-		return map[string]interface{}{"type": "signal", "event": v.Event}
+		return map[string]interface{}{
+			"type":  "signal",
+			"kind":  v.Kind,
+			"event": v.Event,
+		}
 	case *ast.ButterflyNode:
 		return map[string]interface{}{"type": "butterfly", "description": v.Description}
 	case *ast.IfNode:
