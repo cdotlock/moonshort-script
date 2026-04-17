@@ -19,6 +19,14 @@ var knownKeywords = map[string]bool{
 	"butterfly": true, "if": true, "else": true, "label": true,
 	"goto": true, "episode": true, "on": true,
 	"option": true, "gate": true, "next": true, "pause": true,
+	"ending": true,
+}
+
+// validEndingTypes enumerates the accepted values for @ending <type>.
+var validEndingTypes = map[string]bool{
+	"complete":        true,
+	"to_be_continued": true,
+	"bad_ending":      true,
 }
 
 // Parser consumes tokens from a Lexer and produces an AST.
@@ -98,12 +106,13 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 		Title:     title.Literal,
 	}
 
-	body, gates, err := p.parseEpisodeBody()
+	body, gates, ending, err := p.parseEpisodeBody()
 	if err != nil {
 		return nil, err
 	}
 	episode.Body = body
 	episode.Gate = gates
+	episode.Ending = ending
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
@@ -111,14 +120,16 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 	return episode, nil
 }
 
-// parseEpisodeBody parses body nodes until RBRACE, handling @gate specially.
-func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
+// parseEpisodeBody parses body nodes until RBRACE. @gate and @ending are
+// hoisted to episode-level fields; only one of the two may appear.
+func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, error) {
 	var body []ast.Node
 	var gates *ast.GateBlock
+	var ending *ast.EndingNode
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr before
-		// checking for the @gate short-circuit path.
+		// checking the @gate / @ending short-circuit paths.
 		if p.pending != nil {
 			body = append(body, p.pending)
 			p.pending = nil
@@ -126,18 +137,35 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
 			if gates != nil {
-				return nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
+			}
+			if ending != nil {
+				return nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
 			}
 			g, err := p.parseGateBlock()
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			gates = g
 			continue
 		}
+		if p.cur.Type == token.AT && p.peek.Literal == "ending" {
+			if ending != nil {
+				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
+			}
+			if gates != nil {
+				return nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
+			}
+			e, err := p.parseEnding()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			ending = e
+			continue
+		}
 		node, err := p.parseStatement()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if node != nil {
 			body = append(body, node)
@@ -148,7 +176,7 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 		body = append(body, p.pending)
 		p.pending = nil
 	}
-	return body, gates, nil
+	return body, gates, ending, nil
 }
 
 // parseBlock parses body nodes until RBRACE (but does NOT consume the RBRACE).
@@ -893,99 +921,235 @@ func (p *Parser) parseIf() (ast.Node, error) {
 	return node, nil
 }
 
-// readCondition reads a parenthesized condition and classifies it into a Condition.
-// Shared by body @if and gate @if.
-func (p *Parser) readCondition() (*ast.Condition, error) {
+// readCondition reads a parenthesized condition and parses it into a typed
+// Condition AST. Shared by body @if and gate @if.
+//
+// Grammar (recursive descent, left-associative):
+//
+//	expr       = or_expr
+//	or_expr    = and_expr ( "||" and_expr )*
+//	and_expr   = primary ( "&&" primary )*
+//	primary    = "(" expr ")"
+//	           | choice       ( IDENT "." ( "success" | "fail" | "any" ) )
+//	           | comparison   ( operand OP ( NUMBER | SIGNED_NUMBER ) )
+//	           | influence    ( "influence" STRING | STRING )
+//	           | flag         ( IDENT )
+//	operand    = IDENT "." IDENT  (affection.<char>)
+//	           | IDENT             (bare engine-managed value, e.g. "san")
+func (p *Parser) readCondition() (ast.Condition, error) {
 	if _, err := p.expect(token.LPAREN); err != nil {
 		return nil, err
 	}
 
-	var toks []token.Token
-	depth := 1
-	for p.cur.Type != token.EOF {
-		if p.cur.Type == token.LPAREN {
-			depth++
-		}
-		if p.cur.Type == token.RPAREN {
-			depth--
-			if depth == 0 {
-				break
-			}
-		}
-		toks = append(toks, p.cur)
-		p.advance()
+	cond, err := p.parseOrExpr()
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := p.expect(token.RPAREN); err != nil {
 		return nil, err
 	}
-
-	if len(toks) == 0 {
-		return nil, fmt.Errorf("line %d col %d: empty condition", p.cur.Line, p.cur.Col)
-	}
-
-	return classifyCondition(toks), nil
+	return cond, nil
 }
 
-// classifyCondition determines the condition type from a token list.
-func classifyCondition(toks []token.Token) *ast.Condition {
-	expr := buildExpr(toks)
-
-	// 1. Compound: has && or ||
-	for _, t := range toks {
-		if t.Type == token.AND || t.Type == token.OR {
-			return &ast.Condition{Type: "compound", Expr: expr}
+// parseOrExpr parses an 'or_expr' — one or more primaries joined by "||".
+// "||" has lower precedence than "&&".
+func (p *Parser) parseOrExpr() (ast.Condition, error) {
+	left, err := p.parseAndExpr()
+	if err != nil {
+		return nil, err
+	}
+	for p.cur.Type == token.OR {
+		p.advance() // consume ||
+		right, err := p.parseAndExpr()
+		if err != nil {
+			return nil, err
 		}
+		left = &ast.CompoundCondition{Op: "||", Left: left, Right: right}
 	}
-
-	// 2. Influence: influence "description" OR bare "description"
-	if len(toks) >= 2 && toks[0].Type == token.IDENT && toks[0].Literal == "influence" && toks[1].Type == token.STRING {
-		return &ast.Condition{Type: "influence", Description: toks[1].Literal}
-	}
-	if len(toks) == 1 && toks[0].Type == token.STRING {
-		return &ast.Condition{Type: "influence", Description: toks[0].Literal}
-	}
-
-	// 3. Choice: IDENT.result (e.g., A.fail, B.success, C.any)
-	if len(toks) == 3 && toks[0].Type == token.IDENT && toks[1].Type == token.DOT && toks[2].Type == token.IDENT {
-		result := toks[2].Literal
-		if result == "success" || result == "fail" || result == "any" {
-			return &ast.Condition{Type: "choice", Option: toks[0].Literal, Result: result}
-		}
-	}
-
-	// 4. Comparison: has operator
-	for _, t := range toks {
-		switch t.Type {
-		case token.GTE, token.LTE, token.GT, token.LT, token.EQ, token.NEQ:
-			return &ast.Condition{Type: "comparison", Expr: expr}
-		}
-	}
-
-	// 5. Flag: single identifier
-	return &ast.Condition{Type: "flag", Name: expr}
+	return left, nil
 }
 
-// buildExpr joins condition tokens into a string, preserving dot notation
-// (no spaces around dots).
-func buildExpr(toks []token.Token) string {
-	var sb strings.Builder
-	for i, t := range toks {
-		if i > 0 {
-			prev := toks[i-1]
-			if t.Type != token.DOT && prev.Type != token.DOT {
-				sb.WriteString(" ")
+// parseAndExpr parses an 'and_expr' — one or more primaries joined by "&&".
+func (p *Parser) parseAndExpr() (ast.Condition, error) {
+	left, err := p.parseConditionPrimary()
+	if err != nil {
+		return nil, err
+	}
+	for p.cur.Type == token.AND {
+		p.advance() // consume &&
+		right, err := p.parseConditionPrimary()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.CompoundCondition{Op: "&&", Left: left, Right: right}
+	}
+	return left, nil
+}
+
+// parseConditionPrimary parses a single leaf condition or a parenthesized
+// sub-expression.
+func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
+	// Parenthesized sub-expression.
+	if p.cur.Type == token.LPAREN {
+		p.advance() // consume (
+		inner, err := p.parseOrExpr()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(token.RPAREN); err != nil {
+			return nil, err
+		}
+		return inner, nil
+	}
+
+	// Influence: bare STRING — the whole primary is a single string literal.
+	if p.cur.Type == token.STRING {
+		tok := p.cur
+		p.advance()
+		return &ast.InfluenceCondition{Description: tok.Literal}, nil
+	}
+
+	if p.cur.Type != token.IDENT {
+		return nil, fmt.Errorf("line %d col %d: expected condition, got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+
+	// Influence: "influence" STRING
+	if p.cur.Literal == "influence" && p.peek.Type == token.STRING {
+		p.advance() // consume "influence"
+		tok := p.cur
+		p.advance() // consume STRING
+		return &ast.InfluenceCondition{Description: tok.Literal}, nil
+	}
+
+	// Choice: IDENT "." IDENT where the right IDENT is success|fail|any.
+	if p.peek.Type == token.DOT {
+		firstTok := p.cur
+		p.advance() // consume first IDENT
+		p.advance() // consume DOT
+		if p.cur.Type != token.IDENT {
+			return nil, fmt.Errorf("line %d col %d: expected identifier after '.', got %s (%q)",
+				p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+		}
+		secondTok := p.cur
+		p.advance() // consume second IDENT
+
+		// If an operator follows, it's a comparison with affection-style operand.
+		if isComparisonOp(p.cur.Type) {
+			// affection.<char> <op> <N>
+			if firstTok.Literal != "affection" {
+				return nil, fmt.Errorf("line %d col %d: only 'affection.<char>' is supported as a dotted operand in comparisons, got %q.%q",
+					firstTok.Line, firstTok.Col, firstTok.Literal, secondTok.Literal)
 			}
+			op := operatorLiteral(p.cur.Type)
+			p.advance() // consume operator
+			right, err := p.readNumberLiteral()
+			if err != nil {
+				return nil, err
+			}
+			return &ast.ComparisonCondition{
+				Left: ast.ComparisonOperand{
+					Kind: ast.OperandAffection,
+					Char: secondTok.Literal,
+				},
+				Op:    op,
+				Right: right,
+			}, nil
 		}
-		if t.Type == token.STRING {
-			sb.WriteString(`"`)
-			sb.WriteString(t.Literal)
-			sb.WriteString(`"`)
-		} else {
-			sb.WriteString(t.Literal)
+
+		// Otherwise, treat as a choice condition: first.second
+		result := secondTok.Literal
+		if result != "success" && result != "fail" && result != "any" {
+			return nil, fmt.Errorf("line %d col %d: choice condition result must be 'success', 'fail', or 'any', got %q",
+				secondTok.Line, secondTok.Col, result)
 		}
+		return &ast.ChoiceCondition{Option: firstTok.Literal, Result: result}, nil
 	}
-	return sb.String()
+
+	// Bare IDENT: either comparison (IDENT op N) or flag (IDENT alone).
+	nameTok := p.cur
+	p.advance() // consume IDENT
+
+	if isComparisonOp(p.cur.Type) {
+		op := operatorLiteral(p.cur.Type)
+		p.advance() // consume operator
+		right, err := p.readNumberLiteral()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.ComparisonCondition{
+			Left: ast.ComparisonOperand{
+				Kind: ast.OperandValue,
+				Name: nameTok.Literal,
+			},
+			Op:    op,
+			Right: right,
+		}, nil
+	}
+
+	return &ast.FlagCondition{Name: nameTok.Literal}, nil
+}
+
+// isComparisonOp reports whether a token type is a comparison operator.
+func isComparisonOp(t token.Type) bool {
+	switch t {
+	case token.GTE, token.LTE, token.GT, token.LT, token.EQ, token.NEQ:
+		return true
+	}
+	return false
+}
+
+// operatorLiteral returns the canonical source-form of a comparison operator.
+func operatorLiteral(t token.Type) string {
+	switch t {
+	case token.GTE:
+		return ">="
+	case token.LTE:
+		return "<="
+	case token.GT:
+		return ">"
+	case token.LT:
+		return "<"
+	case token.EQ:
+		return "=="
+	case token.NEQ:
+		return "!="
+	}
+	return ""
+}
+
+// readNumberLiteral consumes a NUMBER or SIGNED_NUMBER token and returns
+// its integer value.
+func (p *Parser) readNumberLiteral() (int, error) {
+	if p.cur.Type != token.NUMBER && p.cur.Type != token.SIGNED_NUMBER {
+		return 0, fmt.Errorf("line %d col %d: expected integer on right side of comparison, got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+	tok := p.cur
+	p.advance()
+	n, err := strconv.Atoi(tok.Literal)
+	if err != nil {
+		return 0, fmt.Errorf("line %d col %d: invalid integer literal %q", tok.Line, tok.Col, tok.Literal)
+	}
+	return n, nil
+}
+
+// parseEnding parses: @ending <type>
+// Valid types: complete | to_be_continued | bad_ending.
+func (p *Parser) parseEnding() (*ast.EndingNode, error) {
+	p.advance() // consume AT
+	p.advance() // consume "ending"
+	kind, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: expected ending type after '@ending', got %s (%q)",
+			kind.Line, kind.Col, kind.Type, kind.Literal)
+	}
+	if !validEndingTypes[kind.Literal] {
+		return nil, fmt.Errorf("line %d col %d: invalid @ending type %q (must be one of: complete, to_be_continued, bad_ending)",
+			kind.Line, kind.Col, kind.Literal)
+	}
+	return &ast.EndingNode{Type: kind.Literal}, nil
 }
 
 // parseLabel parses: @label <name>

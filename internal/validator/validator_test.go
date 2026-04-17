@@ -283,7 +283,7 @@ func TestGotoInsideIfNode(t *testing.T) {
 		Body: []ast.Node{
 			&ast.LabelNode{Name: "L1"},
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Condition: &ast.FlagCondition{Name: "A"},
 				Then:      []ast.Node{&ast.GotoNode{Name: "L1"}},
 				Else:      []ast.Node{&ast.GotoNode{Name: "MISSING"}},
 			},
@@ -434,7 +434,7 @@ func TestLabelInsideIfNode(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Condition: &ast.FlagCondition{Name: "A"},
 				Then:      []ast.Node{&ast.LabelNode{Name: "IF_LABEL"}},
 				Else:      []ast.Node{&ast.LabelNode{Name: "ELSE_LABEL"}},
 			},
@@ -644,7 +644,7 @@ func TestValuesInsideNestedNodes(t *testing.T) {
 				},
 			},
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Condition: &ast.FlagCondition{Name: "A"},
 				Then:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops3"}},
 				Else:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops4"}},
 			},
@@ -696,7 +696,7 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 				},
 			},
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Condition: &ast.FlagCondition{Name: "A"},
 				Then: []ast.Node{
 					&ast.ChoiceNode{
 						Options: []*ast.OptionNode{
@@ -809,5 +809,81 @@ func TestErrorMessageFormat(t *testing.T) {
 				t.Error("error message should use '@on success' not '@on_success'")
 			}
 		}
+	}
+}
+
+// TestValidEndingSatisfiesTerminal — an @ending replaces the need for @gate.
+func TestValidEndingSatisfiesTerminal(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:15",
+		Title:     "Finale",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "End."}},
+		Ending:    &ast.EndingNode{Type: ast.EndingComplete},
+	}
+	errs := Validate(ep)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+func TestMissingTerminalErrors(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+	}
+	errs := Validate(ep)
+	if len(errs) == 0 {
+		t.Fatal("expected MISSING_TERMINAL error, got none")
+	}
+	if errs[0].Code != MissingTerminal {
+		t.Errorf("Code: got %q, want %q", errs[0].Code, MissingTerminal)
+	}
+}
+
+func TestInvalidEndingType(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Ending:    &ast.EndingNode{Type: "nope"},
+	}
+	errs := Validate(ep)
+	var found bool
+	for _, e := range errs {
+		if e.Code == InvalidEndingType {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INVALID_ENDING_TYPE in %v", errs)
+	}
+}
+
+func TestInvalidCompoundConditionOp(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.IfNode{
+				Condition: &ast.CompoundCondition{
+					Op:    "xor", // invalid
+					Left:  &ast.FlagCondition{Name: "A"},
+					Right: &ast.FlagCondition{Name: "B"},
+				},
+				Then: []ast.Node{&ast.NarratorNode{Text: "x"}},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	errs := Validate(ep)
+	var found bool
+	for _, e := range errs {
+		if e.Code == InvalidCondition && strings.Contains(e.Message, `"xor"`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INVALID_CONDITION for invalid compound op, got %v", errs)
 	}
 }

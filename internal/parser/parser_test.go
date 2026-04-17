@@ -486,11 +486,15 @@ func TestParseIfElse(t *testing.T) {
 	if !ok {
 		t.Fatalf("Body[0]: expected *IfNode, got %T", ep.Body[0])
 	}
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	cmp, ok := ifNode.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Condition: expected *ComparisonCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Expr != "affection.easton >= 5" {
-		t.Errorf("Condition.Expr: got %q, want %q", ifNode.Condition.Expr, "affection.easton >= 5")
+	if cmp.Left.Kind != ast.OperandAffection || cmp.Left.Char != "easton" {
+		t.Errorf("Condition.Left: got %+v, want affection/easton", cmp.Left)
+	}
+	if cmp.Op != ">=" || cmp.Right != 5 {
+		t.Errorf("Condition: got op=%q right=%d, want >=/5", cmp.Op, cmp.Right)
 	}
 	if len(ifNode.Then) != 2 {
 		t.Fatalf("Then length: got %d, want 2", len(ifNode.Then))
@@ -542,8 +546,8 @@ func TestParseElseIf(t *testing.T) {
 	if !ok {
 		t.Fatalf("Body[0]: expected *IfNode, got %T", ep.Body[0])
 	}
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	if _, ok := ifNode.Condition.(*ast.ComparisonCondition); !ok {
+		t.Errorf("Condition: want *ComparisonCondition, got %T", ifNode.Condition)
 	}
 	if len(ifNode.Then) != 1 {
 		t.Fatalf("Then length: got %d, want 1", len(ifNode.Then))
@@ -557,8 +561,8 @@ func TestParseElseIf(t *testing.T) {
 	if !ok {
 		t.Fatalf("Else[0]: expected *IfNode, got %T", ifNode.Else[0])
 	}
-	if elseIf.Condition.Type != "comparison" {
-		t.Errorf("ElseIf.Condition.Type: got %q, want comparison", elseIf.Condition.Type)
+	if _, ok := elseIf.Condition.(*ast.ComparisonCondition); !ok {
+		t.Errorf("ElseIf.Condition: want *ComparisonCondition, got %T", elseIf.Condition)
 	}
 	if len(elseIf.Then) != 1 {
 		t.Fatalf("ElseIf.Then length: got %d, want 1", len(elseIf.Then))
@@ -728,14 +732,15 @@ func TestParseGates(t *testing.T) {
 
 	// Conditional route 0: choice A.success
 	r0 := ep.Gate.Routes[0]
-	if r0.Condition.Type != "choice" {
-		t.Errorf("Route[0].Condition.Type: got %q, want %q", r0.Condition.Type, "choice")
+	ch0, ok := r0.Condition.(*ast.ChoiceCondition)
+	if !ok {
+		t.Fatalf("Route[0].Condition: want *ChoiceCondition, got %T", r0.Condition)
 	}
-	if r0.Condition.Option != "A" {
-		t.Errorf("Route[0].Condition.Option: got %q, want %q", r0.Condition.Option, "A")
+	if ch0.Option != "A" {
+		t.Errorf("Route[0].Condition.Option: got %q, want %q", ch0.Option, "A")
 	}
-	if r0.Condition.Result != "success" {
-		t.Errorf("Route[0].Condition.Result: got %q, want %q", r0.Condition.Result, "success")
+	if ch0.Result != "success" {
+		t.Errorf("Route[0].Condition.Result: got %q, want %q", ch0.Result, "success")
 	}
 	if r0.Target != "main/good/001:01" {
 		t.Errorf("Route[0].Target: got %q, want %q", r0.Target, "main/good/001:01")
@@ -743,11 +748,15 @@ func TestParseGates(t *testing.T) {
 
 	// Conditional route 1: comparison affection.easton >= 10
 	r1 := ep.Gate.Routes[1]
-	if r1.Condition.Type != "comparison" {
-		t.Errorf("Route[1].Condition.Type: got %q, want %q", r1.Condition.Type, "comparison")
+	cmp1, ok := r1.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Route[1].Condition: want *ComparisonCondition, got %T", r1.Condition)
 	}
-	if r1.Condition.Expr != "affection.easton >= 10" {
-		t.Errorf("Route[1].Condition.Expr: got %q, want %q", r1.Condition.Expr, "affection.easton >= 10")
+	if cmp1.Left.Kind != ast.OperandAffection || cmp1.Left.Char != "easton" {
+		t.Errorf("Route[1].Condition.Left: got %+v, want affection/easton", cmp1.Left)
+	}
+	if cmp1.Op != ">=" || cmp1.Right != 10 {
+		t.Errorf("Route[1].Condition: got op=%q right=%d, want >=/10", cmp1.Op, cmp1.Right)
 	}
 	if r1.Target != "main/bad/001:01" {
 		t.Errorf("Route[1].Target: got %q, want %q", r1.Target, "main/bad/001:01")
@@ -844,8 +853,9 @@ func TestParseError_EmptyCondition(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty condition")
 	}
-	if !strings.Contains(err.Error(), "empty condition") {
-		t.Errorf("expected 'empty condition' in error, got: %v", err)
+	// The new parser reports "expected condition, got RPAREN" when () is empty.
+	if !strings.Contains(err.Error(), "expected condition") {
+		t.Errorf("expected 'expected condition' in error, got: %v", err)
 	}
 }
 
@@ -896,11 +906,12 @@ func TestParseConditionFlag(t *testing.T) {
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "flag" {
-		t.Errorf("want type=flag, got %s", ifNode.Condition.Type)
+	fc, ok := ifNode.Condition.(*ast.FlagCondition)
+	if !ok {
+		t.Fatalf("want *FlagCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Name != "EP01_COMPLETE" {
-		t.Errorf("want name=EP01_COMPLETE, got %s", ifNode.Condition.Name)
+	if fc.Name != "EP01_COMPLETE" {
+		t.Errorf("want name=EP01_COMPLETE, got %s", fc.Name)
 	}
 }
 
@@ -913,11 +924,12 @@ func TestParseConditionInfluence(t *testing.T) {
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "influence" {
-		t.Errorf("want type=influence, got %s", ifNode.Condition.Type)
+	ic, ok := ifNode.Condition.(*ast.InfluenceCondition)
+	if !ok {
+		t.Fatalf("want *InfluenceCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Description != "Player shows empathy" {
-		t.Errorf("want description, got %s", ifNode.Condition.Description)
+	if ic.Description != "Player shows empathy" {
+		t.Errorf("want description, got %s", ic.Description)
 	}
 }
 
@@ -930,8 +942,8 @@ func TestParseConditionInfluenceBareString(t *testing.T) {
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "influence" {
-		t.Errorf("want type=influence, got %s", ifNode.Condition.Type)
+	if _, ok := ifNode.Condition.(*ast.InfluenceCondition); !ok {
+		t.Errorf("want *InfluenceCondition, got %T", ifNode.Condition)
 	}
 }
 
@@ -944,8 +956,8 @@ func TestParseConditionCompound(t *testing.T) {
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "compound" {
-		t.Errorf("want type=compound, got %s", ifNode.Condition.Type)
+	if _, ok := ifNode.Condition.(*ast.CompoundCondition); !ok {
+		t.Errorf("want *CompoundCondition, got %T", ifNode.Condition)
 	}
 }
 
@@ -958,27 +970,30 @@ func TestParseConditionChoiceAny(t *testing.T) {
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "choice" {
-		t.Errorf("want type=choice, got %s", ifNode.Condition.Type)
+	ch, ok := ifNode.Condition.(*ast.ChoiceCondition)
+	if !ok {
+		t.Fatalf("want *ChoiceCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Result != "any" {
-		t.Errorf("want result=any, got %s", ifNode.Condition.Result)
+	if ch.Result != "any" {
+		t.Errorf("want result=any, got %s", ch.Result)
 	}
 }
 
 // --- Nested parentheses ---
 
 func TestParseNestedParenCondition(t *testing.T) {
+	// New grammar: comparison RHS must be a single integer literal,
+	// so `(5 + 3)` is not valid. Use a simple integer.
 	src := `@episode main:01 "T" {
-		@if (affection.easton >= (5 + 3)) {
+		@if (affection.easton >= 8) {
 			NARRATOR: Done.
 		}
 		@gate { @next main:02 }
 	}`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("want type=comparison, got %s", ifNode.Condition.Type)
+	if _, ok := ifNode.Condition.(*ast.ComparisonCondition); !ok {
+		t.Errorf("want *ComparisonCondition, got %T", ifNode.Condition)
 	}
 }
 
@@ -1332,4 +1347,210 @@ func TestParseIfNoElse(t *testing.T) {
 	if ifNode.Else != nil {
 		t.Errorf("expected nil Else, got %v", ifNode.Else)
 	}
+}
+
+// ---- @ending directive tests ----
+
+func TestParseEndingComplete(t *testing.T) {
+	src := `@episode main:15 "Finale" {
+		NARRATOR: The end.
+		@ending complete
+	}`
+	ep := parseOrFail(t, src)
+	if ep.Ending == nil {
+		t.Fatal("Ending: got nil, want *EndingNode")
+	}
+	if ep.Ending.Type != ast.EndingComplete {
+		t.Errorf("Ending.Type: got %q, want %q", ep.Ending.Type, ast.EndingComplete)
+	}
+	if ep.Gate != nil {
+		t.Errorf("Gate: got non-nil, want nil (episode with @ending)")
+	}
+}
+
+func TestParseEndingToBeContinued(t *testing.T) {
+	src := `@episode main:05 "Cliffhanger" {
+		NARRATOR: To be continued.
+		@ending to_be_continued
+	}`
+	ep := parseOrFail(t, src)
+	if ep.Ending == nil || ep.Ending.Type != ast.EndingToBeContinued {
+		t.Fatalf("Ending: got %+v, want to_be_continued", ep.Ending)
+	}
+}
+
+func TestParseEndingBadEnding(t *testing.T) {
+	src := `@episode main/bad/001:02 "Bad End" {
+		NARRATOR: Game over.
+		@ending bad_ending
+	}`
+	ep := parseOrFail(t, src)
+	if ep.Ending == nil || ep.Ending.Type != ast.EndingBad {
+		t.Fatalf("Ending: got %+v, want bad_ending", ep.Ending)
+	}
+}
+
+func TestParseEndingInvalidType(t *testing.T) {
+	src := `@episode main:01 "Bad" {
+		@ending nope
+	}`
+	l := lexer.New(src)
+	p := New(l)
+	_, err := p.Parse()
+	if err == nil {
+		t.Fatal("expected parse error for invalid @ending type, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid @ending type") {
+		t.Errorf("error = %v, want one mentioning 'invalid @ending type'", err)
+	}
+}
+
+func TestParseEndingRejectsGateCoexistence(t *testing.T) {
+	src := `@episode main:01 "Mixed" {
+		NARRATOR: Hi.
+		@gate { @next main:02 }
+		@ending complete
+	}`
+	l := lexer.New(src)
+	p := New(l)
+	_, err := p.Parse()
+	if err == nil {
+		t.Fatal("expected parse error when both @gate and @ending present, got nil")
+	}
+	if !strings.Contains(err.Error(), "cannot coexist") {
+		t.Errorf("error = %v, want one mentioning 'cannot coexist'", err)
+	}
+}
+
+func TestParseEndingRejectsDuplicate(t *testing.T) {
+	src := `@episode main:01 "Dup" {
+		NARRATOR: Hi.
+		@ending complete
+		@ending bad_ending
+	}`
+	l := lexer.New(src)
+	p := New(l)
+	_, err := p.Parse()
+	if err == nil {
+		t.Fatal("expected parse error for duplicate @ending, got nil")
+	}
+}
+
+// ---- Structured-condition AST tests ----
+
+func TestParseConditionChoiceStructured(t *testing.T) {
+	src := `@episode main:01 "X" {
+		@if (A.fail) {
+			NARRATOR: fail.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	c, ok := ifNode.Condition.(*ast.ChoiceCondition)
+	if !ok {
+		t.Fatalf("Condition: got %T, want *ChoiceCondition", ifNode.Condition)
+	}
+	if c.Option != "A" || c.Result != "fail" {
+		t.Errorf("Choice: got %+v, want Option=A Result=fail", c)
+	}
+}
+
+func TestParseConditionAffectionComparisonStructured(t *testing.T) {
+	src := `@episode main:01 "X" {
+		@if (affection.easton >= 5) {
+			NARRATOR: yes.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	c, ok := ifNode.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Condition: got %T, want *ComparisonCondition", ifNode.Condition)
+	}
+	if c.Left.Kind != ast.OperandAffection || c.Left.Char != "easton" {
+		t.Errorf("Left: got %+v, want affection/easton", c.Left)
+	}
+	if c.Op != ">=" || c.Right != 5 {
+		t.Errorf("Op/Right: got %q/%d, want '>=' /5", c.Op, c.Right)
+	}
+}
+
+func TestParseConditionValueComparisonStructured(t *testing.T) {
+	src := `@episode main:01 "X" {
+		@if (san <= 20) {
+			NARRATOR: ouch.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	c, ok := ifNode.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Condition: got %T, want *ComparisonCondition", ifNode.Condition)
+	}
+	if c.Left.Kind != ast.OperandValue || c.Left.Name != "san" {
+		t.Errorf("Left: got %+v, want value/san", c.Left)
+	}
+	if c.Op != "<=" || c.Right != 20 {
+		t.Errorf("Op/Right: got %q/%d, want '<='/20", c.Op, c.Right)
+	}
+}
+
+func TestParseConditionCompoundStructured(t *testing.T) {
+	src := `@episode main:01 "X" {
+		@if (affection.easton >= 5 && CHA >= 14) {
+			NARRATOR: ok.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	c, ok := ifNode.Condition.(*ast.CompoundCondition)
+	if !ok {
+		t.Fatalf("Condition: got %T, want *CompoundCondition", ifNode.Condition)
+	}
+	if c.Op != "&&" {
+		t.Errorf("Op: got %q, want &&", c.Op)
+	}
+	if _, ok := c.Left.(*ast.ComparisonCondition); !ok {
+		t.Errorf("Left: got %T, want *ComparisonCondition", c.Left)
+	}
+	if _, ok := c.Right.(*ast.ComparisonCondition); !ok {
+		t.Errorf("Right: got %T, want *ComparisonCondition", c.Right)
+	}
+}
+
+func TestParseConditionPrecedence(t *testing.T) {
+	// `a || b && c` should parse as `a || (b && c)` — && binds tighter than ||.
+	src := `@episode main:01 "X" {
+		@if (A_FLAG || B_FLAG && C_FLAG) {
+			NARRATOR: ok.
+		}
+		@gate { @next main:02 }
+	}`
+	ep := parseOrFail(t, src)
+	ifNode := ep.Body[0].(*ast.IfNode)
+	top, ok := ifNode.Condition.(*ast.CompoundCondition)
+	if !ok || top.Op != "||" {
+		t.Fatalf("top: got %T op=%s, want *CompoundCondition op=||",
+			ifNode.Condition, conditionOp(ifNode.Condition))
+	}
+	if _, ok := top.Left.(*ast.FlagCondition); !ok {
+		t.Errorf("Left: got %T, want *FlagCondition", top.Left)
+	}
+	right, ok := top.Right.(*ast.CompoundCondition)
+	if !ok || right.Op != "&&" {
+		t.Fatalf("Right: got %T op=%s, want *CompoundCondition op=&&",
+			top.Right, conditionOp(top.Right))
+	}
+}
+
+// conditionOp extracts a compound op for assertion diagnostics.
+func conditionOp(c ast.Condition) string {
+	if cc, ok := c.(*ast.CompoundCondition); ok {
+		return cc.Op
+	}
+	return ""
 }

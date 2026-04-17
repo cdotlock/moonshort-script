@@ -37,14 +37,23 @@ Every script follows this skeleton:
   // Narrative content (scenes, dialogue, choices, mini-games)
   // ...
 
-  // Routing — MUST be last
+  // Terminal — MUST be last. Exactly one of @gate or @ending.
+
+  // Option A: routing to another episode
   @gate {
     @if (<condition>): @next <target>
     @else @if (<condition>): @next <target>
     @else: @next <fallback>
   }
+
+  // Option B: terminal ending (no next episode)
+  // @ending complete        // full story end
+  // @ending to_be_continued  // cliffhanger, next chapter not yet written
+  // @ending bad_ending       // bad-path terminus
 }
 ```
+
+**Every episode must end with either `@gate { ... }` or `@ending <type>`** — they are mutually exclusive. An episode with neither is a validator error.
 
 The `branch_key` follows a strict addressing format. Read `references/addressing.md` for the full scheme.
 
@@ -321,18 +330,20 @@ Use `@if` to show different content based on game state. **Parentheses `()` are 
 }
 ```
 
-**Condition types (5 kinds):**
+**Condition types (5 kinds, all compiled to structured AST — the backend receives typed condition objects, not expression strings):**
 
 | Type | Syntax | Example |
 |------|--------|---------|
 | flag | `SIGNAL_NAME` | `@if (EP01_COMPLETE) { }` |
-| comparison | `value op number` | `@if (affection.easton >= 5) { }` |
-| compound | `expr && expr` / `expr \|\| expr` | `@if (san <= 20 \|\| FAILED_TWICE) { }` |
+| comparison | `<operand> <op> <integer>` | `@if (affection.easton >= 5) { }` or `@if (san <= 20) { }` |
+| compound | `<expr> && <expr>` / `<expr> \|\| <expr>` | `@if (san <= 20 \|\| FAILED_TWICE) { }` |
 | choice | `OPTION.result` | `@if (A.fail) { }` — result: `success` / `fail` / `any` |
 | influence | `influence "desc"` or `"desc"` | `@if (influence "player showed empathy") { }` or `@if ("player showed empathy") { }` — both forms accepted |
 
+**Comparison operand** on the left of `>=` / `<=` / etc. must be either `affection.<char>` (character-specific affection) or a bare `<name>` (engine-managed value like `san`, `CHA`). The right side **must be an integer literal** — expressions like `a >= b` or `affection.easton >= (5 + 3)` are rejected.
+
 **Operators:** `>=` `<=` `>` `<` `==` `!=`
-**Logic:** `&&` (and), `||` (or)
+**Logic:** `&&` (and, binds tighter), `||` (or, binds looser). Use `( )` for explicit grouping.
 
 ### Labels and goto (advanced, avoid if possible)
 
@@ -379,25 +390,62 @@ The `@gate` block at the end of every episode declares where the player goes nex
 
 **Influence condition:** A natural language description. Two syntax forms: `@if (influence "description")` or `@if ("description")` (bare string). At runtime, the engine feeds all accumulated `@butterfly` records to an LLM and asks whether the condition is satisfied.
 
-**`@else` is mandatory.** Every episode must have a fallback route.
+**`@else` is mandatory.** Every episode with `@gate` must have a fallback route.
+
+## Ending (Terminal Episodes)
+
+Not every episode routes onward. Some episodes **end the story** — reach the credits, land on a cliffhanger, or terminate on a bad path. Use `@ending <type>` at episode-body level instead of `@gate`:
+
+```
+@episode main:15 "The End" {
+  NARRATOR: The sun rose over a changed city.
+  @ending complete
+}
+```
+
+Three ending types:
+
+| Type | Meaning | Typical placement |
+|------|---------|-------------------|
+| `complete` | Story fully ends — credits roll | Main ending episodes; true-end / happy-end |
+| `to_be_continued` | Cliffhanger — next chapter not written yet | Last episode of the current release |
+| `bad_ending` | Bad path terminus — player failed / died / broke the relationship | Episodes under `main/bad/...` |
+
+**Rules:**
+
+- **`@ending` and `@gate` are mutually exclusive.** An episode that ends with `@ending` cannot also have a `@gate` — the story has terminated.
+- **Every episode still needs exactly one terminal.** Missing both is a validator error.
+- Only the listed three types are accepted; anything else is a parse error.
+
+Example bad-path terminal:
+
+```
+@episode main/bad/001:02 "She Never Came Home" {
+  @bg set malias_bedroom_night fade
+  NARRATOR: The door never opened again.
+  @ending bad_ending
+}
+```
 
 ## Common Mistakes
 
-1. **Forgetting `@gate` block** — Every episode needs routing. No gate = interpreter error.
-2. **Missing `@else`** — Gate block without fallback = interpreter error.
-3. **Brave option without `check { }`** — Brave means D20 check. No check block = error.
-4. **Brave option without both `@on success` and `@on fail`** — Both outcomes must be defined.
-5. **`@goto` without matching `@label`** — The target label must exist in the same episode.
-6. **Putting `@gate` anywhere except the end** — Gate must be the last thing in `@episode`.
-7. **Using character names inconsistently** — `@mauricio show ...` and `MAURICIO:` must use the same name (case-insensitive).
-8. **Forgetting `@butterfly` in choice outcomes** — Every choice outcome should record what happened for the influence system.
-9. **Writing asset paths instead of semantic names** — Scripts use names like `classroom_morning`, not URLs or file paths. The interpreter handles mapping.
-10. **Nested `@choice` blocks** — Only one `@choice` per episode. Multiple choices in one episode is not supported.
-11. **Using `&` on block structures** — `&choice`, `&cg show`, `&minigame`, `&phone show`, `&if`, `&gate` are all errors. Block structures always use `@`.
-12. **Forgetting to use `&` for scene setup** — When a scene starts with bg + music + character entrances, the first directive uses `@` and the rest should use `&` so they execute together. Writing all of them with `@` makes them sequential, which looks choppy.
-13. **Trying to set engine values from scripts** — `@xp`, `@san` are not valid directives. The engine manages these values internally. Scripts can only check them in `@if` conditions (e.g., `@if (san <= 20) { }`), not modify them.
-14. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
-15. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
+1. **Missing terminal** — Every episode must end with exactly one of `@gate { ... }` or `@ending <type>`. Neither = `MISSING_TERMINAL` validator error.
+2. **Both `@gate` and `@ending`** — The two are mutually exclusive: a routing block cannot coexist with a terminal ending. Pick one.
+3. **Missing `@else`** — Gate block without fallback = interpreter error.
+4. **Brave option without `check { }`** — Brave means D20 check. No check block = error.
+5. **Brave option without both `@on success` and `@on fail`** — Both outcomes must be defined.
+6. **`@goto` without matching `@label`** — The target label must exist in the same episode.
+7. **Putting `@gate` anywhere except the end** — Gate must be the last thing in `@episode`.
+8. **Using character names inconsistently** — `@mauricio show ...` and `MAURICIO:` must use the same name (case-insensitive).
+9. **Forgetting `@butterfly` in choice outcomes** — Every choice outcome should record what happened for the influence system.
+10. **Writing asset paths instead of semantic names** — Scripts use names like `classroom_morning`, not URLs or file paths. The interpreter handles mapping.
+11. **Nested `@choice` blocks** — Only one `@choice` per episode. Multiple choices in one episode is not supported.
+12. **Using `&` on block structures** — `&choice`, `&cg show`, `&minigame`, `&phone show`, `&if`, `&gate` are all errors. Block structures always use `@`.
+13. **Forgetting to use `&` for scene setup** — When a scene starts with bg + music + character entrances, the first directive uses `@` and the rest should use `&` so they execute together. Writing all of them with `@` makes them sequential, which looks choppy.
+14. **Trying to set engine values from scripts** — `@xp`, `@san` are not valid directives. The engine manages these values internally. Scripts can only check them in `@if` conditions (e.g., `@if (san <= 20) { }`), not modify them.
+15. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
+16. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
+17. **Invalid `@ending` type** — Only `complete`, `to_be_continued`, `bad_ending` are accepted. Any other identifier is a parse error.
 
 **Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. Always run the fixer before compiling if the script was generated by an LLM.
 

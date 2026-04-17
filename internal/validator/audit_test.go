@@ -271,7 +271,7 @@ func TestRecursion_DeeplyNested(t *testing.T) {
 				Name: "cg1",
 				Body: []ast.Node{
 					&ast.IfNode{
-						Condition: &ast.Condition{Type: "flag", Name: "A"},
+						Condition: &ast.FlagCondition{Name: "A"},
 						Then: []ast.Node{
 							&ast.ChoiceNode{
 								Options: []*ast.OptionNode{

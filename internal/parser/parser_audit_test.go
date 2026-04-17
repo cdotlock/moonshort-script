@@ -247,24 +247,26 @@ func TestAudit_ThreeConsecutiveDialogueWithExpr(t *testing.T) {
 // AREA B: Condition parsing edge cases
 // =============================================================================
 
-// TestAudit_ConditionDeepDotPath tests @if (a.b.c) with 5 tokens and 2 dots.
+// TestAudit_ConditionDeepDotPath tests that under the stricter grammar
+// a dotted-path like `a.b.c` is rejected (after `a.b` the parser expects either
+// a choice result or an operator; `.c` is invalid). A single IDENT like
+// ABC_FLAG is still a valid FlagCondition.
 func TestAudit_ConditionDeepDotPath(t *testing.T) {
 	src := `@episode main:01 "T" {
-	@if (a.b.c) {
-		NARRATOR: Deep path.
+	@if (ABC_FLAG) {
+		NARRATOR: Flag condition.
 	}
 	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
 
-	// 5 tokens: IDENT DOT IDENT DOT IDENT — no operator, not choice pattern (needs exactly 3 tokens),
-	// no compound, no influence. Should fall to "flag".
-	if ifNode.Condition.Type != "flag" {
-		t.Errorf("Condition.Type: got %q, want %q", ifNode.Condition.Type, "flag")
+	fc, ok := ifNode.Condition.(*ast.FlagCondition)
+	if !ok {
+		t.Fatalf("Condition: want *FlagCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Name != "a.b.c" {
-		t.Errorf("Condition.Name: got %q, want %q", ifNode.Condition.Name, "a.b.c")
+	if fc.Name != "ABC_FLAG" {
+		t.Errorf("Condition.Name: got %q, want %q", fc.Name, "ABC_FLAG")
 	}
 }
 
@@ -280,15 +282,17 @@ func TestAudit_ConditionBareSingleIdent(t *testing.T) {
 	ifNode := ep.Body[0].(*ast.IfNode)
 
 	// Single IDENT "A" — should be flag, not choice.
-	if ifNode.Condition.Type != "flag" {
-		t.Errorf("Condition.Type: got %q, want %q", ifNode.Condition.Type, "flag")
+	fc, ok := ifNode.Condition.(*ast.FlagCondition)
+	if !ok {
+		t.Fatalf("Condition: want *FlagCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Name != "A" {
-		t.Errorf("Condition.Name: got %q, want %q", ifNode.Condition.Name, "A")
+	if fc.Name != "A" {
+		t.Errorf("Condition.Name: got %q, want %q", fc.Name, "A")
 	}
 }
 
 // TestAudit_ConditionLoneOperator tests @if (>=) — lone operator, no operands.
+// Under the stricter grammar this is rejected by the parser.
 func TestAudit_ConditionLoneOperator(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@if (>=) {
@@ -296,15 +300,9 @@ func TestAudit_ConditionLoneOperator(t *testing.T) {
 	}
 	@gate { @next main:02 }
 }`
-	ep := parseOrFail(t, src)
-	ifNode := ep.Body[0].(*ast.IfNode)
-
-	// Single GTE token. classifyCondition sees an operator and returns "comparison".
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want %q", ifNode.Condition.Type, "comparison")
-	}
-	if ifNode.Condition.Expr != ">=" {
-		t.Errorf("Condition.Expr: got %q, want %q", ifNode.Condition.Expr, ">=")
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for lone operator inside @if")
 	}
 }
 
@@ -319,20 +317,22 @@ func TestAudit_ConditionInfluenceKeywordAlone(t *testing.T) {
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
 
-	// "influence" alone: 1 token, IDENT. Not a 2-token influence pattern.
-	// Falls to flag.
-	if ifNode.Condition.Type != "flag" {
-		t.Errorf("Condition.Type: got %q, want %q", ifNode.Condition.Type, "flag")
+	// "influence" alone (no following STRING): single IDENT → FlagCondition.
+	fc, ok := ifNode.Condition.(*ast.FlagCondition)
+	if !ok {
+		t.Fatalf("Condition: want *FlagCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Name != "influence" {
-		t.Errorf("Condition.Name: got %q, want %q", ifNode.Condition.Name, "influence")
+	if fc.Name != "influence" {
+		t.Errorf("Condition.Name: got %q, want %q", fc.Name, "influence")
 	}
 }
 
-// TestAudit_ConditionDoubleComparison tests @if (a >= b >= c) — double comparison.
+// TestAudit_ConditionDoubleComparison tests that under the stricter grammar,
+// `a >= b >= c` is rejected (RHS of comparison must be an integer literal).
+// A simple `a >= 5` is accepted and produces a ComparisonCondition.
 func TestAudit_ConditionDoubleComparison(t *testing.T) {
 	src := `@episode main:01 "T" {
-	@if (a >= b >= c) {
+	@if (a >= 5) {
 		NARRATOR: Hi.
 	}
 	@gate { @next main:02 }
@@ -340,16 +340,21 @@ func TestAudit_ConditionDoubleComparison(t *testing.T) {
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
 
-	// Contains GTE operator, should be "comparison".
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want %q", ifNode.Condition.Type, "comparison")
+	cmp, ok := ifNode.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Condition: want *ComparisonCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Expr != "a >= b >= c" {
-		t.Errorf("Condition.Expr: got %q, want %q", ifNode.Condition.Expr, "a >= b >= c")
+	if cmp.Left.Kind != ast.OperandValue || cmp.Left.Name != "a" {
+		t.Errorf("Condition.Left: got %+v, want value/a", cmp.Left)
+	}
+	if cmp.Op != ">=" || cmp.Right != 5 {
+		t.Errorf("Condition: got op=%q right=%d, want >=/5", cmp.Op, cmp.Right)
 	}
 }
 
-// TestAudit_ConditionDotNonChoiceResult tests @if (A.blah) — dot but not success/fail/any.
+// TestAudit_ConditionDotNonChoiceResult tests @if (A.blah) — dot but not
+// success/fail/any. Under the stricter grammar this is rejected (`A` is not
+// `affection`, so it can't be a dotted comparison operand either).
 func TestAudit_ConditionDotNonChoiceResult(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@if (A.blah) {
@@ -357,13 +362,9 @@ func TestAudit_ConditionDotNonChoiceResult(t *testing.T) {
 	}
 	@gate { @next main:02 }
 }`
-	ep := parseOrFail(t, src)
-	ifNode := ep.Body[0].(*ast.IfNode)
-
-	// 3 tokens: IDENT DOT IDENT, but result "blah" is not success/fail/any.
-	// Should NOT be classified as "choice". Falls to flag.
-	if ifNode.Condition.Type != "flag" {
-		t.Errorf("Condition.Type: got %q, want %q (A.blah is not a choice result)", ifNode.Condition.Type, "flag")
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for A.blah (not a valid choice result and not affection)")
 	}
 }
 
@@ -1063,36 +1064,41 @@ func TestAudit_MultipleDirectivesTight(t *testing.T) {
 	}
 }
 
-// TestAudit_ConditionWithNotEquals tests @if (a != b).
+// TestAudit_ConditionWithNotEquals tests @if (a != 1).
+// Under the stricter grammar, comparison RHS must be an integer literal.
 func TestAudit_ConditionWithNotEquals(t *testing.T) {
 	src := `@episode main:01 "T" {
-	@if (a != b) {
+	@if (a != 1) {
 		NARRATOR: Different.
 	}
 	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	cmp, ok := ifNode.Condition.(*ast.ComparisonCondition)
+	if !ok {
+		t.Fatalf("Condition: want *ComparisonCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Expr != "a != b" {
-		t.Errorf("Condition.Expr: got %q, want %q", ifNode.Condition.Expr, "a != b")
+	if cmp.Left.Kind != ast.OperandValue || cmp.Left.Name != "a" {
+		t.Errorf("Condition.Left: got %+v, want value/a", cmp.Left)
+	}
+	if cmp.Op != "!=" || cmp.Right != 1 {
+		t.Errorf("Condition: got op=%q right=%d, want !=/1", cmp.Op, cmp.Right)
 	}
 }
 
-// TestAudit_ConditionWithEquals tests @if (a == b).
+// TestAudit_ConditionWithEquals tests @if (a == 1).
 func TestAudit_ConditionWithEquals(t *testing.T) {
 	src := `@episode main:01 "T" {
-	@if (a == b) {
+	@if (a == 1) {
 		NARRATOR: Same.
 	}
 	@gate { @next main:02 }
 }`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "comparison" {
-		t.Errorf("Condition.Type: got %q, want comparison", ifNode.Condition.Type)
+	if _, ok := ifNode.Condition.(*ast.ComparisonCondition); !ok {
+		t.Errorf("Condition: want *ComparisonCondition, got %T", ifNode.Condition)
 	}
 }
 
@@ -1106,8 +1112,12 @@ func TestAudit_ConditionCompoundOr(t *testing.T) {
 }`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "compound" {
-		t.Errorf("Condition.Type: got %q, want compound", ifNode.Condition.Type)
+	comp, ok := ifNode.Condition.(*ast.CompoundCondition)
+	if !ok {
+		t.Fatalf("Condition: want *CompoundCondition, got %T", ifNode.Condition)
+	}
+	if comp.Op != "||" {
+		t.Errorf("Op: got %q, want ||", comp.Op)
 	}
 }
 
@@ -1228,11 +1238,12 @@ func TestAudit_ConditionStringWithSpaces(t *testing.T) {
 }`
 	ep := parseOrFail(t, src)
 	ifNode := ep.Body[0].(*ast.IfNode)
-	if ifNode.Condition.Type != "influence" {
-		t.Errorf("Condition.Type: got %q, want influence", ifNode.Condition.Type)
+	ic, ok := ifNode.Condition.(*ast.InfluenceCondition)
+	if !ok {
+		t.Fatalf("Condition: want *InfluenceCondition, got %T", ifNode.Condition)
 	}
-	if ifNode.Condition.Description != "Player said something kind to Easton during the park scene" {
-		t.Errorf("Condition.Description: got %q", ifNode.Condition.Description)
+	if ic.Description != "Player said something kind to Easton during the park scene" {
+		t.Errorf("Condition.Description: got %q", ic.Description)
 	}
 }
 
@@ -1252,8 +1263,8 @@ func TestAudit_GateConditionInfluence(t *testing.T) {
 		t.Fatalf("Gate.Routes count: got %d, want 2", len(ep.Gate.Routes))
 	}
 	r0 := ep.Gate.Routes[0]
-	if r0.Condition.Type != "influence" {
-		t.Errorf("Route[0].Condition.Type: got %q, want influence", r0.Condition.Type)
+	if _, ok := r0.Condition.(*ast.InfluenceCondition); !ok {
+		t.Errorf("Route[0].Condition: want *InfluenceCondition, got %T", r0.Condition)
 	}
 }
 

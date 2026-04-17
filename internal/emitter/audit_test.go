@@ -123,11 +123,11 @@ func TestAuditB_GateIfElseChain(t *testing.T) {
 		Gate: &ast.GateBlock{
 			Routes: []*ast.GateRoute{
 				{
-					Condition: &ast.Condition{Type: "choice", Option: "A", Result: "fail"},
+					Condition: &ast.ChoiceCondition{Option: "A", Result: "fail"},
 					Target:    "bad:01",
 				},
 				{
-					Condition: &ast.Condition{Type: "influence", Description: "Player shows empathy"},
+					Condition: &ast.InfluenceCondition{Description: "Player shows empathy"},
 					Target:    "route:01",
 				},
 				{
@@ -197,11 +197,11 @@ func TestAuditC_ElseIfBodyOutput(t *testing.T) {
 		Title:     "T",
 		Body: []ast.Node{
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "flag_A"},
+				Condition: &ast.FlagCondition{Name: "flag_A"},
 				Then:      []ast.Node{&ast.NarratorNode{Text: "A."}},
 				Else: []ast.Node{
 					&ast.IfNode{
-						Condition: &ast.Condition{Type: "flag", Name: "flag_B"},
+						Condition: &ast.FlagCondition{Name: "flag_B"},
 						Then:      []ast.Node{&ast.NarratorNode{Text: "B."}},
 						Else:      []ast.Node{&ast.NarratorNode{Text: "C."}},
 					},
@@ -570,7 +570,7 @@ func TestAuditF_IfWithoutElse(t *testing.T) {
 		Title:     "T",
 		Body: []ast.Node{
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "test_flag"},
+				Condition: &ast.FlagCondition{Name: "test_flag"},
 				Then:      []ast.Node{&ast.NarratorNode{Text: "yes"}},
 				Else:      nil,
 			},
@@ -690,7 +690,7 @@ func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
 		{"signal", &ast.SignalNode{Event: "E"}, "signal"},
 		{"butterfly", &ast.ButterflyNode{Description: "d"}, "butterfly"},
 		{"if", &ast.IfNode{
-			Condition: &ast.Condition{Type: "flag", Name: "f"},
+			Condition: &ast.FlagCondition{Name: "f"},
 			Then:      []ast.Node{&ast.NarratorNode{Text: "x"}},
 		}, "if"},
 		{"label", &ast.LabelNode{Name: "L"}, "label"},
@@ -767,34 +767,59 @@ func TestAuditG_ConditionFieldCompleteness(t *testing.T) {
 	em := New(newMockResolver())
 
 	t.Run("choice", func(t *testing.T) {
-		c := em.emitCondition(&ast.Condition{Type: "choice", Option: "A", Result: "fail"})
+		c := em.emitCondition(&ast.ChoiceCondition{Option: "A", Result: "fail"})
 		assertField(t, c, "type", "choice")
 		assertField(t, c, "option", "A")
 		assertField(t, c, "result", "fail")
 	})
 
 	t.Run("flag", func(t *testing.T) {
-		c := em.emitCondition(&ast.Condition{Type: "flag", Name: "EP01"})
+		c := em.emitCondition(&ast.FlagCondition{Name: "EP01"})
 		assertField(t, c, "type", "flag")
 		assertField(t, c, "name", "EP01")
 	})
 
 	t.Run("comparison", func(t *testing.T) {
-		c := em.emitCondition(&ast.Condition{Type: "comparison", Expr: "x >= 5"})
+		c := em.emitCondition(&ast.ComparisonCondition{
+			Left:  ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
+			Op:    ">=",
+			Right: 5,
+		})
 		assertField(t, c, "type", "comparison")
-		assertField(t, c, "expr", "x >= 5")
+		assertField(t, c, "op", ">=")
+		assertField(t, c, "right", 5)
+		left, ok := c["left"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("comparison left should be map, got %T", c["left"])
+		}
+		if left["kind"] != ast.OperandValue {
+			t.Errorf("left.kind = %v, want %q", left["kind"], ast.OperandValue)
+		}
+		if left["name"] != "x" {
+			t.Errorf("left.name = %v, want %q", left["name"], "x")
+		}
 	})
 
 	t.Run("influence", func(t *testing.T) {
-		c := em.emitCondition(&ast.Condition{Type: "influence", Description: "desc"})
+		c := em.emitCondition(&ast.InfluenceCondition{Description: "desc"})
 		assertField(t, c, "type", "influence")
 		assertField(t, c, "description", "desc")
 	})
 
 	t.Run("compound", func(t *testing.T) {
-		c := em.emitCondition(&ast.Condition{Type: "compound", Expr: "a && b"})
+		c := em.emitCondition(&ast.CompoundCondition{
+			Op:    "&&",
+			Left:  &ast.FlagCondition{Name: "a"},
+			Right: &ast.FlagCondition{Name: "b"},
+		})
 		assertField(t, c, "type", "compound")
-		assertField(t, c, "expr", "a && b")
+		assertField(t, c, "op", "&&")
+		if _, ok := c["left"].(map[string]interface{}); !ok {
+			t.Errorf("compound left should be map, got %T", c["left"])
+		}
+		if _, ok := c["right"].(map[string]interface{}); !ok {
+			t.Errorf("compound right should be map, got %T", c["right"])
+		}
 	})
 }
 

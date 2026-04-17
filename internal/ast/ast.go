@@ -32,11 +32,20 @@ func (c *ConcurrentFlag) SetConcurrent(v bool) { c.Concurrent = v }
 // ----------------------------------------------------------------------------
 
 // Episode is the root node of every MSS script file.
+//
+// An episode must terminate with exactly one of:
+//   - Gate: routing table that picks the next episode based on conditions.
+//   - Ending: terminal marker (complete / to_be_continued / bad_ending).
+//
+// Both nil means the episode has no terminal — the validator flags this.
+// Both set is disallowed: an ending is final, a gate is a router, they
+// cannot coexist in the same episode.
 type Episode struct {
-	BranchKey string     // e.g. "main:01"
-	Title     string     // e.g. "Butterfly"
-	Body      []Node     // ordered list of top-level nodes
-	Gate      *GateBlock // optional routing table at end of episode
+	BranchKey string      // e.g. "main:01"
+	Title     string      // e.g. "Butterfly"
+	Body      []Node      // ordered list of top-level nodes
+	Gate      *GateBlock  // optional routing table at end of episode
+	Ending    *EndingNode // optional terminal marker (mutually exclusive with Gate)
 }
 
 // ----------------------------------------------------------------------------
@@ -51,22 +60,98 @@ type GateBlock struct {
 
 func (g *GateBlock) nodeType() string { return "gate" }
 
-// Condition represents a semi-structured condition expression.
-// Type determines which fields are populated.
-type Condition struct {
-	Type        string // "choice", "flag", "comparison", "influence", "compound"
-	Option      string // choice: option ID (e.g. "A", "B")
-	Result      string // choice: "success" or "fail"
-	Name        string // flag: signal name (e.g. "EP01_COMPLETE")
-	Expr        string // comparison/compound: expression (e.g. "affection.easton >= 5")
-	Description string // influence: LLM evaluation text
+// Condition is the interface implemented by every condition node.
+// ConditionKind returns the "type" string used by the emitter ("choice",
+// "flag", "influence", "comparison", "compound"). Concrete types:
+//   - ChoiceCondition       : option check result (e.g. A.fail)
+//   - FlagCondition         : signal-flag truthiness (e.g. EP01_COMPLETE)
+//   - InfluenceCondition    : LLM butterfly-effect judgment
+//   - ComparisonCondition   : structured numeric comparison
+//   - CompoundCondition     : && / || tree of sub-conditions
+type Condition interface {
+	ConditionKind() string
 }
+
+// ChoiceCondition matches when an option's check resolved a given way.
+// Result is one of: "success", "fail", "any".
+type ChoiceCondition struct {
+	Option string // option ID, e.g. "A", "B"
+	Result string // "success" | "fail" | "any"
+}
+
+func (c *ChoiceCondition) ConditionKind() string { return "choice" }
+
+// FlagCondition tests whether a named signal flag has been emitted.
+type FlagCondition struct {
+	Name string // e.g. "EP01_COMPLETE"
+}
+
+func (c *FlagCondition) ConditionKind() string { return "flag" }
+
+// InfluenceCondition is evaluated by an LLM over accumulated butterfly records.
+type InfluenceCondition struct {
+	Description string // natural-language judgment text
+}
+
+func (c *InfluenceCondition) ConditionKind() string { return "influence" }
+
+// ComparisonOperandKind distinguishes the shape of the left side of a
+// comparison. Affection operands address per-character affection values
+// (affection.<char>); value operands address engine-managed scalars
+// (san, CHA, etc.).
+const (
+	OperandAffection = "affection"
+	OperandValue     = "value"
+)
+
+// ComparisonOperand is the left-hand side of a comparison.
+type ComparisonOperand struct {
+	Kind string // OperandAffection | OperandValue
+	Char string // when Kind == OperandAffection: character id
+	Name string // when Kind == OperandValue: scalar name (e.g. "san", "CHA")
+}
+
+// ComparisonCondition is a structured numeric comparison.
+// Right-hand side is always an integer literal.
+// Op is one of: ">=", "<=", ">", "<", "==", "!=".
+type ComparisonCondition struct {
+	Left  ComparisonOperand
+	Op    string
+	Right int
+}
+
+func (c *ComparisonCondition) ConditionKind() string { return "comparison" }
+
+// CompoundCondition combines two sub-conditions with && or ||.
+// Op is "&&" (and) or "||" (or).
+type CompoundCondition struct {
+	Op    string
+	Left  Condition
+	Right Condition
+}
+
+func (c *CompoundCondition) ConditionKind() string { return "compound" }
 
 // GateRoute is a single condition→target pair inside a @gate block.
 type GateRoute struct {
-	Condition *Condition // nil = unconditional/fallback
-	Target    string     // destination episode key, e.g. "main/bad/001:01"
+	Condition Condition // nil = unconditional/fallback
+	Target    string    // destination episode key, e.g. "main/bad/001:01"
 }
+
+// Valid ending type values for EndingNode.Type.
+const (
+	EndingComplete      = "complete"
+	EndingToBeContinued = "to_be_continued"
+	EndingBad           = "bad_ending"
+)
+
+// EndingNode marks the terminal state of an episode. Mutually exclusive
+// with GateBlock — an episode terminates by routing or by ending, not both.
+type EndingNode struct {
+	Type string // EndingComplete | EndingToBeContinued | EndingBad
+}
+
+func (e *EndingNode) nodeType() string { return "ending" }
 
 // LabelNode marks a jump target inside the episode body.
 type LabelNode struct {
@@ -338,7 +423,7 @@ func (b *ButterflyNode) nodeType() string { return "butterfly" }
 // For @else @if chains, Else contains a single IfNode.
 type IfNode struct {
 	ConcurrentFlag
-	Condition *Condition
+	Condition Condition
 	Then      []Node
 	Else      []Node // nil when there is no @else branch
 }

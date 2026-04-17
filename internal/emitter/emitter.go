@@ -52,6 +52,12 @@ func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 		out["gate"] = nil
 	}
 
+	if ep.Ending != nil {
+		out["ending"] = map[string]interface{}{"type": ep.Ending.Type}
+	} else {
+		out["ending"] = nil
+	}
+
 	return json.MarshalIndent(out, "", "  ")
 }
 
@@ -460,21 +466,52 @@ func (e *Emitter) emitGateRoute(routes []*ast.GateRoute, idx int) map[string]int
 	return m
 }
 
-// emitCondition converts a structured Condition to a JSON map.
-func (e *Emitter) emitCondition(c *ast.Condition) map[string]interface{} {
-	m := map[string]interface{}{"type": c.Type}
-	switch c.Type {
-	case "choice":
-		m["option"] = c.Option
-		m["result"] = c.Result
-	case "flag":
-		m["name"] = c.Name
-	case "comparison", "compound":
-		m["expr"] = c.Expr
-	case "influence":
-		m["description"] = c.Description
+// emitCondition converts a Condition AST node to a JSON map.
+// All condition types are fully structured — no raw expression strings —
+// so the backend can consume them directly without re-parsing.
+func (e *Emitter) emitCondition(c ast.Condition) map[string]interface{} {
+	switch v := c.(type) {
+	case *ast.ChoiceCondition:
+		return map[string]interface{}{
+			"type":   "choice",
+			"option": v.Option,
+			"result": v.Result,
+		}
+	case *ast.FlagCondition:
+		return map[string]interface{}{
+			"type": "flag",
+			"name": v.Name,
+		}
+	case *ast.InfluenceCondition:
+		return map[string]interface{}{
+			"type":        "influence",
+			"description": v.Description,
+		}
+	case *ast.ComparisonCondition:
+		left := map[string]interface{}{"kind": v.Left.Kind}
+		switch v.Left.Kind {
+		case ast.OperandAffection:
+			left["char"] = v.Left.Char
+		case ast.OperandValue:
+			left["name"] = v.Left.Name
+		}
+		return map[string]interface{}{
+			"type":  "comparison",
+			"left":  left,
+			"op":    v.Op,
+			"right": v.Right,
+		}
+	case *ast.CompoundCondition:
+		return map[string]interface{}{
+			"type":  "compound",
+			"op":    v.Op,
+			"left":  e.emitCondition(v.Left),
+			"right": e.emitCondition(v.Right),
+		}
+	default:
+		e.warn("unknown condition type: %T", c)
+		return map[string]interface{}{"type": "unknown"}
 	}
-	return m
 }
 
 func (e *Emitter) warn(format string, args ...interface{}) {

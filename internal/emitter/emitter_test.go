@@ -419,8 +419,8 @@ func TestEmitGateConditional(t *testing.T) {
 		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
 		Gate: &ast.GateBlock{
 			Routes: []*ast.GateRoute{
-				{Condition: &ast.Condition{Type: "choice", Option: "A", Result: "fail"}, Target: "bad:01"},
-				{Condition: &ast.Condition{Type: "flag", Name: "EP01_DONE"}, Target: "mid:01"},
+				{Condition: &ast.ChoiceCondition{Option: "A", Result: "fail"}, Target: "bad:01"},
+				{Condition: &ast.FlagCondition{Name: "EP01_DONE"}, Target: "mid:01"},
 				{Target: "main:02"},
 			},
 		},
@@ -440,15 +440,21 @@ func TestEmitGateConditional(t *testing.T) {
 func TestEmitConditionTypes(t *testing.T) {
 	tests := []struct {
 		name string
-		cond *ast.Condition
-		key  string
-		val  string
+		cond ast.Condition
 	}{
-		{"choice", &ast.Condition{Type: "choice", Option: "A", Result: "fail"}, "option", "A"},
-		{"flag", &ast.Condition{Type: "flag", Name: "EP01"}, "name", "EP01"},
-		{"comparison", &ast.Condition{Type: "comparison", Expr: "x >= 5"}, "expr", "x >= 5"},
-		{"influence", &ast.Condition{Type: "influence", Description: "desc"}, "description", "desc"},
-		{"compound", &ast.Condition{Type: "compound", Expr: "a && b"}, "expr", "a && b"},
+		{"choice", &ast.ChoiceCondition{Option: "A", Result: "fail"}},
+		{"flag", &ast.FlagCondition{Name: "EP01"}},
+		{"comparison", &ast.ComparisonCondition{
+			Left: ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
+			Op:   ">=",
+			Right: 5,
+		}},
+		{"influence", &ast.InfluenceCondition{Description: "desc"}},
+		{"compound", &ast.CompoundCondition{
+			Op:    "&&",
+			Left:  &ast.FlagCondition{Name: "a"},
+			Right: &ast.FlagCondition{Name: "b"},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -474,11 +480,11 @@ func TestEmitElseIfUnwrap(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.IfNode{
-				Condition: &ast.Condition{Type: "flag", Name: "A"},
+				Condition: &ast.FlagCondition{Name: "A"},
 				Then:      []ast.Node{&ast.NarratorNode{Text: "a"}},
 				Else: []ast.Node{
 					&ast.IfNode{
-						Condition: &ast.Condition{Type: "flag", Name: "B"},
+						Condition: &ast.FlagCondition{Name: "B"},
 						Then:      []ast.Node{&ast.NarratorNode{Text: "b"}},
 					},
 				},
@@ -573,5 +579,65 @@ func TestEmitAssetWarning(t *testing.T) {
 	em.Emit(ep)
 	if len(em.Warnings) == 0 {
 		t.Error("expected warning for unknown asset")
+	}
+}
+
+// TestEmitEndingKey verifies that @ending produces a structured "ending" key
+// and that its absence produces a null "ending" key (always present for consumers).
+func TestEmitEndingKey(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:15",
+		Title:     "Finale",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "The end."}},
+		Ending:    &ast.EndingNode{Type: ast.EndingComplete},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("unmarshal err: %v", err)
+	}
+	ending, ok := parsed["ending"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("ending: got %v, want map[string]interface{}", parsed["ending"])
+	}
+	if ending["type"] != "complete" {
+		t.Errorf("ending.type: got %v, want complete", ending["type"])
+	}
+	if parsed["gate"] != nil {
+		t.Errorf("gate: got %v, want nil (ending is set)", parsed["gate"])
+	}
+}
+
+func TestEmitEndingAbsent(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "Normal",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{{Target: "main:02"}},
+		},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("unmarshal err: %v", err)
+	}
+	if _, present := parsed["ending"]; !present {
+		t.Error("ending key should always be present (null when absent)")
+	}
+	if parsed["ending"] != nil {
+		t.Errorf("ending: got %v, want nil", parsed["ending"])
 	}
 }

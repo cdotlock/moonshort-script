@@ -9,7 +9,7 @@ import (
 
 // Error codes for validation failures.
 const (
-	MissingGate         = "MISSING_GATE"
+	MissingTerminal     = "MISSING_TERMINAL"
 	GotoNoLabel         = "GOTO_NO_LABEL"
 	BraveNoCheck        = "BRAVE_NO_CHECK"
 	BraveMissingOutcome = "BRAVE_MISSING_OUTCOME"
@@ -19,7 +19,19 @@ const (
 	InvalidTransition   = "INVALID_TRANSITION"
 	InvalidBubbleType   = "INVALID_BUBBLE_TYPE"
 	InvalidOptionMode   = "INVALID_OPTION_MODE"
+	InvalidEndingType   = "INVALID_ENDING_TYPE"
+	InvalidCondition    = "INVALID_CONDITION"
 )
+
+// MissingGate is kept as an alias for backward compatibility of external
+// tooling that references the old code. Prefer MissingTerminal.
+const MissingGate = MissingTerminal
+
+var validEndingTypes = map[string]bool{
+	ast.EndingComplete:      true,
+	ast.EndingToBeContinued: true,
+	ast.EndingBad:           true,
+}
 
 var validPositions = map[string]bool{
 	"left": true, "center": true, "right": true,
@@ -50,10 +62,19 @@ func (e Error) Error() string {
 func Validate(ep *ast.Episode) []Error {
 	var errs []Error
 
-	if ep.Gate == nil {
+	// Episode must terminate with exactly one of @gate or @ending.
+	if ep.Gate == nil && ep.Ending == nil {
 		errs = append(errs, Error{
-			Code:    MissingGate,
-			Message: "episode is missing a @gate block",
+			Code:    MissingTerminal,
+			Message: "episode is missing a terminal: add @gate { ... } for routing or @ending <type> for a terminal state",
+		})
+	}
+
+	// Validate @ending type if present.
+	if ep.Ending != nil && !validEndingTypes[ep.Ending.Type] {
+		errs = append(errs, Error{
+			Code:    InvalidEndingType,
+			Message: fmt.Sprintf("invalid @ending type %q (must be one of: complete, to_be_continued, bad_ending)", ep.Ending.Type),
 		})
 	}
 
@@ -70,7 +91,116 @@ func Validate(ep *ast.Episode) []Error {
 	// Check value whitelists.
 	checkValues(ep.Body, &errs)
 
+	// Validate condition trees (body @if and @gate routes).
+	checkConditions(ep.Body, &errs)
+	if ep.Gate != nil {
+		for _, route := range ep.Gate.Routes {
+			if route.Condition != nil {
+				checkCondition(route.Condition, &errs)
+			}
+		}
+	}
+
 	return errs
+}
+
+// validCompoundOps and validComparisonOps enumerate accepted operators in
+// structured condition nodes.
+var validCompoundOps = map[string]bool{"&&": true, "||": true}
+var validComparisonOps = map[string]bool{
+	">=": true, "<=": true, ">": true, "<": true, "==": true, "!=": true,
+}
+var validChoiceResults = map[string]bool{"success": true, "fail": true, "any": true}
+
+// checkConditions walks nodes and validates every Condition tree it finds.
+func checkConditions(nodes []ast.Node, errs *[]Error) {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case *ast.IfNode:
+			if v.Condition != nil {
+				checkCondition(v.Condition, errs)
+			}
+			checkConditions(v.Then, errs)
+			checkConditions(v.Else, errs)
+		case *ast.CgShowNode:
+			checkConditions(v.Body, errs)
+		case *ast.ChoiceNode:
+			for _, opt := range v.Options {
+				checkConditions(opt.OnSuccess, errs)
+				checkConditions(opt.OnFail, errs)
+				checkConditions(opt.Body, errs)
+			}
+		case *ast.MinigameNode:
+			for _, sub := range v.OnResult {
+				checkConditions(sub, errs)
+			}
+		case *ast.PhoneShowNode:
+			checkConditions(v.Body, errs)
+		}
+	}
+}
+
+// checkCondition validates a single Condition AST node recursively.
+func checkCondition(c ast.Condition, errs *[]Error) {
+	switch v := c.(type) {
+	case *ast.ChoiceCondition:
+		if !validChoiceResults[v.Result] {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("choice condition %s.%s has invalid result (must be success, fail, or any)", v.Option, v.Result),
+			})
+		}
+	case *ast.ComparisonCondition:
+		if !validComparisonOps[v.Op] {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("comparison has invalid operator %q", v.Op),
+			})
+		}
+		switch v.Left.Kind {
+		case ast.OperandAffection:
+			if v.Left.Char == "" {
+				*errs = append(*errs, Error{
+					Code:    InvalidCondition,
+					Message: "affection operand has empty character name",
+				})
+			}
+		case ast.OperandValue:
+			if v.Left.Name == "" {
+				*errs = append(*errs, Error{
+					Code:    InvalidCondition,
+					Message: "value operand has empty name",
+				})
+			}
+		default:
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("comparison has unknown operand kind %q", v.Left.Kind),
+			})
+		}
+	case *ast.CompoundCondition:
+		if !validCompoundOps[v.Op] {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("compound condition has invalid operator %q", v.Op),
+			})
+		}
+		if v.Left != nil {
+			checkCondition(v.Left, errs)
+		}
+		if v.Right != nil {
+			checkCondition(v.Right, errs)
+		}
+	case *ast.FlagCondition, *ast.InfluenceCondition:
+		// No further structural checks — any non-empty string is fine.
+	case nil:
+		// nil condition can appear in unconditional gate routes; caller handles.
+	default:
+		*errs = append(*errs, Error{
+			Code:    InvalidCondition,
+			Message: fmt.Sprintf("unknown condition type %T", c),
+		})
+	}
 }
 
 // collectLabels recursively finds all LabelNodes and records their names.

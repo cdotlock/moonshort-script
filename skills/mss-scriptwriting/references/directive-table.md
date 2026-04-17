@@ -5,7 +5,8 @@
 | Directive | Example |
 |-----------|---------|
 | `@episode <key> <title> { }` | `@episode main:01 "Butterfly" { }` |
-| `@gate { }` | Must be last in episode |
+| `@gate { }` | Routing block — mutually exclusive with `@ending` |
+| `@ending <type>` | Terminal marker — `complete` / `to_be_continued` / `bad_ending` (mutually exclusive with `@gate`) |
 | `@if (<cond>): @next <key>` | `@if (A.fail): @next main/bad/001:01` — parens required, dot notation |
 | `@else @if (<cond>): @next <key>` | `@else @if ("player showed empathy"): @next main/route/001:01` |
 | `@else: @next <key>` | `@else: @next main:02` |
@@ -92,6 +93,21 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | `@else @if (<cond>) { }` | `} @else @if (affection.easton >= 3) { }` — chained condition |
 | `@else { }` | `} @else { }` |
 
-Conditions (5 types): choice (`A.fail`), flag (`SIGNAL_NAME`), comparison (`affection.char >= N`), influence (`"description"`), compound (`san <= N || FLAG`)
+Conditions (5 types, all fully parsed into structured AST — no raw expression strings in JSON output):
+- choice: `A.fail` / `B.success` / `C.any`
+- flag: `SIGNAL_NAME`
+- comparison: `affection.<char> <op> <N>` or `<name> <op> <N>` (right side must be integer)
+- influence: `"description"` or `influence "description"`
+- compound: `<cond> && <cond>` / `<cond> || <cond>` (parens for grouping; `&&` binds tighter than `||`)
+
 Operators: `>=` `<=` `>` `<` `==` `!=`
 Logic: `&&` (and), `||` (or)
+
+## Episode Termination
+
+Every episode must end with exactly one of:
+
+- `@gate { ... }` — route to another episode based on conditions
+- `@ending <type>` — terminal state (no next episode)
+
+The two are mutually exclusive. Missing both is a validator error.
