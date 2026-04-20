@@ -374,7 +374,14 @@
                     "description": "Accepted Easton's approach at the cafeteria",
                     "type": "butterfly"
                   }
-                ]
+                ],
+                {
+                  "description": "You let him come close. Didn't look away.",
+                  "id": "FACED_EASTON",
+                  "name": "Eye Contact",
+                  "rarity": "uncommon",
+                  "type": "achievement"
+                }
               ],
               "type": "if"
             }
