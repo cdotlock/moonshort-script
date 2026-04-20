@@ -135,14 +135,25 @@ All visual directives use **object-action** order: `@<object> <action> [params]`
 
 ### CG (Full-screen illustrations)
 
-CG replaces the entire screen. Nest dialogue inside the block — it plays over the CG. When the block ends, the previous background and characters restore automatically.
+CG replaces the entire screen. It's not a still image — downstream the `cg_show` step is generated as a short video by agent-forge. MSS is flow-control plus content, so the script has to carry the narrative material the video pipeline needs.
+
+Two fields are **required** at the top of a CG block, before any body nodes:
+
+- **`duration:`** — one of `low` / `medium` / `high`. A length tier, not seconds. agent-forge decides the actual timing.
+- **`content:`** — a quoted English string describing the CG's camera and story beats. Plain, concrete, no purple prose — what happens, what the camera does, what the frame emphasises.
+
+Body nodes after the two fields play during the CG, same as before. When the block ends, the previous background and characters restore automatically.
 
 ```
 @cg show window_stare fade {
+  duration: medium
+  content: "The camera opens on Malia's silhouette against the rain-streaked window. Slow push-in on her eyes — one tear tracks down, catching the cold blue of the skyline. Her reflection doubles her, ghost-like, in the glass."
   YOU: The city lights blurred through my tears.
   NARRATOR: She stood there for what felt like hours.
 }
 ```
+
+A `@cg show` block without both fields is a parse error. Validator checks a duration whitelist and rejects empty `content`.
 
 ## Concurrency (@ vs &)
 
@@ -213,25 +224,24 @@ The phone overlay sits on top of everything. Keep messages short — they render
 
 ### Mini-games
 
-Mini-games interrupt the reading flow. The player plays an H5 game, gets a rating (S/A/B/C/D), and the rating modifies their next D20 check. You can also add bonus narrative per rating.
+Mini-games interrupt the reading flow. The player plays an H5 game, gets a rating (typically S / A / B / C / D), and the rating modifies their next D20 check. You can also branch bonus narrative per rating.
 
 ```
-@minigame qte_challenge ATK {
-  @on S {
+@minigame qte_challenge ATK "a quick hallway partner-assignment check where Malia matches Mauricio's beat or drops the rhythm" {
+  @if (rating.S) {
     NARRATOR: Your reflexes are razor-sharp today.
-  }
-  @on A B {
+  } @else @if (rating.A || rating.B) {
     NARRATOR: Not bad. You kept up.
-  }
-  @on C D {
+  } @else {
     NARRATOR: Sloppy. You're distracted.
   }
 }
 ```
 
-- `@on` blocks are **bonus narrative only** — they don't change the story route
-- Multiple ratings on one `@on` line: `@on A B { }` means "A or B"
-- The rating's mechanical effect (check modifier) is handled by the game engine, not the script
+- The third positional argument (a quoted English string) is a **required** short description tying the minigame to the scene. Mini-games are picked from a pre-built library (not generated), so the description is just for narrative glue — one sentence is plenty, don't over-write.
+- Rating branching uses a standard `@if (rating.<grade>) { }` tree. `rating.S`, `rating.A`, etc. are pseudo-identifiers valid only inside a `@minigame` body. Use `||` to group grades (`@if (rating.A || rating.B)`).
+- Bonus narrative under a rating branch doesn't change the story route. The rating's mechanical effect (check modifier) is handled by the game engine, not the script.
+- Minigame body is optional — an empty `{ }` is valid if you don't need per-rating narrative.
 
 ### Choices (D20 Checks)
 
@@ -244,14 +254,13 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
       attr: CHA
       dc: 12
     }
-    @on success {
+    @if (check.success) {
       @easton look relieved
       EASTON: Can I sit?
       MALIA: You have two minutes.
       @affection easton +2
       @butterfly "Accepted Easton's approach at the cafeteria"
-    }
-    @on fail {
+    } @else {
       @easton look hurt
       MALIA: I... I can't do this.
       @butterfly "Tried to face Easton but lost courage"
@@ -268,19 +277,20 @@ Every episode has one choice point. Each option has an ID (A, B, C...) and a mod
 ```
 
 **Rules for `brave` options:**
-- Must contain a `check { attr: ... dc: ... }` block
-- Must contain `@on success { }` and `@on fail { }` blocks
-- Attribute names are freeform strings (the engine knows how to interpret them)
+- Must contain a `check { attr: ... dc: ... }` block.
+- Outcome branching uses a standard `@if (check.success) { } @else { }` tree. `check.success` / `check.fail` are context-local pseudo-identifiers valid only inside a brave option body.
+- A missing `@else` is a narrative choice, not a syntax error — the validator does not require both branches to be populated. If you leave fail implicit, make sure the story still reads.
+- Attribute names are freeform strings (the engine knows how to interpret them).
 
 **Rules for `safe` options:**
-- No check block, no @on blocks
-- Content goes directly inside the option block
+- No check block, no outcome branching — safe options bypass the D20 entirely.
+- Content goes directly inside the option block as plain body nodes.
 
 **Every outcome path should include:**
 - `@butterfly` description (what happened as a result of this choice)
 - Optionally: `@affection` if the choice changes a relationship
 
-**Do NOT drop a `@signal mark` on every choice outcome.** Marks are only for key story points that a later `@if` or `@achievement.when` will actually query. See "State Changes" below.
+**Do NOT drop a `@signal mark` on every choice outcome.** Marks are only for key story points that a later `@if` branch or an `@achievement` unlock will actually query. See "State Changes" below.
 
 ## State Changes
 
@@ -290,23 +300,22 @@ These are declarations — the game engine handles the actual math.
 @affection easton +2                                   // Character relationship
 @butterfly "Accepted Easton's approach"                // Flavor memory for LLM route evaluation
 @signal mark HIGH_HEEL_EP05                            // Key story point — queried later
-@signal achievement HIGH_HEEL_WARRIOR                  // Unlock a declared achievement
+@achievement HIGH_HEEL_WARRIOR                         // Imperative achievement trigger
 ```
 
 > **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
-**`@signal <kind> <event>` — kind is mandatory.** Two kinds with distinct roles:
+**`@signal <kind> <event>` — kind is mandatory.** Currently only `mark` is implemented; the kind slot is kept in the grammar and AST so future kinds can be added without a language break. Achievements are **not** a signal kind — use the dedicated `@achievement <id>` trigger for those.
 
 | kind | Role | Checkable in `@if`? |
 |------|------|---------------------|
-| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement `when` conditions. | **Yes** — becomes a `FlagCondition` in conditions |
-| `achievement` | Directly unlock a declared `@achievement` by id. Engine fires its achievement pipeline (UI popup, analytics, unlock). | **No** — achievements are outbound notifications, not story state |
+| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement-unlock conditions. | **Yes** — becomes a `FlagCondition` in conditions |
 
 `event` can be a bare identifier or a double-quoted string.
 
 ### Mark discipline — marks are NOT wayposts
 
-**Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@achievement`'s `when` condition references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
+**Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@if (X && ...) { @achievement ID }` unlock guard references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
 
 **Write the mark second.** Start from the reader:
 
@@ -334,62 +343,77 @@ These are declarations — the game engine handles the actual math.
     NARRATOR: She glanced down at her shoes. She remembered.
   }
   ```
-- ✅ **Arc achievement trigger**: Two or more marks feed into an achievement's `when`:
+- ✅ **Arc achievement trigger**: Two or more marks feed into an achievement unlock guard:
   ```
   // EP05
+  MALIA: One quick step. My heel went straight through his shoe.
   @signal mark HIGH_HEEL_EP05
 
-  // EP24
+  // EP24 — the second beat, and the place where the achievement fires
+  MALIA: And again. Same shoe, same precision.
   @signal mark HIGH_HEEL_EP24
-
-  @achievement HIGH_HEEL_DOUBLE_KILL {
-    name: "Heel Twice Over"
-    rarity: epic
-    description: "Once is improvisation. Twice is a signature move."
-    when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+  @if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
+    @achievement HIGH_HEEL_DOUBLE_KILL
   }
   ```
-- ✅ **Imperative achievement fire**: A singular narrative beat unlocks an achievement directly:
+- ✅ **Single-beat achievement**: A singular narrative moment unlocks an achievement directly:
   ```
   YOU: I leaned in. He didn't pull back.
-  @signal achievement FIRST_KISS
+  @achievement FIRST_KISS
   ```
 
 **Name all signal events and achievement ids in `SCREAMING_SNAKE_CASE` English.** Keeps the flag store grep-able and unambiguous across the pipeline.
 
+**Where to put the `@if ... { @achievement ID }` guard** for arc achievements: put it after the *last* mark in the chain is emitted — the guard only fires if every required mark is already set. Putting it at the start of an episode works too but is redundant (you'd re-check every time). One clean guard beats multiple scattered checks.
+
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
 
-### Achievements — `@achievement` declarations
+### Achievements — `@achievement` (declaration and trigger)
 
-Achievements are declared with `@achievement` blocks at episode top-level (alongside narrative content). Field names and rarity vocabulary mirror the [`cdotlock/story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill output — so the generator's table can be mechanically dropped into MSS.
+`@achievement` is a single directive with two forms, disambiguated by whether a `{` follows the id:
+
+- `@achievement <id> { ... }` — **declaration block.** Hoisted to episode top-level, carries metadata only. Declaration does not unlock anything on its own.
+- `@achievement <id>` — **imperative trigger.** Stays inline as a body step; fires the named achievement at that exact narrative beat. Wrap it in `@if (...) { @achievement <id> }` when the unlock depends on marks or other conditions.
+
+Declaration field names and rarity vocabulary mirror the [`cdotlock/story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill output, so the generator's table can be dropped into MSS mechanically.
 
 ```
 @achievement HIGH_HEEL_DOUBLE_KILL {
   name: "Heel Twice Over"
   rarity: epic
   description: "Once is improvisation. Twice is a signature move."
-  when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
 }
 ```
 
-**Required fields (all four). Use English for all user-facing text:**
+**Required declaration fields (all three). Use English for all user-facing text:**
 
 | Field | Type | Rule |
 |-------|------|------|
 | `name` | quoted string | English display name. Short, concrete, evocative (≤30 chars recommended) |
 | `rarity` | identifier | One of: `uncommon` / `rare` / `epic` / `legendary`. **`common` is banned** — if every player gets it, it's not an achievement |
 | `description` | quoted string | English DM-voice flavor text (1-2 sentences) |
-| `when` | condition | Trigger condition using the same grammar as `@if`. Usually references `mark` flags |
 
-**Two complementary trigger patterns:**
+Declarations do not carry a `when` field. Trigger logic lives in the story body where the author decides — this keeps the engine simple (no mark-watcher, no automatic re-evaluation) and puts narrative timing in the writer's hands.
 
-1. **Declarative (preferred for arcs)** — Drop `@signal mark EP05_HEEL` in Episode 5 and `@signal mark EP24_HEEL` in Episode 24. Declare the achievement with `when: (EP05_HEEL && EP24_HEEL)`. The engine watches marks and unlocks the achievement when the condition becomes true. Cross-episode arcs work naturally this way.
+**Trigger placement patterns:**
 
-2. **Imperative (for single-moment achievements)** — Declare the achievement with a placeholder flag, then use `@signal achievement FIRST_KISS` at the exact narrative beat. The engine unlocks the achievement by id, bypassing `when` evaluation.
+1. **Single-beat achievement** — fire the trigger inline at the moment the achievement makes narrative sense:
+   ```
+   YOU: I leaned in. He didn't pull back.
+   @achievement FIRST_KISS
+   ```
+2. **Arc achievement** — wrap the trigger in an `@if` that checks every required mark, placed right after the last mark in the chain is emitted:
+   ```
+   // Episode 24
+   @signal mark HIGH_HEEL_EP24
+   @if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
+     @achievement HIGH_HEEL_DOUBLE_KILL
+   }
+   ```
 
-**Placement:** Put the `@achievement` declaration in whatever episode most naturally "owns" it — usually the episode where the achievement unlocks, or the one that introduces the arc. Order within the episode doesn't matter (achievements are hoisted to the episode level).
+**Declaration placement:** Put the `@achievement { ... }` block in whatever episode most naturally "owns" it — usually the episode where it unlocks, or the one that introduces the arc. Order within the episode doesn't matter (declarations are hoisted to the episode level). An achievement must be declared before it can be triggered, but the declaration and trigger can live in different episodes as long as the runtime registry has seen the declaration first.
 
-**Generating achievements:** The [`story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill reads a finished script set and produces a curated ~15-achievement table. Dramatizer should run it after scripts are complete, then each achievement is translated into an `@achievement` block (and any required `@signal mark` instrumentation) in the appropriate episode.
+**Generating achievements:** The [`story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill reads a finished script set and produces a curated ~15-achievement table. Dramatizer should run it after scripts are complete, then each achievement is translated into an `@achievement { ... }` declaration (and any required `@signal mark` instrumentation plus the final `@if ... { @achievement <id> }` trigger) in the appropriate episode.
 
 ## Flow Control
 
@@ -411,17 +435,21 @@ Use `@if` to show different content based on game state. **Parentheses `()` are 
 }
 ```
 
-**Condition types (5 kinds, all compiled to structured AST — the backend receives typed condition objects, not expression strings):**
+**Condition types (7 kinds, all compiled to structured AST — the backend receives typed condition objects, not expression strings):**
 
 | Type | Syntax | Example |
 |------|--------|---------|
 | flag | `SIGNAL_NAME` | `@if (EP01_COMPLETE) { }` |
 | comparison | `<operand> <op> <integer>` | `@if (affection.easton >= 5) { }` or `@if (san <= 20) { }` |
 | compound | `<expr> && <expr>` / `<expr> \|\| <expr>` | `@if (san <= 20 \|\| FAILED_TWICE) { }` |
-| choice | `OPTION.result` | `@if (A.fail) { }` — result: `success` / `fail` / `any` |
+| choice | `OPTION.result` | `@if (A.fail) { }` — result: `success` / `fail` / `any`. Use from outside the option |
 | influence | `influence "desc"` or `"desc"` | `@if (influence "player showed empathy") { }` or `@if ("player showed empathy") { }` — both forms accepted |
+| check | `check.success` / `check.fail` | `@if (check.success) { }` — context-local, only valid inside a brave option body |
+| rating | `rating.<grade>` | `@if (rating.S) { }` / `@if (rating.A \|\| rating.B) { }` — context-local, only valid inside a minigame body |
 
 **Comparison operand** on the left of `>=` / `<=` / etc. must be either `affection.<char>` (character-specific affection) or a bare `<name>` (engine-managed value like `san`, `CHA`). The right side **must be an integer literal** — expressions like `a >= b` or `affection.easton >= (5 + 3)` are rejected.
+
+**`check` vs `choice`** — both touch D20 outcomes but answer different questions. `check.success` inside a brave option body asks "did *this* option's roll just succeed?" It's the idiom for writing `@if (check.success) { } @else { }` immediately after `check { }`. `A.success` from anywhere asks "at some earlier point, did the player pick option A and pass its check?" — retrospective, not context-local. Use `check.*` inside the option body it describes; use `A.*` / `B.*` everywhere else.
 
 **Operators:** `>=` `<=` `>` `<` `==` `!=`
 **Logic:** `&&` (and, binds tighter), `||` (or, binds looser). Use `( )` for explicit grouping.
@@ -514,7 +542,7 @@ Example bad-path terminal:
 2. **Both `@gate` and `@ending`** — The two are mutually exclusive: a routing block cannot coexist with a terminal ending. Pick one.
 3. **Missing `@else`** — Gate block without fallback = interpreter error.
 4. **Brave option without `check { }`** — Brave means D20 check. No check block = error.
-5. **Brave option without both `@on success` and `@on fail`** — Both outcomes must be defined.
+5. **Brave option still using `@on`** — `@on success` / `@on fail` are retired. Use `@if (check.success) { } @else { }`. A missing `@else` is allowed (the validator no longer forces both branches), but it's usually still what you want.
 6. **`@goto` without matching `@label`** — The target label must exist in the same episode.
 7. **Putting `@gate` anywhere except the end** — Gate must be the last thing in `@episode`.
 8. **Using character names inconsistently** — `@mauricio show ...` and `MAURICIO:` must use the same name (case-insensitive).
@@ -527,14 +555,18 @@ Example bad-path terminal:
 15. **`@if` without parentheses** — `@if condition { }` is a syntax error. Must be `@if (condition) { }`. Parentheses are mandatory for both body `@if` and gate `@if`.
 16. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
 17. **Invalid `@ending` type** — Only `complete`, `to_be_continued`, `bad_ending` are accepted. Any other identifier is a parse error.
-18. **`@signal` without a kind** — `@signal <kind> <event>` requires a kind token. Write `@signal mark EVENT` (persistent flag) or `@signal achievement ID` (unlock a declared achievement). Nothing else parses.
-19. **Orphan marks** — `@signal mark X` with no reader. If no `@if (X)` and no `@achievement.when` references `X`, delete the mark. Marks that no one reads are noise: they dilute the flag store and mislead downstream tools. Never emit marks for "episode completed", "chose option A", "affection raised", or anything else the engine already tracks.
-20. **Using non-English names** — All `event` identifiers, `@achievement` ids, achievement `name`, and `description` strings must be English. Mixed-language ids cause grep/search failures and ambiguous meaning across the pipeline.
-21. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If every player gets it, it's not an achievement.
-22. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes via `when` condition, declare it once in the most appropriate episode (usually the terminal one).
-23. **Checking an `achievement` signal in `@if`** — `@if (FIRST_KISS)` after `@signal achievement FIRST_KISS` will always be false. Achievements are outbound notifications, not flags. For conditional logic, use `@signal mark`.
+18. **`@signal` without a kind** — `@signal <kind> <event>` requires a kind token. Currently only `mark` is implemented. `@signal achievement ...` is no longer valid — use the dedicated `@achievement <id>` trigger instead.
+19. **`@minigame` without a description** — `@minigame <id> <ATTR> "<description>" { }`. The quoted description is mandatory; an empty body is fine, but the description is not.
+20. **`@cg show` without `duration:` / `content:` fields** — Both are required at the top of the block, before any body nodes. `duration` must be `low` / `medium` / `high`; `content` is a quoted English narrative for the video-generation pipeline.
+21. **Orphan marks** — `@signal mark X` with no reader. If no `@if (X)` and no `@if (X && ...) { @achievement ... }` references `X`, delete the mark. Marks that no one reads are noise: they dilute the flag store and mislead downstream tools. Never emit marks for "episode completed", "chose option A", "affection raised", or anything else the engine already tracks.
+22. **Using non-English names** — All `event` identifiers, `@achievement` ids, achievement `name`, and `description` strings must be English. Mixed-language ids cause grep/search failures and ambiguous meaning across the pipeline.
+23. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If every player gets it, it's not an achievement.
+24. **Writing a `when:` field on `@achievement`** — retired in v2.4. Declarations carry only `name` / `rarity` / `description`. Trigger logic lives in the body via `@achievement <id>` (or `@if (...) { @achievement <id> }` for conditional triggers).
+25. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes, declare it once in whichever one most naturally owns it.
+26. **Triggering an achievement that was never declared** — `@achievement <id>` inline without a matching `@achievement <id> { ... }` declaration is a runtime dead letter. The runtime registry must have seen the declaration first. (Cross-episode is fine; the engine loads all declarations.)
+27. **Using `check.success` outside a brave option body, or `rating.S` outside a minigame body** — both are context-local pseudo-identifiers. Outside their scope the runtime always returns false — that's a narrative bug, not a syntax error.
 
-**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. Always run the fixer before compiling if the script was generated by an LLM.
+**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags legacy `@on` usage with a v2.4 migration hint. Always run the fixer before compiling if the script was generated by an LLM.
 
 ## Remix Scripts
 

@@ -33,11 +33,25 @@
 | `@<char> move to <pos>` | `@mauricio move to left` |
 | `@<char> bubble <type>` | `@josie bubble heart` |
 | `@bg set <name> [trans]` | `@bg set classroom fade` |
-| `@cg show <name> [trans] { }` | `@cg show kiss_scene fade { ... }` |
+| `@cg show <name> [trans] { duration: ... content: "..." ... }` | See CG section below — `duration` and `content` fields are required |
 
 Positions: `left` `center` `right` `left_far` `right_far`
 Transitions: (none)=dissolve, `fade`, `cut`, `slow`
 Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ellipsis`
+
+### CG block fields (required)
+
+```
+@cg show window_stare fade {
+  duration: medium
+  content: "The camera opens on Malia's silhouette against the rain-streaked window, slow push-in as one tear tracks down."
+  YOU: The city lights blurred through my tears.
+}
+```
+
+- `duration` — one of `low` / `medium` / `high`. Length tier consumed by the video-generation pipeline (agent-forge) — scripts don't emit seconds.
+- `content` — continuous English narrative describing camera + story beats during the CG. Plain, no purple prose.
+- Body nodes after the two fields play during the CG, same as before.
 
 ## Dialogue
 
@@ -70,21 +84,25 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 
 | Directive | Example |
 |-----------|---------|
-| `@minigame <id> <ATTR> { }` | `@minigame qte_challenge ATK { ... }` |
+| `@minigame <id> <ATTR> "<description>" { }` | `@minigame qte_challenge ATK "a quick reflex duel" { ... }` — description required |
 | `@choice { }` | Contains @option blocks |
-| `@option <ID> brave <text> { }` | `@option A brave "Fight" { check { ... } @on success { } @on fail { } }` |
+| `@option <ID> brave <text> { }` | Body must contain `check { }`; outcome branching via `@if (check.success) { } @else { }` |
 | `@option <ID> safe <text> { }` | `@option B safe "Run" { ... }` |
 | `check { attr: X  dc: N }` | Inside brave option |
-| `@on <cond> { }` | `@on success { }` `@on fail { }` `@on S { }` `@on A B { }` |
+
+Rating branching inside a minigame uses `@if (rating.<grade>) { }` trees, where `<grade>` is typically `S` / `A` / `B` / `C` / `D` (the language does not enforce a specific vocabulary).
+
+Check-outcome branching inside a brave option uses `@if (check.success) { } @else { }`. The `check.success` / `check.fail` pseudo-identifier is valid only inside a brave option body.
 
 ## State Changes
 
 | Directive | Example |
 |-----------|---------|
 | `@affection <char> <+/-N>` | `@affection easton +2` |
-| `@signal <kind> <event>` | `@signal mark EP01_COMPLETE` (persistent boolean flag, check with `@if (EP01_COMPLETE) { }`) or `@signal achievement FIRST_KISS` (unlock declared achievement) |
+| `@signal <kind> <event>` | `@signal mark EP01_COMPLETE` — `<kind>` is mandatory; only `mark` is currently implemented. The kind slot is kept in the source grammar for future expansion |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
-| `@achievement <id> { name/rarity/description/when }` | Declarative achievement (see Achievements section) |
+| `@achievement <id> { name / rarity / description }` | Declarative achievement (hoisted to episode top-level) |
+| `@achievement <id>` | Imperative achievement trigger — fires a previously declared achievement at this narrative beat |
 
 ## Flow Control
 
@@ -94,12 +112,15 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 | `@else @if (<cond>) { }` | `} @else @if (affection.easton >= 3) { }` — chained condition |
 | `@else { }` | `} @else { }` |
 
-Conditions (5 types, all fully parsed into structured AST — no raw expression strings in JSON output):
+Conditions (7 types, all fully parsed into structured AST — no raw expression strings in JSON output):
+
 - choice: `A.fail` / `B.success` / `C.any`
 - flag: `SIGNAL_NAME`
 - comparison: `affection.<char> <op> <N>` or `<name> <op> <N>` (right side must be integer)
 - influence: `"description"` or `influence "description"`
 - compound: `<cond> && <cond>` / `<cond> || <cond>` (parens for grouping; `&&` binds tighter than `||`)
+- check: `check.success` / `check.fail` — context-local, only valid inside a brave option body
+- rating: `rating.<grade>` — context-local, only valid inside a minigame body
 
 Operators: `>=` `<=` `>` `<` `==` `!=`
 Logic: `&&` (and), `||` (or)
@@ -115,23 +136,33 @@ The two are mutually exclusive. Missing both is a validator error.
 
 ## Achievements
 
-Declarative `@achievement` blocks, hoisted to episode top-level. Field names align with the `cdotlock/story-achievement-generator` skill output.
+Declarations are hoisted to episode top-level. Field names align with the `cdotlock/story-achievement-generator` skill output.
 
 ```
 @achievement HIGH_HEEL_DOUBLE_KILL {
   name: "Heel Twice Over"
   rarity: epic
   description: "Once is improvisation. Twice is a signature move."
-  when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
 }
 ```
 
 - `rarity` must be one of `uncommon` / `rare` / `epic` / `legendary` (no `common`)
-- `when` uses the same condition grammar as `@if` — typically references one or more `mark` flags
-- Two trigger models:
-  - declarative: engine watches `mark` signals, unlocks when `when` becomes true (preferred for arcs)
-  - imperative: `@signal achievement <id>` unlocks a declared achievement directly
+- Declaration holds only metadata (`name` / `rarity` / `description`). There is no `when` field — trigger conditions live in the story body.
 
-`@signal` kind field is mandatory:
-- `@signal mark <event>` — persistent boolean flag, checkable in `@if (NAME)`
-- `@signal achievement <id>` — unlock a declared achievement (not a queryable flag)
+Trigger via bare `@achievement <id>` at the exact narrative beat the achievement unlocks. Wrap it in `@if (...) { @achievement <id> }` whenever the unlock depends on accumulated marks or other conditions:
+
+```
+@if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
+  @achievement HIGH_HEEL_DOUBLE_KILL
+}
+```
+
+Parser disambiguates: `@achievement <id>` with no `{` is the trigger form; with `{ ... }` is the declaration form.
+
+## Signals
+
+`@signal <kind> <event>` — kind is mandatory. Currently only `mark` is implemented:
+
+- `@signal mark <event>` — persistent boolean flag. Engine stores it forever; `@if (NAME)` queries this store. Use only for key story points with a reader (a later `@if` branch or achievement trigger).
+
+The kind slot is kept in the source grammar and AST so future kinds can be added without breaking scripts. Achievements are **not** a signal kind — use the dedicated `@achievement <id>` trigger instead.
