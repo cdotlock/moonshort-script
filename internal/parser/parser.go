@@ -451,7 +451,7 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 	case "achievement":
 		return p.parseAchievement()
 	case "on":
-		return nil, fmt.Errorf("line %d col %d: @on is no longer supported — use @if (check.success) / @if (rating.S) inside brave options and minigames", p.cur.Line, p.cur.Col)
+		return nil, fmt.Errorf("line %d col %d: @on is not a MSS directive — use @if (check.success) / @if (rating.X) inside brave options and minigames", p.cur.Line, p.cur.Col)
 	default:
 		// Not a known keyword — treat as character directive.
 		return p.parseCharDirective(keyword)

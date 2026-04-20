@@ -9,29 +9,22 @@ import (
 
 // Error codes for validation failures.
 const (
-	MissingTerminal     = "MISSING_TERMINAL"
-	GotoNoLabel         = "GOTO_NO_LABEL"
-	BraveNoCheck        = "BRAVE_NO_CHECK"
-	// BraveMissingOutcome is retained as a constant for backward compatibility
-	// with downstream code; the validator no longer emits this code because
-	// the new grammar expresses success/fail branching via @if (check.success)
-	// / @else trees and the completeness cannot be statically verified without
-	// control-flow analysis.
-	BraveMissingOutcome = "BRAVE_MISSING_OUTCOME"
-	DuplicateOptionID   = "DUPLICATE_OPTION_ID"
-	SafeOptionHasCheck  = "SAFE_OPTION_HAS_CHECK"
-	InvalidPosition     = "INVALID_POSITION"
-	InvalidTransition   = "INVALID_TRANSITION"
-	InvalidBubbleType   = "INVALID_BUBBLE_TYPE"
-	InvalidOptionMode   = "INVALID_OPTION_MODE"
-	InvalidEndingType   = "INVALID_ENDING_TYPE"
-	InvalidCondition    = "INVALID_CONDITION"
-	InvalidSignalKind   = "INVALID_SIGNAL_KIND"
-	InvalidRarity       = "INVALID_RARITY"
-	DuplicateAchievement = "DUPLICATE_ACHIEVEMENT_ID"
-	AchievementMissingField = "ACHIEVEMENT_MISSING_FIELD"
-	InvalidCgDuration = "INVALID_CG_DURATION"
-	CgMissingContent  = "CG_MISSING_CONTENT"
+	MissingTerminal            = "MISSING_TERMINAL"
+	GotoNoLabel                = "GOTO_NO_LABEL"
+	BraveNoCheck               = "BRAVE_NO_CHECK"
+	DuplicateOptionID          = "DUPLICATE_OPTION_ID"
+	SafeOptionHasCheck         = "SAFE_OPTION_HAS_CHECK"
+	InvalidPosition            = "INVALID_POSITION"
+	InvalidTransition          = "INVALID_TRANSITION"
+	InvalidBubbleType          = "INVALID_BUBBLE_TYPE"
+	InvalidOptionMode          = "INVALID_OPTION_MODE"
+	InvalidEndingType          = "INVALID_ENDING_TYPE"
+	InvalidCondition           = "INVALID_CONDITION"
+	InvalidSignalKind          = "INVALID_SIGNAL_KIND"
+	InvalidRarity              = "INVALID_RARITY"
+	AchievementMissingField    = "ACHIEVEMENT_MISSING_FIELD"
+	InvalidCgDuration          = "INVALID_CG_DURATION"
+	CgMissingContent           = "CG_MISSING_CONTENT"
 	MinigameMissingDescription = "MINIGAME_MISSING_DESCRIPTION"
 )
 
@@ -51,10 +44,6 @@ var validRarities = map[string]bool{
 	ast.RarityEpic:      true,
 	ast.RarityLegendary: true,
 }
-
-// MissingGate is kept as an alias for backward compatibility of external
-// tooling that references the old code. Prefer MissingTerminal.
-const MissingGate = MissingTerminal
 
 var validEndingTypes = map[string]bool{
 	ast.EndingComplete:      true,

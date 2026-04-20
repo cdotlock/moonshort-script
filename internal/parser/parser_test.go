@@ -1766,9 +1766,9 @@ func TestParseAchievementRejectsMissingField(t *testing.T) {
 	}
 }
 
-// TestParseSignalRejectsAchievementKind verifies the parser no longer accepts
-// the legacy `@signal achievement <id>` form — achievement triggering is now
-// the bare `@achievement <id>` directive.
+// TestParseSignalRejectsAchievementKind verifies that `@signal achievement
+// <id>` is a parse error — achievements are their own directive, not a
+// signal kind.
 func TestParseSignalRejectsAchievementKind(t *testing.T) {
 	src := `@episode main:01 "T" {
 		NARRATOR: hi.
@@ -1777,6 +1777,6 @@ func TestParseSignalRejectsAchievementKind(t *testing.T) {
 	}`
 	_, err := New(lexer.New(src)).Parse()
 	if err == nil {
-		t.Fatal("expected parse error: @signal achievement is no longer valid")
+		t.Fatal("expected parse error: @signal achievement is not a valid kind")
 	}
 }

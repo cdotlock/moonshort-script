@@ -131,9 +131,9 @@ func TestFixUnquotedButterfly(t *testing.T) {
 			fixed:    false,
 		},
 		{
-			// The fixer no longer touches @signal — its new syntax is
-			// `@signal <kind> <event>`, a structured form the fixer must
-			// not reshape. A legacy-looking line stays untouched.
+			// The fixer does not touch @signal lines — the directive
+			// takes a structured `<kind> <event>` argument and quoting
+			// the tail would corrupt it.
 			name:     "signal with spaces is left alone",
 			input:    `@signal quest complete`,
 			expected: `@signal quest complete`,

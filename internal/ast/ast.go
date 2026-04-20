@@ -406,8 +406,8 @@ func (c *ChoiceNode) nodeType() string { return "choice" }
 //
 // For brave options the body typically contains an @if (check.success)
 // branch with @else — the CheckCondition AST node queries the runtime
-// check result. The parser no longer accepts the legacy @on success/fail
-// structure; authors write standard @if/@else trees instead.
+// check result. Authors write standard @if/@else trees; there is no
+// dedicated outcome directive.
 type OptionNode struct {
 	ID    string      // letter / identifier, e.g. "A"
 	Mode  string      // "safe" | "brave"

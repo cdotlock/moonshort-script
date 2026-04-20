@@ -448,8 +448,7 @@ func TestValidatorNilMinigameBody(t *testing.T) {
 
 // EDGE: A brave option whose body covers only the check.success branch
 // (no @else for check.fail) is not a validation error — authors own the
-// completeness of their @if tree. This test pins that the validator
-// never emits BRAVE_MISSING_OUTCOME.
+// completeness of their @if tree.
 func TestBraveOptionSuccessOnlyBodyIsValid(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -473,10 +472,8 @@ func TestBraveOptionSuccessOnlyBodyIsValid(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	for _, e := range errs {
-		if e.Code == BraveMissingOutcome {
-			t.Errorf("BRAVE_MISSING_OUTCOME should no longer be emitted: %v", e)
-		}
+	if len(errs) != 0 {
+		t.Errorf("success-only body should validate cleanly, got %v", errs)
 	}
 }
 

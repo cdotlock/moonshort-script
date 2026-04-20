@@ -41,8 +41,8 @@ func TestMissingGate(t *testing.T) {
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
-	if errs[0].Code != MissingGate {
-		t.Errorf("error code = %q, want %q", errs[0].Code, MissingGate)
+	if errs[0].Code != MissingTerminal {
+		t.Errorf("error code = %q, want %q", errs[0].Code, MissingTerminal)
 	}
 }
 
@@ -721,8 +721,8 @@ func TestValuesInsideNestedNodes(t *testing.T) {
 
 func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 	// Test checkBraveOptions recurses into CgShow, IfNode, Minigame, PhoneShow.
-	// The validator no longer emits BRAVE_MISSING_OUTCOME, so we count
-	// BRAVE_NO_CHECK only — one per missing check = 5 total.
+	// Each of the 5 brave options below is missing its check block, so
+	// we expect BRAVE_NO_CHECK to fire 5 times.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
@@ -806,8 +806,8 @@ func TestValidatorErrorMethod(t *testing.T) {
 }
 
 // TestSafeOptionWithCheckBlock verifies that a safe option with a check
-// block still triggers SAFE_OPTION_HAS_CHECK — that's the sole remaining
-// trigger condition since @on success / @on fail blocks no longer exist.
+// block triggers SAFE_OPTION_HAS_CHECK — check is only meaningful for
+// brave options.
 func TestSafeOptionWithCheckBlock(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -835,10 +835,10 @@ func TestSafeOptionWithCheckBlock(t *testing.T) {
 	}
 }
 
-// TestBraveOptionWithCheckPasses verifies that a brave option with a check
-// block and no explicit outcome body still passes validation — the
-// validator no longer enforces BRAVE_MISSING_OUTCOME because outcome
-// branching is handled via an @if (check.success) tree the author writes.
+// TestBraveOptionWithCheckPasses verifies that a brave option with a
+// check block and no explicit outcome body passes validation — outcome
+// branching is a narrative choice the author makes via @if (check.success),
+// not something the validator enforces.
 func TestBraveOptionWithCheckPasses(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -855,10 +855,8 @@ func TestBraveOptionWithCheckPasses(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	for _, e := range errs {
-		if e.Code == BraveMissingOutcome {
-			t.Errorf("BRAVE_MISSING_OUTCOME should no longer be emitted: %v", e)
-		}
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
 	}
 }
 
@@ -953,10 +951,8 @@ func TestAchievementIdDuplicationAllowed(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	for _, e := range errs {
-		if e.Code == DuplicateAchievement {
-			t.Errorf("duplicate-id check should no longer fire: %v", e)
-		}
+	if len(errs) != 0 {
+		t.Errorf("duplicate ids should validate cleanly, got %v", errs)
 	}
 }
 

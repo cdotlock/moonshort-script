@@ -543,7 +543,10 @@ func fixAffectionCharCase(line string, lineNum int, r *FixResult) string {
 	return newLine
 }
 
-// oldFormatKeywords are keywords from the old MSS format that are no longer valid.
+// oldFormatKeywords are keywords the fixer detects and rejects with a hint
+// pointing at the correct MSS syntax. These catch common LLM mistakes
+// where the generator produces a directive name drawn from an adjacent
+// dialect rather than MSS itself.
 var oldFormatKeywords = map[string]string{
 	"@show":      "use @<character> show",
 	"@hide":      "use @<character> hide",

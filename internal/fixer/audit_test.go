@@ -512,9 +512,10 @@ func TestUnquotedArgs_AmpersandButterfly(t *testing.T) {
 	}
 }
 
-// EDGE: fixUnquotedArgs with &signal — the fixer no longer touches any
-// @signal / &signal line (the directive's new syntax is structured:
-// `@signal <kind> <event>`). Verify the line is passed through unchanged.
+// EDGE: fixUnquotedArgs with &signal — the fixer leaves @signal / &signal
+// lines alone, since the directive takes a structured `<kind> <event>`
+// argument that should not be quoted as a single string. Verify the line
+// is passed through unchanged.
 func TestUnquotedArgs_AmpersandSignalWithSpaces(t *testing.T) {
 	input := "&signal quest complete"
 	r := Fix(input)
