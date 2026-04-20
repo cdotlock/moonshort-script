@@ -62,13 +62,14 @@ type GateBlock struct {
 func (g *GateBlock) nodeType() string { return "gate" }
 
 // Condition is the interface implemented by every condition node.
-// ConditionKind returns the "type" string used by the emitter ("choice",
-// "flag", "influence", "comparison", "compound"). Concrete types:
-//   - ChoiceCondition       : option check result (e.g. A.fail)
-//   - FlagCondition         : signal-flag truthiness (e.g. EP01_COMPLETE)
+// ConditionKind returns the "type" string used by the emitter. Concrete types:
+//   - ChoiceCondition       : option check result (e.g. A.fail) — retrospective query from outside an option
+//   - FlagCondition         : signal-flag truthiness (e.g. HIGH_HEEL_EP05)
 //   - InfluenceCondition    : LLM butterfly-effect judgment
 //   - ComparisonCondition   : structured numeric comparison
 //   - CompoundCondition     : && / || tree of sub-conditions
+//   - CheckCondition        : this-option's check result (check.success / check.fail) — context-local to brave option body
+//   - RatingCondition       : this-minigame's rating (rating.S / rating.A / …) — context-local to minigame body
 type Condition interface {
 	ConditionKind() string
 }
@@ -132,6 +133,25 @@ type CompoundCondition struct {
 }
 
 func (c *CompoundCondition) ConditionKind() string { return "compound" }
+
+// CheckCondition is the context-local condition for a brave option's
+// check result. Source syntax: check.success / check.fail, valid only
+// inside the body of an @option <ID> brave.
+type CheckCondition struct {
+	Result string // "success" | "fail"
+}
+
+func (c *CheckCondition) ConditionKind() string { return "check" }
+
+// RatingCondition is the context-local condition for a minigame's grade.
+// Source syntax: rating.<grade>, valid only inside the body of a
+// @minigame. Grade is a single identifier (typically S / A / B / C / D,
+// but the language does not enforce a specific vocabulary).
+type RatingCondition struct {
+	Grade string // e.g. "S", "A"
+}
+
+func (c *RatingCondition) ConditionKind() string { return "rating" }
 
 // GateRoute is a single condition→target pair inside a @gate block.
 type GateRoute struct {
@@ -243,12 +263,28 @@ type CharBubbleNode struct {
 
 func (c *CharBubbleNode) nodeType() string { return "char_bubble" }
 
-// CgShowNode overlays a CG (computer-generated) illustration.
-// Body holds nodes that play while the CG is visible.
+// Valid CG duration tiers. Duration is a qualitative length tier that
+// downstream video pipelines (e.g. agent-forge) map to concrete seconds.
+const (
+	CgDurationLow    = "low"
+	CgDurationMedium = "medium"
+	CgDurationHigh   = "high"
+)
+
+// CgShowNode overlays a CG (computer-generated) illustration, which is
+// produced downstream as a short video. MSS is flow-control + content,
+// so the script must carry the narrative content the video pipeline
+// needs: camera direction plus story beats.
+//
+// Duration and Content are required fields declared at the top of the
+// CG block. Body holds the dialogue / narration nodes that play while
+// the CG is visible (unchanged from prior behavior).
 type CgShowNode struct {
 	ConcurrentFlag
 	Name       string
 	Transition string
+	Duration   string // CgDurationLow | CgDurationMedium | CgDurationHigh
+	Content    string // continuous English narrative: camera + story beats
 	Body       []Node
 }
 
@@ -345,14 +381,15 @@ func (s *SfxPlayNode) nodeType() string { return "sfx_play" }
 // Game-mechanic nodes
 // ----------------------------------------------------------------------------
 
-// MinigameNode triggers a mini-game.
-// OnResult maps result grade strings (e.g. "S", "A", "B", "fail") to the
-// sequence of nodes that execute for that outcome.
+// MinigameNode triggers a mini-game. Body holds the nodes that run during
+// and after the minigame resolves; author uses standard @if with
+// RatingCondition (e.g. @if (rating.S) { ... }) to branch on the result.
 type MinigameNode struct {
 	ConcurrentFlag
-	ID       string
-	Attr     string // governing attribute, e.g. "ATK"
-	OnResult map[string][]Node
+	ID          string
+	Attr        string // governing attribute, e.g. "ATK"
+	Description string // short English narrative tying the minigame to the scene
+	Body        []Node
 }
 
 func (m *MinigameNode) nodeType() string { return "minigame" }
@@ -367,14 +404,17 @@ func (c *ChoiceNode) nodeType() string { return "choice" }
 
 // OptionNode is a single answer inside a @choice block.
 // Mode: "safe" | "brave"
+//
+// For brave options the body typically contains an @if (check.success)
+// branch with @else — the CheckCondition AST node queries the runtime
+// check result. The parser no longer accepts the legacy @on success/fail
+// structure; authors write standard @if/@else trees instead.
 type OptionNode struct {
-	ID        string     // letter / identifier, e.g. "A"
-	Mode      string     // "safe" | "brave"
-	Text      string     // display label
-	Check     *CheckBlock // nil for safe options
-	OnSuccess []Node     // nodes that run on success (brave only)
-	OnFail    []Node     // nodes that run on failure (brave only)
-	Body      []Node     // nodes that always run after check resolution
+	ID    string      // letter / identifier, e.g. "A"
+	Mode  string      // "safe" | "brave"
+	Text  string      // display label
+	Check *CheckBlock // nil for safe options
+	Body  []Node      // body nodes (for brave: typically contains @if (check.success) … @else …)
 }
 
 func (o *OptionNode) nodeType() string { return "option" }
@@ -400,30 +440,42 @@ type AffectionNode struct {
 
 func (a *AffectionNode) nodeType() string { return "affection" }
 
-// Valid signal kinds for SignalNode.Kind.
+// Valid signal kinds. Only "mark" is currently implemented. The kind
+// word is mandatory in the source syntax (@signal <kind> <event>) —
+// future kinds will be added to this whitelist as the engine grows.
 const (
-	// SignalKindMark is a persistent boolean flag. The engine stores it
-	// forever; scripts can test it in @if (NAME) conditions (resolved as a
-	// FlagCondition). Use for hidden route triggers and story state.
 	SignalKindMark = "mark"
-	// SignalKindAchievement is an achievement notification. The engine
-	// fires its achievement pipeline (UI popup, analytics, unlock). It is
-	// NOT queryable via @if — achievements are outbound notifications,
-	// not story state.
-	SignalKindAchievement = "achievement"
 )
 
-// SignalNode emits a named story signal. The Kind field disambiguates the
-// two roles that used to share the @signal directive:
-//   - "mark"         → persistent boolean flag (checkable in @if)
-//   - "achievement"  → outbound achievement notification (not checkable)
+// SignalNode emits a named persistent boolean flag (a "mark"). The engine
+// stores every emitted mark forever; scripts test them in @if (NAME)
+// conditions (resolved as FlagCondition). Use only for key story points
+// that a later @if or @achievement trigger will actually query — orphan
+// marks are a documented anti-pattern.
+//
+// Source syntax: @signal <kind> <event>. Currently kind must be "mark".
 type SignalNode struct {
 	ConcurrentFlag
-	Kind  string // SignalKindMark | SignalKindAchievement
-	Event string // e.g. "EP01_COMPLETE"
+	Kind  string // currently always SignalKindMark (parser-enforced whitelist)
+	Event string // e.g. "HIGH_HEEL_EP05"
 }
 
 func (s *SignalNode) nodeType() string { return "signal" }
+
+// AchievementTriggerNode fires a previously-declared achievement by id.
+// Source syntax: @achievement <id> (bare, no block). The block form with
+// curly braces declares an AchievementNode instead (hoisted to
+// Episode.Achievements).
+//
+// Conditions are expressed via an enclosing @if — there is no `when`
+// field on the declaration. Authors place the trigger at whatever
+// narrative beat should unlock the achievement.
+type AchievementTriggerNode struct {
+	ConcurrentFlag
+	ID string // must match an AchievementNode.ID declared in this episode or a sibling
+}
+
+func (a *AchievementTriggerNode) nodeType() string { return "achievement" }
 
 // Valid achievement rarities. Aligned with the story-achievement-generator
 // schema (cdotlock/story-achievement-generator). "common" is intentionally
@@ -437,24 +489,24 @@ const (
 
 // AchievementNode is a declarative achievement definition hoisted to the
 // episode level (Episode.Achievements). Not a runtime step — the engine
-// loads all declared achievements and fires them when the Trigger condition
-// is satisfied. Fields mirror the story-achievement-generator output schema:
-//   - ID: stable identifier referenced by @signal achievement <id>
-//   - Name: display name (may contain 【】 brackets, up to ~8 CJK chars)
+// loads all declared achievements into a registry. Firing is a separate
+// step (AchievementTriggerNode), placed in-body wherever the author
+// wants the unlock to happen (typically inside an @if that checks the
+// required marks).
+//
+// Fields mirror the story-achievement-generator output schema:
+//   - ID: stable identifier referenced by @achievement <id> triggers
+//   - Name: short English display name
 //   - Rarity: uncommon | rare | epic | legendary (no "common")
-//   - Description: DM-voice 1–2 sentence flavor text
-//   - Trigger: Condition AST — typically a FlagCondition referencing one
-//     or more marks (use CompoundCondition for arc achievements that span
-//     multiple episodes)
+//   - Description: DM-voice 1–2 sentence English flavor text
 type AchievementNode struct {
 	ID          string
 	Name        string
 	Rarity      string
 	Description string
-	Trigger     Condition
 }
 
-func (a *AchievementNode) nodeType() string { return "achievement" }
+func (a *AchievementNode) nodeType() string { return "achievement_decl" }
 
 // ButterflyNode records a butterfly-effect narrative branch decision.
 type ButterflyNode struct {

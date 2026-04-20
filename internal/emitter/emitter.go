@@ -74,7 +74,6 @@ func (e *Emitter) emitAchievements(list []*ast.AchievementNode) []interface{} {
 			"name":        a.Name,
 			"rarity":      a.Rarity,
 			"description": a.Description,
-			"when":        e.emitCondition(a.Trigger),
 		})
 	}
 	return out
@@ -184,6 +183,8 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		}
 	case *ast.ButterflyNode:
 		return map[string]interface{}{"type": "butterfly", "description": v.Description}
+	case *ast.AchievementTriggerNode:
+		return map[string]interface{}{"type": "achievement", "id": v.ID}
 	case *ast.IfNode:
 		return e.emitIf(v)
 	case *ast.LabelNode:
@@ -281,8 +282,10 @@ func (e *Emitter) emitCharBubble(n *ast.CharBubbleNode) map[string]interface{} {
 
 func (e *Emitter) emitCgShow(n *ast.CgShowNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type": "cg_show",
-		"name": n.Name,
+		"type":     "cg_show",
+		"name":     n.Name,
+		"duration": n.Duration,
+		"content":  n.Content,
 	}
 	url, err := e.resolver.ResolveCg(n.Name)
 	if err != nil {
@@ -384,9 +387,10 @@ func (e *Emitter) emitSfxPlay(n *ast.SfxPlayNode) map[string]interface{} {
 
 func (e *Emitter) emitMinigame(n *ast.MinigameNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type":    "minigame",
-		"game_id": n.ID,
-		"attr":    n.Attr,
+		"type":        "minigame",
+		"game_id":     n.ID,
+		"attr":        n.Attr,
+		"description": n.Description,
 	}
 	url, err := e.resolver.ResolveMinigame(n.ID)
 	if err != nil {
@@ -394,12 +398,8 @@ func (e *Emitter) emitMinigame(n *ast.MinigameNode) map[string]interface{} {
 	} else {
 		m["game_url"] = url
 	}
-	if len(n.OnResult) > 0 {
-		results := make(map[string]interface{})
-		for grade, nodes := range n.OnResult {
-			results[grade] = e.emitNodes(nodes)
-		}
-		m["on_results"] = results
+	if len(n.Body) > 0 {
+		m["steps"] = e.emitNodes(n.Body)
 	}
 	return m
 }
@@ -417,12 +417,6 @@ func (e *Emitter) emitChoice(n *ast.ChoiceNode) map[string]interface{} {
 				"attr": opt.Check.Attr,
 				"dc":   opt.Check.DC,
 			}
-		}
-		if len(opt.OnSuccess) > 0 {
-			o["on_success"] = e.emitNodes(opt.OnSuccess)
-		}
-		if len(opt.OnFail) > 0 {
-			o["on_fail"] = e.emitNodes(opt.OnFail)
 		}
 		if len(opt.Body) > 0 {
 			o["steps"] = e.emitNodes(opt.Body)
@@ -530,6 +524,16 @@ func (e *Emitter) emitCondition(c ast.Condition) map[string]interface{} {
 			"op":    v.Op,
 			"left":  e.emitCondition(v.Left),
 			"right": e.emitCondition(v.Right),
+		}
+	case *ast.CheckCondition:
+		return map[string]interface{}{
+			"type":   "check",
+			"result": v.Result,
+		}
+	case *ast.RatingCondition:
+		return map[string]interface{}{
+			"type":  "rating",
+			"grade": v.Grade,
 		}
 	default:
 		e.warn("unknown condition type: %T", c)

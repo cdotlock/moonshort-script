@@ -17,7 +17,7 @@ var knownKeywords = map[string]bool{
 	"music": true, "sfx": true, "minigame": true, "choice": true,
 	"affection": true, "signal": true,
 	"butterfly": true, "if": true, "else": true, "label": true,
-	"goto": true, "episode": true, "on": true,
+	"goto": true, "episode": true,
 	"option": true, "gate": true, "next": true, "pause": true,
 	"ending": true, "achievement": true,
 }
@@ -30,10 +30,10 @@ var validEndingTypes = map[string]bool{
 }
 
 // validSignalKinds enumerates accepted values for the kind token in
-// @signal <kind> <event>.
+// @signal <kind> <event>. Only "mark" is currently implemented; future
+// kinds will expand this whitelist.
 var validSignalKinds = map[string]bool{
-	"mark":        true,
-	"achievement": true,
+	"mark": true,
 }
 
 // validRarities enumerates accepted achievement rarities. Common is
@@ -183,21 +183,21 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 			ending = e
 			continue
 		}
-		if p.cur.Type == token.AT && p.peek.Literal == "achievement" {
-			a, err := p.parseAchievement()
-			if err != nil {
-				return nil, nil, nil, nil, err
-			}
-			achievements = append(achievements, a)
-			continue
-		}
 		node, err := p.parseStatement()
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		if node != nil {
-			body = append(body, node)
+		if node == nil {
+			continue
 		}
+		// Declarative achievement blocks (with `{` ... `}`) are hoisted out
+		// of the body into Episode.Achievements. Bare @achievement <id>
+		// triggers (without `{`) stay in the body like any other step.
+		if decl, ok := node.(*ast.AchievementNode); ok {
+			achievements = append(achievements, decl)
+			continue
+		}
+		body = append(body, node)
 	}
 	// Drain final pending node if any.
 	if p.pending != nil {
@@ -458,6 +458,10 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 		return p.parseGoto()
 	case "pause":
 		return p.parsePause()
+	case "achievement":
+		return p.parseAchievement()
+	case "on":
+		return nil, fmt.Errorf("line %d col %d: @on is no longer supported — use @if (check.success) / @if (rating.S) inside brave options and minigames", p.cur.Line, p.cur.Col)
 	default:
 		// Not a known keyword — treat as character directive.
 		return p.parseCharDirective(keyword)
@@ -483,7 +487,23 @@ func (p *Parser) parseBg() (ast.Node, error) {
 	return node, nil
 }
 
-// parseCg parses: @cg show <name> [transition] { body }
+// validCgDurations enumerates accepted @cg duration tiers.
+var validCgDurations = map[string]bool{
+	ast.CgDurationLow:    true,
+	ast.CgDurationMedium: true,
+	ast.CgDurationHigh:   true,
+}
+
+// parseCg parses:
+//
+//	@cg show <name> [transition] {
+//	  duration: <low|medium|high>
+//	  content: "<narrative>"
+//	  <body nodes>
+//	}
+//
+// duration and content are required fields that must appear before any
+// body statement. Field order between them is free; they may not repeat.
 func (p *Parser) parseCg() (ast.Node, error) {
 	p.advance() // consume "cg"
 	if _, err := p.expect(token.IDENT); err != nil { // consume "show"
@@ -499,16 +519,63 @@ func (p *Parser) parseCg() (ast.Node, error) {
 		node.Transition = p.cur.Literal
 		p.advance()
 	}
-	if p.cur.Type == token.LBRACE {
-		p.advance() // consume LBRACE
-		body, err := p.parseBlock()
-		if err != nil {
+	if _, err := p.expect(token.LBRACE); err != nil {
+		return nil, err
+	}
+
+	// Read field-value pairs (duration, content) until we see a non-field
+	// statement (@, &, dialogue pattern, or RBRACE).
+	seen := map[string]bool{}
+	for p.cur.Type == token.IDENT && p.peek.Type == token.COLON {
+		key := p.cur.Literal
+		if key != "duration" && key != "content" {
+			// Not a CG field; fall through to body parsing (this path
+			// is unusual — would mean an IDENT:COLON dialogue line whose
+			// IDENT happens to look like lowercase. Dialogue uses caps so
+			// this is rare but kept for safety).
+			break
+		}
+		if seen[key] {
+			return nil, fmt.Errorf("line %d col %d: duplicate @cg field %q", p.cur.Line, p.cur.Col, key)
+		}
+		seen[key] = true
+		p.advance() // consume key
+		if _, err := p.expect(token.COLON); err != nil {
 			return nil, err
 		}
-		node.Body = body
-		if _, err := p.expect(token.RBRACE); err != nil {
-			return nil, err
+		switch key {
+		case "duration":
+			val, err := p.expect(token.IDENT)
+			if err != nil {
+				return nil, fmt.Errorf("line %d col %d: cg duration must be an identifier (low|medium|high)", val.Line, val.Col)
+			}
+			if !validCgDurations[val.Literal] {
+				return nil, fmt.Errorf("line %d col %d: invalid cg duration %q (must be low, medium, or high)", val.Line, val.Col, val.Literal)
+			}
+			node.Duration = val.Literal
+		case "content":
+			val, err := p.expect(token.STRING)
+			if err != nil {
+				return nil, fmt.Errorf("line %d col %d: cg content must be a quoted string", val.Line, val.Col)
+			}
+			node.Content = val.Literal
 		}
+	}
+
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
+	}
+	node.Body = body
+	if _, err := p.expect(token.RBRACE); err != nil {
+		return nil, err
+	}
+
+	if node.Duration == "" {
+		return nil, fmt.Errorf("@cg show %q: missing required field 'duration'", node.Name)
+	}
+	if node.Content == "" {
+		return nil, fmt.Errorf("@cg show %q: missing required field 'content'", node.Name)
 	}
 	return node, nil
 }
@@ -630,7 +697,15 @@ func (p *Parser) parseSfx() (ast.Node, error) {
 	return &ast.SfxPlayNode{Sound: sound.Literal}, nil
 }
 
-// parseMinigame parses: @minigame <id> <ATTR> { @on <ratings> { body } ... }
+// parseMinigame parses:
+//
+//	@minigame <id> <ATTR> "<description>" {
+//	  <body>  // typically @if (rating.S) { ... } @else @if (rating.A) { ... } ...
+//	}
+//
+// Description is a short English narrative tying the minigame to the
+// scene. Body is standard MSS; branching on the result uses
+// RatingCondition (rating.<grade>) in @if.
 func (p *Parser) parseMinigame() (ast.Node, error) {
 	p.advance() // consume "minigame"
 	id, err := p.expect(token.IDENT)
@@ -641,55 +716,29 @@ func (p *Parser) parseMinigame() (ast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	desc, err := p.expect(token.STRING)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: @minigame requires a quoted description after the attribute", desc.Line, desc.Col)
+	}
 	if _, err := p.expect(token.LBRACE); err != nil {
 		return nil, err
 	}
 
-	node := &ast.MinigameNode{
-		ID:       id.Literal,
-		Attr:     attr.Literal,
-		OnResult: make(map[string][]ast.Node),
-	}
-
-	// Parse @on blocks.
-	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
-		if p.cur.Type == token.AT && p.peek.Literal == "on" {
-			p.advance() // consume AT
-			p.advance() // consume "on"
-			// Collect rating identifiers until LBRACE.
-			var ratings []string
-			for p.cur.Type == token.IDENT {
-				ratings = append(ratings, p.cur.Literal)
-				p.advance()
-			}
-			if _, err := p.expect(token.LBRACE); err != nil {
-				return nil, err
-			}
-			body, err := p.parseBlock()
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(token.RBRACE); err != nil {
-				return nil, err
-			}
-			// Map each rating to the same body.
-			key := ""
-			for i, r := range ratings {
-				if i > 0 {
-					key += " "
-				}
-				key += r
-			}
-			node.OnResult[key] = body
-		} else {
-			p.advance() // skip unexpected tokens
-		}
+	body, err := p.parseBlock()
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
 	}
-	return node, nil
+
+	return &ast.MinigameNode{
+		ID:          id.Literal,
+		Attr:        attr.Literal,
+		Description: desc.Literal,
+		Body:        body,
+	}, nil
 }
 
 // parseChoice parses: @choice { @option ... }
@@ -769,7 +818,15 @@ func (p *Parser) parseOption() (*ast.OptionNode, error) {
 	return opt, nil
 }
 
-// parseBraveOptionBody parses: check { attr: X  dc: N } @on success { } @on fail { }
+// parseBraveOptionBody parses a brave option body:
+//
+//	check { attr: X  dc: N }
+//	<any MSS body statements — typically @if (check.success) { ... } @else { ... }>
+//
+// The check block must appear somewhere in the body (validator enforces
+// its presence). Beyond that, body statements are plain MSS — authors
+// use @if with the CheckCondition (check.success / check.fail) to route
+// on the resolved check outcome.
 func (p *Parser) parseBraveOptionBody(opt *ast.OptionNode) error {
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		if p.cur.Type == token.IDENT && p.cur.Literal == "check" {
@@ -814,31 +871,7 @@ func (p *Parser) parseBraveOptionBody(opt *ast.OptionNode) error {
 				return err
 			}
 			opt.Check = check
-		} else if p.cur.Type == token.AT && p.peek.Literal == "on" {
-			p.advance() // consume AT
-			p.advance() // consume "on"
-			result, err := p.expect(token.IDENT) // "success" or "fail"
-			if err != nil {
-				return err
-			}
-			if _, err := p.expect(token.LBRACE); err != nil {
-				return err
-			}
-			body, err := p.parseBlock()
-			if err != nil {
-				return err
-			}
-			if _, err := p.expect(token.RBRACE); err != nil {
-				return err
-			}
-			switch result.Literal {
-			case "success":
-				opt.OnSuccess = body
-			case "fail":
-				opt.OnFail = body
-			}
 		} else {
-			// Could be other body nodes.
 			node, err := p.parseStatement()
 			if err != nil {
 				return err
@@ -867,21 +900,24 @@ func (p *Parser) parseAffection() (ast.Node, error) {
 
 // parseSignal parses: @signal <kind> <event>
 //
-// Kind is mandatory — one of:
-//   - "mark"        → persistent boolean flag (checkable in @if (NAME))
-//   - "achievement" → achievement unlock event (references a declared
-//                      @achievement by id; not a queryable flag)
+// Kind is mandatory. The whitelist is deliberately open-ended — currently
+// only "mark" is implemented, but the slot is kept in source syntax so
+// future signal kinds can be added without a grammar break.
+//
+// "mark" emits a persistent boolean flag testable via @if (NAME).
+// Triggering achievements is a separate directive (@achievement <id>),
+// not a signal kind.
 //
 // Event may be a bare IDENT or a double-quoted STRING.
 func (p *Parser) parseSignal() (ast.Node, error) {
 	p.advance() // consume "signal"
 	kindTok, err := p.expect(token.IDENT)
 	if err != nil {
-		return nil, fmt.Errorf("line %d col %d: expected signal kind (mark|achievement) after '@signal', got %s (%q)",
+		return nil, fmt.Errorf("line %d col %d: expected signal kind after '@signal' (currently only 'mark' is supported), got %s (%q)",
 			kindTok.Line, kindTok.Col, kindTok.Type, kindTok.Literal)
 	}
 	if !validSignalKinds[kindTok.Literal] {
-		return nil, fmt.Errorf("line %d col %d: invalid signal kind %q (must be 'mark' or 'achievement')",
+		return nil, fmt.Errorf("line %d col %d: invalid signal kind %q (currently only 'mark' is supported)",
 			kindTok.Line, kindTok.Col, kindTok.Literal)
 	}
 	var event string
@@ -899,14 +935,25 @@ func (p *Parser) parseSignal() (ast.Node, error) {
 	return &ast.SignalNode{Kind: kindTok.Literal, Event: event}, nil
 }
 
-// parseAchievement parses: @achievement <id> { name: "..." rarity: <r>
-// description: "..." when: (<condition>) }
+// parseAchievement parses both achievement forms, selected by the presence
+// of a following `{`:
 //
-// Keys may appear in any order. Every key is required. Only one
-// @achievement with a given id may appear across the episode (validator
-// enforces uniqueness).
-func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
-	p.advance() // consume AT
+//   - Declaration (hoisted to Episode.Achievements):
+//     @achievement <id> {
+//       name: "..."
+//       rarity: <uncommon|rare|epic|legendary>
+//       description: "..."
+//     }
+//
+//   - Trigger (stays in body as an AchievementTriggerNode):
+//     @achievement <id>
+//
+// The caller (parseEpisodeBody) inspects the returned node's type and
+// hoists AchievementNode; AchievementTriggerNode stays inline as a step.
+func (p *Parser) parseAchievement() (ast.Node, error) {
+	// AT and "achievement" have already been consumed by parseDirective
+	// (parseDirective calls advance() once before dispatching, then the
+	// keyword `achievement` is still in p.cur). Consume the keyword now.
 	p.advance() // consume "achievement"
 
 	idTok, err := p.expect(token.IDENT)
@@ -915,9 +962,13 @@ func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
 			idTok.Line, idTok.Col, idTok.Type, idTok.Literal)
 	}
 
-	if _, err := p.expect(token.LBRACE); err != nil {
-		return nil, err
+	// Bare form (trigger): no LBRACE follows → emit AchievementTriggerNode.
+	if p.cur.Type != token.LBRACE {
+		return &ast.AchievementTriggerNode{ID: idTok.Literal}, nil
 	}
+
+	// Block form (declaration): parse fields.
+	p.advance() // consume LBRACE
 
 	node := &ast.AchievementNode{ID: idTok.Literal}
 	seen := map[string]bool{}
@@ -959,14 +1010,8 @@ func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
 					val.Line, val.Col, val.Literal)
 			}
 			node.Rarity = val.Literal
-		case "when":
-			cond, err := p.readCondition()
-			if err != nil {
-				return nil, err
-			}
-			node.Trigger = cond
 		default:
-			return nil, fmt.Errorf("line %d col %d: unknown achievement field %q (expected name, rarity, description, or when)",
+			return nil, fmt.Errorf("line %d col %d: unknown achievement field %q (expected name, rarity, or description)",
 				p.cur.Line, p.cur.Col, key)
 		}
 	}
@@ -975,7 +1020,7 @@ func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
 		return nil, err
 	}
 
-	// All four fields are required.
+	// All three fields required.
 	if node.Name == "" {
 		return nil, fmt.Errorf("achievement %q: missing required field 'name'", node.ID)
 	}
@@ -984,9 +1029,6 @@ func (p *Parser) parseAchievement() (*ast.AchievementNode, error) {
 	}
 	if node.Description == "" {
 		return nil, fmt.Errorf("achievement %q: missing required field 'description'", node.ID)
-	}
-	if node.Trigger == nil {
-		return nil, fmt.Errorf("achievement %q: missing required field 'when'", node.ID)
 	}
 	return node, nil
 }
@@ -1160,7 +1202,12 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 		return &ast.InfluenceCondition{Description: tok.Literal}, nil
 	}
 
-	// Choice: IDENT "." IDENT where the right IDENT is success|fail|any.
+	// Dotted forms: <first>.<second>. Five shapes recognised:
+	//   - check.success / check.fail   → CheckCondition   (context-local to brave option body)
+	//   - rating.<grade>               → RatingCondition  (context-local to minigame body)
+	//   - affection.<char> <op> <N>    → ComparisonCondition with affection operand
+	//   - <option_id>.success|fail|any → ChoiceCondition  (retrospective query from outside option)
+	//   - anything else dotted         → error
 	if p.peek.Type == token.DOT {
 		firstTok := p.cur
 		p.advance() // consume first IDENT
@@ -1172,12 +1219,25 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 		secondTok := p.cur
 		p.advance() // consume second IDENT
 
-		// If an operator follows, it's a comparison with affection-style operand.
-		if isComparisonOp(p.cur.Type) {
-			// affection.<char> <op> <N>
-			if firstTok.Literal != "affection" {
-				return nil, fmt.Errorf("line %d col %d: only 'affection.<char>' is supported as a dotted operand in comparisons, got %q.%q",
-					firstTok.Line, firstTok.Col, firstTok.Literal, secondTok.Literal)
+		// Context-local: check.success / check.fail.
+		if firstTok.Literal == "check" {
+			if secondTok.Literal != "success" && secondTok.Literal != "fail" {
+				return nil, fmt.Errorf("line %d col %d: check.<result> must be 'success' or 'fail', got %q",
+					secondTok.Line, secondTok.Col, secondTok.Literal)
+			}
+			return &ast.CheckCondition{Result: secondTok.Literal}, nil
+		}
+
+		// Context-local: rating.<grade>.
+		if firstTok.Literal == "rating" {
+			return &ast.RatingCondition{Grade: secondTok.Literal}, nil
+		}
+
+		// affection.<char> <op> <N> — comparison with affection operand.
+		if firstTok.Literal == "affection" {
+			if !isComparisonOp(p.cur.Type) {
+				return nil, fmt.Errorf("line %d col %d: affection.%s must be followed by a comparison operator",
+					secondTok.Line, secondTok.Col, secondTok.Literal)
 			}
 			op := operatorLiteral(p.cur.Type)
 			p.advance() // consume operator
@@ -1195,7 +1255,7 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 			}, nil
 		}
 
-		// Otherwise, treat as a choice condition: first.second
+		// Otherwise: choice condition — <option_id>.success|fail|any.
 		result := secondTok.Literal
 		if result != "success" && result != "fail" && result != "any" {
 			return nil, fmt.Errorf("line %d col %d: choice condition result must be 'success', 'fail', or 'any', got %q",

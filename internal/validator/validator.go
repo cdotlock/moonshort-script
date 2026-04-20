@@ -12,6 +12,11 @@ const (
 	MissingTerminal     = "MISSING_TERMINAL"
 	GotoNoLabel         = "GOTO_NO_LABEL"
 	BraveNoCheck        = "BRAVE_NO_CHECK"
+	// BraveMissingOutcome is retained as a constant for backward compatibility
+	// with downstream code; the validator no longer emits this code because
+	// the new grammar expresses success/fail branching via @if (check.success)
+	// / @else trees and the completeness cannot be statically verified without
+	// control-flow analysis.
 	BraveMissingOutcome = "BRAVE_MISSING_OUTCOME"
 	DuplicateOptionID   = "DUPLICATE_OPTION_ID"
 	SafeOptionHasCheck  = "SAFE_OPTION_HAS_CHECK"
@@ -25,11 +30,19 @@ const (
 	InvalidRarity       = "INVALID_RARITY"
 	DuplicateAchievement = "DUPLICATE_ACHIEVEMENT_ID"
 	AchievementMissingField = "ACHIEVEMENT_MISSING_FIELD"
+	InvalidCgDuration = "INVALID_CG_DURATION"
+	CgMissingContent  = "CG_MISSING_CONTENT"
+	MinigameMissingDescription = "MINIGAME_MISSING_DESCRIPTION"
 )
 
 var validSignalKinds = map[string]bool{
-	ast.SignalKindMark:        true,
-	ast.SignalKindAchievement: true,
+	ast.SignalKindMark: true,
+}
+
+var validCgDurations = map[string]bool{
+	ast.CgDurationLow:    true,
+	ast.CgDurationMedium: true,
+	ast.CgDurationHigh:   true,
 }
 
 var validRarities = map[string]bool{
@@ -134,32 +147,29 @@ func checkSignals(nodes []ast.Node, errs *[]Error) {
 			if !validSignalKinds[v.Kind] {
 				*errs = append(*errs, Error{
 					Code:    InvalidSignalKind,
-					Message: fmt.Sprintf("@signal %q has invalid kind %q (must be 'mark' or 'achievement')", v.Event, v.Kind),
+					Message: fmt.Sprintf("@signal %q has invalid kind %q (only 'mark' is currently supported)", v.Event, v.Kind),
 				})
 			}
 		case *ast.CgShowNode:
 			checkSignals(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
-				checkSignals(opt.OnSuccess, errs)
-				checkSignals(opt.OnFail, errs)
 				checkSignals(opt.Body, errs)
 			}
 		case *ast.IfNode:
 			checkSignals(v.Then, errs)
 			checkSignals(v.Else, errs)
 		case *ast.MinigameNode:
-			for _, sub := range v.OnResult {
-				checkSignals(sub, errs)
-			}
+			checkSignals(v.Body, errs)
 		case *ast.PhoneShowNode:
 			checkSignals(v.Body, errs)
 		}
 	}
 }
 
-// checkAchievements validates rarity whitelist, required fields, duplicate ids,
-// and recurses into the Trigger condition.
+// checkAchievements validates rarity whitelist, required fields, duplicate ids.
+// Triggering is a separate step (AchievementTriggerNode); declarations just
+// carry metadata.
 func checkAchievements(list []*ast.AchievementNode, errs *[]Error) {
 	seen := map[string]bool{}
 	for _, a := range list {
@@ -195,14 +205,6 @@ func checkAchievements(list []*ast.AchievementNode, errs *[]Error) {
 				Message: fmt.Sprintf("achievement %q has invalid rarity %q (must be uncommon, rare, epic, or legendary)", a.ID, a.Rarity),
 			})
 		}
-		if a.Trigger == nil {
-			*errs = append(*errs, Error{
-				Code:    AchievementMissingField,
-				Message: fmt.Sprintf("achievement %q missing 'when' trigger", a.ID),
-			})
-		} else {
-			checkCondition(a.Trigger, errs)
-		}
 	}
 }
 
@@ -228,14 +230,10 @@ func checkConditions(nodes []ast.Node, errs *[]Error) {
 			checkConditions(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
-				checkConditions(opt.OnSuccess, errs)
-				checkConditions(opt.OnFail, errs)
 				checkConditions(opt.Body, errs)
 			}
 		case *ast.MinigameNode:
-			for _, sub := range v.OnResult {
-				checkConditions(sub, errs)
-			}
+			checkConditions(v.Body, errs)
 		case *ast.PhoneShowNode:
 			checkConditions(v.Body, errs)
 		}
@@ -295,6 +293,20 @@ func checkCondition(c ast.Condition, errs *[]Error) {
 		}
 	case *ast.FlagCondition, *ast.InfluenceCondition:
 		// No further structural checks — any non-empty string is fine.
+	case *ast.CheckCondition:
+		if v.Result != "success" && v.Result != "fail" {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("check condition result %q is invalid (must be success or fail)", v.Result),
+			})
+		}
+	case *ast.RatingCondition:
+		if v.Grade == "" {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: "rating condition has empty grade",
+			})
+		}
 	case nil:
 		// nil condition can appear in unconditional gate routes; caller handles.
 	default:
@@ -315,17 +327,13 @@ func collectLabels(nodes []ast.Node, labels map[string]bool) {
 			collectLabels(v.Body, labels)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
-				collectLabels(opt.OnSuccess, labels)
-				collectLabels(opt.OnFail, labels)
 				collectLabels(opt.Body, labels)
 			}
 		case *ast.IfNode:
 			collectLabels(v.Then, labels)
 			collectLabels(v.Else, labels)
 		case *ast.MinigameNode:
-			for _, nodes := range v.OnResult {
-				collectLabels(nodes, labels)
-			}
+			collectLabels(v.Body, labels)
 		case *ast.PhoneShowNode:
 			collectLabels(v.Body, labels)
 		}
@@ -347,17 +355,13 @@ func checkGotos(nodes []ast.Node, labels map[string]bool, errs *[]Error) {
 			checkGotos(v.Body, labels, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
-				checkGotos(opt.OnSuccess, labels, errs)
-				checkGotos(opt.OnFail, labels, errs)
 				checkGotos(opt.Body, labels, errs)
 			}
 		case *ast.IfNode:
 			checkGotos(v.Then, labels, errs)
 			checkGotos(v.Else, labels, errs)
 		case *ast.MinigameNode:
-			for _, nodes := range v.OnResult {
-				checkGotos(nodes, labels, errs)
-			}
+			checkGotos(v.Body, labels, errs)
 		case *ast.PhoneShowNode:
 			checkGotos(v.Body, labels, errs)
 		}
@@ -388,24 +392,11 @@ func checkBraveOptions(nodes []ast.Node, errs *[]Error) {
 							Message: fmt.Sprintf("brave option %q is missing a @check block", opt.ID),
 						})
 					}
-					// 5. Brave options must have both on_success and on_fail.
-					if len(opt.OnSuccess) == 0 || len(opt.OnFail) == 0 {
-						*errs = append(*errs, Error{
-							Code:    BraveMissingOutcome,
-							Message: fmt.Sprintf("brave option %q must have both @on success and @on fail", opt.ID),
-						})
-					}
 				} else if opt.Mode == "safe" {
 					if opt.Check != nil {
 						*errs = append(*errs, Error{
 							Code:    SafeOptionHasCheck,
 							Message: fmt.Sprintf("safe option %q should not have a check block", opt.ID),
-						})
-					}
-					if len(opt.OnSuccess) > 0 || len(opt.OnFail) > 0 {
-						*errs = append(*errs, Error{
-							Code:    SafeOptionHasCheck,
-							Message: fmt.Sprintf("safe option %q should not have @on success/@on fail blocks", opt.ID),
 						})
 					}
 				} else {
@@ -414,9 +405,7 @@ func checkBraveOptions(nodes []ast.Node, errs *[]Error) {
 						Message: fmt.Sprintf("option %q has invalid mode %q (must be 'brave' or 'safe')", opt.ID, opt.Mode),
 					})
 				}
-				// Recurse into option bodies.
-				checkBraveOptions(opt.OnSuccess, errs)
-				checkBraveOptions(opt.OnFail, errs)
+				// Recurse into option body.
 				checkBraveOptions(opt.Body, errs)
 			}
 		case *ast.CgShowNode:
@@ -425,9 +414,7 @@ func checkBraveOptions(nodes []ast.Node, errs *[]Error) {
 			checkBraveOptions(v.Then, errs)
 			checkBraveOptions(v.Else, errs)
 		case *ast.MinigameNode:
-			for _, nodes := range v.OnResult {
-				checkBraveOptions(nodes, errs)
-			}
+			checkBraveOptions(v.Body, errs)
 		case *ast.PhoneShowNode:
 			checkBraveOptions(v.Body, errs)
 		}
@@ -493,20 +480,34 @@ func checkValues(nodes []ast.Node, errs *[]Error) {
 					Message: fmt.Sprintf("cg %q has invalid transition %q", v.Name, v.Transition),
 				})
 			}
+			if !validCgDurations[v.Duration] {
+				*errs = append(*errs, Error{
+					Code:    InvalidCgDuration,
+					Message: fmt.Sprintf("cg %q has invalid duration %q (must be low, medium, or high)", v.Name, v.Duration),
+				})
+			}
+			if v.Content == "" {
+				*errs = append(*errs, Error{
+					Code:    CgMissingContent,
+					Message: fmt.Sprintf("cg %q missing required 'content' field", v.Name),
+				})
+			}
 			checkValues(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
-				checkValues(opt.OnSuccess, errs)
-				checkValues(opt.OnFail, errs)
 				checkValues(opt.Body, errs)
 			}
 		case *ast.IfNode:
 			checkValues(v.Then, errs)
 			checkValues(v.Else, errs)
 		case *ast.MinigameNode:
-			for _, nodes := range v.OnResult {
-				checkValues(nodes, errs)
+			if v.Description == "" {
+				*errs = append(*errs, Error{
+					Code:    MinigameMissingDescription,
+					Message: fmt.Sprintf("@minigame %q missing required description", v.ID),
+				})
 			}
+			checkValues(v.Body, errs)
 		case *ast.PhoneShowNode:
 			checkValues(v.Body, errs)
 		}
