@@ -203,28 +203,51 @@
     },
     {
       "attr": "ATK",
+      "description": "a quick hallway partner-assignment check where Malia matches Mauricio's beat or drops the rhythm",
       "game_id": "qte_challenge",
       "game_url": "https://oss.mobai.com/novel_001/minigames/qte_challenge/index.html",
-      "on_results": {
-        "A B": [
-          {
-            "text": "Not bad. You kept up.",
-            "type": "narrator"
-          }
-        ],
-        "C D": [
-          {
-            "text": "Sloppy. You're distracted.",
-            "type": "narrator"
-          }
-        ],
-        "S": [
-          {
-            "text": "Your reflexes are razor-sharp today.",
-            "type": "narrator"
-          }
-        ]
-      },
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "else": {
+            "condition": {
+              "left": {
+                "grade": "A",
+                "type": "rating"
+              },
+              "op": "||",
+              "right": {
+                "grade": "B",
+                "type": "rating"
+              },
+              "type": "compound"
+            },
+            "else": [
+              {
+                "text": "Sloppy. You're distracted.",
+                "type": "narrator"
+              }
+            ],
+            "then": [
+              {
+                "text": "Not bad. You kept up.",
+                "type": "narrator"
+              }
+            ],
+            "type": "if"
+          },
+          "then": [
+            {
+              "text": "Your reflexes are razor-sharp today.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
       "type": "minigame"
     },
     [
@@ -290,63 +313,72 @@
           },
           "id": "A",
           "mode": "brave",
-          "on_fail": [
+          "steps": [
             {
-              "character": "easton",
-              "look": "hurt",
-              "type": "char_look",
-              "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
-            },
-            {
-              "character": "malia",
-              "text": "I... I can't do this.",
-              "type": "dialogue"
-            },
-            {
-              "character": "easton",
-              "text": "Malia, please",
-              "type": "dialogue"
-            },
-            [
-              {
-                "character": "malia",
-                "text": "Not here. Not now.",
-                "type": "dialogue"
+              "condition": {
+                "result": "success",
+                "type": "check"
               },
-              {
-                "description": "Tried to face Easton but lost courage",
-                "type": "butterfly"
-              }
-            ]
-          ],
-          "on_success": [
-            {
-              "character": "easton",
-              "look": "relieved",
-              "type": "char_look",
-              "url": "https://oss.mobai.com/novel_001/characters/easton_relieved.png"
-            },
-            {
-              "character": "easton",
-              "text": "Can I sit?",
-              "type": "dialogue"
-            },
-            {
-              "character": "malia",
-              "text": "You have two minutes.",
-              "type": "dialogue"
-            },
-            [
-              {
-                "character": "easton",
-                "delta": 2,
-                "type": "affection"
-              },
-              {
-                "description": "Accepted Easton's approach at the cafeteria",
-                "type": "butterfly"
-              }
-            ]
+              "else": [
+                {
+                  "character": "easton",
+                  "look": "hurt",
+                  "type": "char_look",
+                  "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
+                },
+                {
+                  "character": "malia",
+                  "text": "I... I can't do this.",
+                  "type": "dialogue"
+                },
+                {
+                  "character": "easton",
+                  "text": "Malia, please",
+                  "type": "dialogue"
+                },
+                [
+                  {
+                    "character": "malia",
+                    "text": "Not here. Not now.",
+                    "type": "dialogue"
+                  },
+                  {
+                    "description": "Tried to face Easton but lost courage",
+                    "type": "butterfly"
+                  }
+                ]
+              ],
+              "then": [
+                {
+                  "character": "easton",
+                  "look": "relieved",
+                  "type": "char_look",
+                  "url": "https://oss.mobai.com/novel_001/characters/easton_relieved.png"
+                },
+                {
+                  "character": "easton",
+                  "text": "Can I sit?",
+                  "type": "dialogue"
+                },
+                {
+                  "character": "malia",
+                  "text": "You have two minutes.",
+                  "type": "dialogue"
+                },
+                [
+                  {
+                    "character": "easton",
+                    "delta": 2,
+                    "type": "affection"
+                  },
+                  {
+                    "description": "Accepted Easton's approach at the cafeteria",
+                    "type": "butterfly"
+                  }
+                ]
+              ],
+              "type": "if"
+            }
           ],
           "text": "Let him come."
         },
