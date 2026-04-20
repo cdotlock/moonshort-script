@@ -44,7 +44,12 @@ func TestEmptyTransition(t *testing.T) {
 		Body: []ast.Node{
 			&ast.CharShowNode{Char: "c", Look: "l", Position: "center", Transition: ""},
 			&ast.BgSetNode{Name: "bg", Transition: ""},
-			&ast.CgShowNode{Name: "cg", Transition: ""},
+			&ast.CgShowNode{
+				Name:       "cg",
+				Transition: "",
+				Duration:   ast.CgDurationMedium,
+				Content:    "cg content placeholder",
+			},
 			&ast.CharHideNode{Char: "c", Transition: ""},
 			&ast.CharLookNode{Char: "c", Look: "l", Transition: ""},
 		},
@@ -170,8 +175,11 @@ func TestEmptyPositionOnMove(t *testing.T) {
 // None of the walks recurse into GateBlock, which is correct since
 // Gate routes don't contain body nodes.
 
-// E2. Test that labels and gotos inside all option sub-fields are found.
-// OptionNode has: OnSuccess, OnFail, Body — all three should be walked.
+// E2. Labels and gotos throughout the option body (including inside the
+// @if (check.success) / @else tree) must all be discoverable. The
+// OptionNode only exposes a single Body slice now — the old
+// OnSuccess/OnFail compartments were merged into it when @on was
+// retired — so the walk must descend through IfNode.Then/Else too.
 func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -180,10 +188,15 @@ func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "brave", Text: "Fight",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-						OnSuccess: []ast.Node{&ast.LabelNode{Name: "L1"}},
-						OnFail:    []ast.Node{&ast.LabelNode{Name: "L2"}},
-						Body:      []ast.Node{&ast.LabelNode{Name: "L3"}},
+						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.LabelNode{Name: "L1"}},
+								Else:      []ast.Node{&ast.LabelNode{Name: "L2"}},
+							},
+							&ast.LabelNode{Name: "L3"},
+						},
 					},
 				},
 			},
@@ -202,16 +215,22 @@ func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
 	}
 }
 
-// E3. Test that checkValues recurses into MinigameNode.OnResult.
+// E3. checkValues must recurse into MinigameNode.Body — the @on S/A/B/C/D
+// compartments are gone, rating branching lives inside an @if (rating.X)
+// tree in the plain body now.
 func TestRecursion_ValuesInsideMinigame(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {&ast.CharShowNode{Char: "c", Look: "l", Position: "invalid_pos"}},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "invalid_pos"}},
+					},
 				},
 			},
 		},
@@ -225,23 +244,28 @@ func TestRecursion_ValuesInsideMinigame(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("checkValues should recurse into MinigameNode.OnResult")
+		t.Error("checkValues should recurse into MinigameNode.Body (through IfNode.Then)")
 	}
 }
 
-// E4. Test that checkBraveOptions recurses into MinigameNode.OnResult.
+// E4. checkBraveOptions must recurse into MinigameNode.Body (through
+// nested IfNode.Then/Else for rating-branch trees).
 func TestRecursion_BraveOptionsInsideMinigame(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {
-						&ast.ChoiceNode{
-							Options: []*ast.OptionNode{
-								{ID: "A", Mode: "brave", Text: "a"},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then: []ast.Node{
+							&ast.ChoiceNode{
+								Options: []*ast.OptionNode{
+									{ID: "A", Mode: "brave", Text: "a"},
+								},
 							},
 						},
 					},
@@ -258,17 +282,20 @@ func TestRecursion_BraveOptionsInsideMinigame(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("checkBraveOptions should recurse into MinigameNode.OnResult")
+		t.Error("checkBraveOptions should recurse into MinigameNode.Body (through IfNode.Then)")
 	}
 }
 
-// E5. Test deeply nested: CgShow > IfNode > ChoiceNode > Option with goto to missing label.
+// E5. Deeply nested: CgShow > IfNode > ChoiceNode > brave Option with a
+// goto inside the check.success branch of its inner @if tree.
 func TestRecursion_DeeplyNested(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name: "cg1",
+				Name:     "cg1",
+				Duration: ast.CgDurationMedium,
+				Content:  "cg content placeholder",
 				Body: []ast.Node{
 					&ast.IfNode{
 						Condition: &ast.FlagCondition{Name: "A"},
@@ -277,9 +304,14 @@ func TestRecursion_DeeplyNested(t *testing.T) {
 								Options: []*ast.OptionNode{
 									{
 										ID: "A", Mode: "brave", Text: "Fight",
-										Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-										OnSuccess: []ast.Node{&ast.GotoNode{Name: "DEEP_MISSING"}},
-										OnFail:    []ast.Node{&ast.NarratorNode{Text: "Fail."}},
+										Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+										Body: []ast.Node{
+											&ast.IfNode{
+												Condition: &ast.CheckCondition{Result: "success"},
+												Then:      []ast.Node{&ast.GotoNode{Name: "DEEP_MISSING"}},
+												Else:      []ast.Node{&ast.NarratorNode{Text: "Fail."}},
+											},
+										},
 									},
 								},
 							},
@@ -298,7 +330,7 @@ func TestRecursion_DeeplyNested(t *testing.T) {
 		}
 	}
 	if !foundGoto {
-		t.Error("checkGotos should find DEEP_MISSING in CgShow > IfNode > ChoiceNode > Option.OnSuccess")
+		t.Error("checkGotos should find DEEP_MISSING in CgShow > IfNode > ChoiceNode > brave Option body > @if (check.success).Then")
 	}
 }
 
@@ -375,60 +407,69 @@ func TestValidatorEmptyChoice(t *testing.T) {
 	}
 }
 
-// EDGE: MinigameNode with empty OnResult map.
-func TestValidatorEmptyMinigameResults(t *testing.T) {
+// EDGE: MinigameNode with empty body — valid after v2.4 (minigame body is
+// now a plain []Node; rating branching lives in @if (rating.X) trees the
+// author writes). The validator must not fault an empty body.
+func TestValidatorEmptyMinigameBody(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:       "mg1",
-				Attr:     "STR",
-				OnResult: map[string][]ast.Node{},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body:        []ast.Node{},
 			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	// Should not panic.
 	if len(errs) != 0 {
-		t.Errorf("empty minigame results should have no errors, got: %v", errs)
+		t.Errorf("empty minigame body should have no errors, got: %v", errs)
 	}
 }
 
-// EDGE: MinigameNode with nil OnResult map.
-func TestValidatorNilMinigameResults(t *testing.T) {
+// EDGE: MinigameNode with nil body — the walk must not panic on a nil slice.
+func TestValidatorNilMinigameBody(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:       "mg1",
-				Attr:     "STR",
-				OnResult: nil,
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body:        nil,
 			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	// Should not panic when iterating nil map.
 	if len(errs) != 0 {
-		t.Errorf("nil minigame results should have no errors, got: %v", errs)
+		t.Errorf("nil minigame body should have no errors, got: %v", errs)
 	}
 }
 
-// EDGE: Brave option with OnSuccess populated but OnFail empty.
-func TestBraveOptionPartialOutcomes(t *testing.T) {
+// EDGE: A brave option whose body covers only the check.success branch
+// (no @else for check.fail) is NOT a validation error in v2.4 — authors
+// own the completeness of their @if tree. The old BRAVE_MISSING_OUTCOME
+// code was retired when @on disappeared; we keep this test as a pinning
+// regression ensuring the validator does not resurrect the check.
+func TestBraveOptionSuccessOnlyBodyIsValid(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.ChoiceNode{
 				Options: []*ast.OptionNode{
 					{
-						ID:        "A",
-						Mode:      "brave",
-						Text:      "Fight",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-						OnSuccess: []ast.Node{&ast.NarratorNode{Text: "Win."}},
-						OnFail:    []ast.Node{}, // empty, not nil
+						ID: "A", Mode: "brave", Text: "Fight",
+						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.NarratorNode{Text: "Win."}},
+								// No Else — author deliberately left fail implicit.
+							},
+						},
 					},
 				},
 			},
@@ -436,14 +477,10 @@ func TestBraveOptionPartialOutcomes(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	found := false
 	for _, e := range errs {
 		if e.Code == BraveMissingOutcome {
-			found = true
+			t.Errorf("BRAVE_MISSING_OUTCOME should no longer be emitted: %v", e)
 		}
-	}
-	if !found {
-		t.Error("brave option with empty OnFail should trigger BRAVE_MISSING_OUTCOME")
 	}
 }
 

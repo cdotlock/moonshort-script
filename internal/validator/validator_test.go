@@ -107,7 +107,6 @@ func TestBraveOptionWithoutCheck(t *testing.T) {
 						Mode: "brave",
 						Text: "Confront him",
 						// Check is nil — should trigger BRAVE_NO_CHECK.
-						// OnSuccess/OnFail both empty — should trigger BRAVE_MISSING_OUTCOME.
 					},
 				},
 			},
@@ -121,20 +120,13 @@ func TestBraveOptionWithoutCheck(t *testing.T) {
 
 	errs := Validate(ep)
 	hasNoCheck := false
-	hasMissingOutcome := false
 	for _, e := range errs {
 		if e.Code == BraveNoCheck {
 			hasNoCheck = true
 		}
-		if e.Code == BraveMissingOutcome {
-			hasMissingOutcome = true
-		}
 	}
 	if !hasNoCheck {
 		t.Errorf("expected BRAVE_NO_CHECK error, got %v", errs)
-	}
-	if !hasMissingOutcome {
-		t.Errorf("expected BRAVE_MISSING_OUTCOME error, got %v", errs)
 	}
 }
 
@@ -146,9 +138,14 @@ func TestValidBraveOptionPass(t *testing.T) {
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "brave", Text: "Fight",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-						OnSuccess: []ast.Node{&ast.NarratorNode{Text: "Win."}},
-						OnFail:    []ast.Node{&ast.NarratorNode{Text: "Lose."}},
+						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.NarratorNode{Text: "Win."}},
+								Else:      []ast.Node{&ast.NarratorNode{Text: "Lose."}},
+							},
+						},
 					},
 				},
 			},
@@ -307,8 +304,10 @@ func TestGotoInsideCgShow(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name: "cg1",
-				Body: []ast.Node{&ast.GotoNode{Name: "MISSING"}},
+				Name:     "cg1",
+				Duration: ast.CgDurationMedium,
+				Content:  "cg content placeholder",
+				Body:     []ast.Node{&ast.GotoNode{Name: "MISSING"}},
 			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
@@ -330,10 +329,14 @@ func TestGotoInsideMinigame(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {&ast.GotoNode{Name: "MISSING"}},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then:      []ast.Node{&ast.GotoNode{Name: "MISSING"}},
+					},
 				},
 			},
 		},
@@ -378,8 +381,10 @@ func TestLabelInsideCgShow(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name: "cg1",
-				Body: []ast.Node{&ast.LabelNode{Name: "INNER"}},
+				Name:     "cg1",
+				Duration: ast.CgDurationMedium,
+				Content:  "cg content placeholder",
+				Body:     []ast.Node{&ast.LabelNode{Name: "INNER"}},
 			},
 			&ast.GotoNode{Name: "INNER"},
 		},
@@ -396,10 +401,14 @@ func TestLabelInsideMinigame(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {&ast.LabelNode{Name: "MG_LABEL"}},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then:      []ast.Node{&ast.LabelNode{Name: "MG_LABEL"}},
+					},
 				},
 			},
 			&ast.GotoNode{Name: "MG_LABEL"},
@@ -450,6 +459,8 @@ func TestLabelInsideIfNode(t *testing.T) {
 }
 
 func TestLabelInsideChoiceOption(t *testing.T) {
+	// Labels inside a brave option body (including inside the @if
+	// check.success tree) must be collected so external gotos resolve.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
@@ -457,10 +468,15 @@ func TestLabelInsideChoiceOption(t *testing.T) {
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "brave", Text: "Fight",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-						OnSuccess: []ast.Node{&ast.LabelNode{Name: "SUCC_LABEL"}},
-						OnFail:    []ast.Node{&ast.LabelNode{Name: "FAIL_LABEL"}},
-						Body:      []ast.Node{&ast.LabelNode{Name: "BODY_LABEL"}},
+						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.LabelNode{Name: "SUCC_LABEL"}},
+								Else:      []ast.Node{&ast.LabelNode{Name: "FAIL_LABEL"}},
+							},
+							&ast.LabelNode{Name: "BODY_LABEL"},
+						},
 					},
 				},
 			},
@@ -484,10 +500,15 @@ func TestGotoInsideChoiceOption(t *testing.T) {
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "brave", Text: "Fight",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 14},
-						OnSuccess: []ast.Node{&ast.GotoNode{Name: "MISSING1"}},
-						OnFail:    []ast.Node{&ast.GotoNode{Name: "MISSING2"}},
-						Body:      []ast.Node{&ast.GotoNode{Name: "MISSING3"}},
+						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.GotoNode{Name: "MISSING1"}},
+								Else:      []ast.Node{&ast.GotoNode{Name: "MISSING2"}},
+							},
+							&ast.GotoNode{Name: "MISSING3"},
+						},
 					},
 				},
 			},
@@ -587,7 +608,12 @@ func TestInvalidTransitionOnCgShow(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
-			&ast.CgShowNode{Name: "cg1", Transition: "wipe"},
+			&ast.CgShowNode{
+				Name:       "cg1",
+				Transition: "wipe",
+				Duration:   ast.CgDurationMedium,
+				Content:    "cg content placeholder",
+			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
@@ -624,22 +650,31 @@ func TestInvalidPositionOnCharMove(t *testing.T) {
 }
 
 func TestValuesInsideNestedNodes(t *testing.T) {
-	// Test checkValues recurses into CgShow, Choice, IfNode, Minigame, PhoneShow
+	// Test checkValues recurses into CgShow, Choice, IfNode, Minigame, PhoneShow.
+	// Brave-option success/fail branches are now inside the Body as an
+	// @if (check.success) tree; we nest the bad bubble types in both branches.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name: "cg1",
-				Body: []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops"}},
+				Name:     "cg1",
+				Duration: ast.CgDurationMedium,
+				Content:  "cg content placeholder",
+				Body:     []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops"}},
 			},
 			&ast.ChoiceNode{
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "brave", Text: "a",
-						Check:     &ast.CheckBlock{Attr: "STR", DC: 10},
-						OnSuccess: []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid1"}},
-						OnFail:    []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid2"}},
-						Body:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops2"}},
+						Check: &ast.CheckBlock{Attr: "STR", DC: 10},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid1"}},
+								Else:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid2"}},
+							},
+							&ast.CharShowNode{Char: "c", Look: "l", Position: "oops2"},
+						},
 					},
 				},
 			},
@@ -649,10 +684,14 @@ func TestValuesInsideNestedNodes(t *testing.T) {
 				Else:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops4"}},
 			},
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {&ast.CharShowNode{Char: "c", Look: "l", Position: "oops5"}},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops5"}},
+					},
 				},
 			},
 			&ast.PhoneShowNode{
@@ -681,12 +720,16 @@ func TestValuesInsideNestedNodes(t *testing.T) {
 }
 
 func TestBraveOptionsInsideNestedNodes(t *testing.T) {
-	// Test checkBraveOptions recurses into CgShow, IfNode, Minigame, PhoneShow
+	// Test checkBraveOptions recurses into CgShow, IfNode, Minigame, PhoneShow.
+	// The validator no longer emits BRAVE_MISSING_OUTCOME, so we count
+	// BRAVE_NO_CHECK only — one per missing check = 5 total.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name: "cg1",
+				Name:     "cg1",
+				Duration: ast.CgDurationMedium,
+				Content:  "cg content placeholder",
 				Body: []ast.Node{
 					&ast.ChoiceNode{
 						Options: []*ast.OptionNode{
@@ -713,13 +756,17 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 				},
 			},
 			&ast.MinigameNode{
-				ID:   "mg1",
-				Attr: "STR",
-				OnResult: map[string][]ast.Node{
-					"S": {
-						&ast.ChoiceNode{
-							Options: []*ast.OptionNode{
-								{ID: "D", Mode: "brave", Text: "d"},
+				ID:          "mg1",
+				Attr:        "STR",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then: []ast.Node{
+							&ast.ChoiceNode{
+								Options: []*ast.OptionNode{
+									{ID: "D", Mode: "brave", Text: "d"},
+								},
 							},
 						},
 					},
@@ -740,14 +787,13 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 	errs := Validate(ep)
 	braveErrors := 0
 	for _, e := range errs {
-		if e.Code == BraveNoCheck || e.Code == BraveMissingOutcome {
+		if e.Code == BraveNoCheck {
 			braveErrors++
 		}
 	}
-	// Each brave option without check/outcomes should produce 2 errors (no check + missing outcome)
-	// 5 brave options * 2 = 10 errors
-	if braveErrors < 10 {
-		t.Errorf("expected at least 10 brave option errors from nested nodes, got %d", braveErrors)
+	// 5 brave options without check → 5 BRAVE_NO_CHECK errors.
+	if braveErrors < 5 {
+		t.Errorf("expected at least 5 BRAVE_NO_CHECK errors from nested nodes, got %d", braveErrors)
 	}
 }
 
@@ -759,7 +805,10 @@ func TestValidatorErrorMethod(t *testing.T) {
 	}
 }
 
-func TestSafeOptionWithOutcomeBlocks(t *testing.T) {
+// TestSafeOptionWithCheckBlock verifies that a safe option with a check
+// block still triggers SAFE_OPTION_HAS_CHECK — that's the sole remaining
+// trigger condition since @on success / @on fail blocks no longer exist.
+func TestSafeOptionWithCheckBlock(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
@@ -767,8 +816,7 @@ func TestSafeOptionWithOutcomeBlocks(t *testing.T) {
 				Options: []*ast.OptionNode{
 					{
 						ID: "A", Mode: "safe", Text: "a",
-						OnSuccess: []ast.Node{&ast.NarratorNode{Text: "oops"}},
-						OnFail:    []ast.Node{&ast.NarratorNode{Text: "oops"}},
+						Check: &ast.CheckBlock{Attr: "CHA", DC: 10},
 					},
 				},
 			},
@@ -783,11 +831,15 @@ func TestSafeOptionWithOutcomeBlocks(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("expected SAFE_OPTION_HAS_CHECK error for safe option with on_success/on_fail")
+		t.Error("expected SAFE_OPTION_HAS_CHECK error for safe option with a check block")
 	}
 }
 
-func TestErrorMessageFormat(t *testing.T) {
+// TestBraveOptionWithCheckPasses verifies that a brave option with a check
+// block and no explicit outcome body still passes validation — the
+// validator no longer enforces BRAVE_MISSING_OUTCOME because outcome
+// branching is handled via an @if (check.success) tree the author writes.
+func TestBraveOptionWithCheckPasses(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
@@ -805,9 +857,7 @@ func TestErrorMessageFormat(t *testing.T) {
 	errs := Validate(ep)
 	for _, e := range errs {
 		if e.Code == BraveMissingOutcome {
-			if strings.Contains(e.Message, "@on_success") {
-				t.Error("error message should use '@on success' not '@on_success'")
-			}
+			t.Errorf("BRAVE_MISSING_OUTCOME should no longer be emitted: %v", e)
 		}
 	}
 }
@@ -895,8 +945,8 @@ func TestDuplicateAchievementID(t *testing.T) {
 		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
 		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 		Achievements: []*ast.AchievementNode{
-			{ID: "A", Name: "x", Rarity: "rare", Description: "d", Trigger: &ast.FlagCondition{Name: "F"}},
-			{ID: "A", Name: "y", Rarity: "epic", Description: "d", Trigger: &ast.FlagCondition{Name: "G"}},
+			{ID: "A", Name: "x", Rarity: "rare", Description: "d"},
+			{ID: "A", Name: "y", Rarity: "epic", Description: "d"},
 		},
 	}
 	errs := Validate(ep)
@@ -917,7 +967,7 @@ func TestInvalidRarityValidation(t *testing.T) {
 		Body: []ast.Node{&ast.NarratorNode{Text: "hi"}},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 		Achievements: []*ast.AchievementNode{
-			{ID: "A", Name: "n", Rarity: "common", Description: "d", Trigger: &ast.FlagCondition{Name: "F"}},
+			{ID: "A", Name: "n", Rarity: "common", Description: "d"},
 		},
 	}
 	errs := Validate(ep)

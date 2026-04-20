@@ -146,6 +146,8 @@ func TestAudit_DialogueWithExprInElseBlock(t *testing.T) {
 func TestAudit_DialogueWithExprInCgBody(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@cg show sunset {
+		duration: medium
+		content: "cg content placeholder"
 		MAURICIO [thinking]: Beautiful view.
 	}
 	@gate { @next main:02 }
@@ -182,8 +184,9 @@ func TestAudit_DialogueWithExprInPhoneBody(t *testing.T) {
 	}
 }
 
-// TestAudit_DialogueWithExprInOnSuccessBlock tests pending inside brave option @on success { }.
-func TestAudit_DialogueWithExprInOnSuccessBlock(t *testing.T) {
+// TestAudit_DialogueWithExprInCheckSuccessBlock tests pending inside the
+// brave-option @if (check.success) { } branch.
+func TestAudit_DialogueWithExprInCheckSuccessBlock(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@choice {
 		@option A brave "Fight" {
@@ -191,10 +194,9 @@ func TestAudit_DialogueWithExprInOnSuccessBlock(t *testing.T) {
 				attr: STR
 				dc: 14
 			}
-			@on success {
+			@if (check.success) {
 				MAURICIO [happy]: You did it!
-			}
-			@on fail {
+			} @else {
 				NARRATOR: You failed.
 			}
 		}
@@ -206,15 +208,22 @@ func TestAudit_DialogueWithExprInOnSuccessBlock(t *testing.T) {
 	choice := ep.Body[0].(*ast.ChoiceNode)
 	optA := choice.Options[0]
 
-	// OnSuccess should have CharLookNode + DialogueNode = 2 nodes
-	if len(optA.OnSuccess) != 2 {
-		t.Fatalf("OnSuccess length: got %d, want 2 (CharLookNode + DialogueNode)", len(optA.OnSuccess))
+	if len(optA.Body) != 1 {
+		t.Fatalf("optA.Body length: got %d, want 1 (single @if)", len(optA.Body))
 	}
-	if _, ok := optA.OnSuccess[0].(*ast.CharLookNode); !ok {
-		t.Errorf("OnSuccess[0]: expected *CharLookNode, got %T", optA.OnSuccess[0])
+	ifNode, ok := optA.Body[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("optA.Body[0]: expected *IfNode, got %T", optA.Body[0])
 	}
-	if _, ok := optA.OnSuccess[1].(*ast.DialogueNode); !ok {
-		t.Errorf("OnSuccess[1]: expected *DialogueNode, got %T", optA.OnSuccess[1])
+	// Then branch should have CharLookNode + DialogueNode = 2 nodes
+	if len(ifNode.Then) != 2 {
+		t.Fatalf("Then length: got %d, want 2 (CharLookNode + DialogueNode)", len(ifNode.Then))
+	}
+	if _, ok := ifNode.Then[0].(*ast.CharLookNode); !ok {
+		t.Errorf("Then[0]: expected *CharLookNode, got %T", ifNode.Then[0])
+	}
+	if _, ok := ifNode.Then[1].(*ast.DialogueNode); !ok {
+		t.Errorf("Then[1]: expected *DialogueNode, got %T", ifNode.Then[1])
 	}
 }
 
@@ -490,6 +499,8 @@ func TestAudit_GateElseIfChain(t *testing.T) {
 func TestAudit_NestedIfInsideCg(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@cg show sunset {
+		duration: medium
+		content: "cg content placeholder"
 		@if (flag) {
 			NARRATOR: Hi.
 		}
@@ -511,8 +522,9 @@ func TestAudit_NestedIfInsideCg(t *testing.T) {
 	}
 }
 
-// TestAudit_DeeplyNestedChoiceBrave tests deeply nested brave option with
-// check block and @if inside @on success.
+// TestAudit_DeeplyNestedChoiceBrave tests a brave option whose body contains
+// a check.success/check.fail @if/@else tree, with a nested @if on a plain
+// flag inside the success branch.
 func TestAudit_DeeplyNestedChoiceBrave(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@choice {
@@ -521,14 +533,13 @@ func TestAudit_DeeplyNestedChoiceBrave(t *testing.T) {
 				attr: STR
 				dc: 14
 			}
-			@on success {
+			@if (check.success) {
 				@if (flag) {
 					NARRATOR: Win with flag.
 				} @else {
 					NARRATOR: Win without flag.
 				}
-			}
-			@on fail {
+			} @else {
 				NARRATOR: Lose.
 			}
 		}
@@ -547,24 +558,35 @@ func TestAudit_DeeplyNestedChoiceBrave(t *testing.T) {
 		t.Errorf("Check: attr=%q dc=%d", optA.Check.Attr, optA.Check.DC)
 	}
 
-	// OnSuccess should have 1 node: an IfNode
-	if len(optA.OnSuccess) != 1 {
-		t.Fatalf("OnSuccess length: got %d, want 1", len(optA.OnSuccess))
+	// Body should have 1 node: the outer @if (check.success)
+	if len(optA.Body) != 1 {
+		t.Fatalf("optA.Body length: got %d, want 1", len(optA.Body))
 	}
-	ifNode, ok := optA.OnSuccess[0].(*ast.IfNode)
+	outerIf, ok := optA.Body[0].(*ast.IfNode)
 	if !ok {
-		t.Fatalf("OnSuccess[0]: expected *IfNode, got %T", optA.OnSuccess[0])
+		t.Fatalf("optA.Body[0]: expected *IfNode, got %T", optA.Body[0])
 	}
-	if len(ifNode.Then) != 1 {
-		t.Errorf("IfNode.Then length: got %d, want 1", len(ifNode.Then))
+	if _, ok := outerIf.Condition.(*ast.CheckCondition); !ok {
+		t.Fatalf("outer condition: expected *CheckCondition, got %T", outerIf.Condition)
 	}
-	if len(ifNode.Else) != 1 {
-		t.Errorf("IfNode.Else length: got %d, want 1", len(ifNode.Else))
+	// Success branch: a nested @if (flag)
+	if len(outerIf.Then) != 1 {
+		t.Fatalf("outer Then length: got %d, want 1 (nested if)", len(outerIf.Then))
+	}
+	nestedIf, ok := outerIf.Then[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("outer Then[0]: expected *IfNode, got %T", outerIf.Then[0])
+	}
+	if len(nestedIf.Then) != 1 {
+		t.Errorf("nested Then length: got %d, want 1", len(nestedIf.Then))
+	}
+	if len(nestedIf.Else) != 1 {
+		t.Errorf("nested Else length: got %d, want 1", len(nestedIf.Else))
 	}
 
-	// OnFail
-	if len(optA.OnFail) != 1 {
-		t.Fatalf("OnFail length: got %d, want 1", len(optA.OnFail))
+	// Else branch (fail)
+	if len(outerIf.Else) != 1 {
+		t.Fatalf("outer Else length: got %d, want 1", len(outerIf.Else))
 	}
 }
 
@@ -1146,6 +1168,8 @@ func TestAudit_SafeOptionBody(t *testing.T) {
 func TestAudit_CgShowNoTransition(t *testing.T) {
 	src := `@episode main:01 "T" {
 	@cg show sunset {
+		duration: medium
+		content: "cg content placeholder"
 		NARRATOR: Nice.
 	}
 	@gate { @next main:02 }
@@ -1291,14 +1315,14 @@ func TestAudit_ChoiceMultipleOptions(t *testing.T) {
 	}
 }
 
-// TestAudit_MinigameSingleRating tests @on with a single rating.
+// TestAudit_MinigameSingleRating tests branching on a rating via @if
+// (rating.S) inside a minigame body.
 func TestAudit_MinigameSingleRating(t *testing.T) {
 	src := `@episode main:01 "T" {
-	@minigame test STR {
-		@on S {
+	@minigame test STR "minigame description placeholder" {
+		@if (rating.S) {
 			NARRATOR: Perfect.
-		}
-		@on fail {
+		} @else {
 			NARRATOR: Failed.
 		}
 	}
@@ -1306,13 +1330,24 @@ func TestAudit_MinigameSingleRating(t *testing.T) {
 }`
 	ep := parseOrFail(t, src)
 	mg := ep.Body[0].(*ast.MinigameNode)
-	if len(mg.OnResult) != 2 {
-		t.Fatalf("OnResult count: got %d, want 2", len(mg.OnResult))
+	if mg.Description != "minigame description placeholder" {
+		t.Errorf("Description: got %q", mg.Description)
 	}
-	if _, ok := mg.OnResult["S"]; !ok {
-		t.Error("Missing OnResult[S]")
+	if len(mg.Body) != 1 {
+		t.Fatalf("Body length: got %d, want 1 (single @if)", len(mg.Body))
 	}
-	if _, ok := mg.OnResult["fail"]; !ok {
-		t.Error("Missing OnResult[fail]")
+	ifNode, ok := mg.Body[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("Body[0]: expected *IfNode, got %T", mg.Body[0])
+	}
+	rc, ok := ifNode.Condition.(*ast.RatingCondition)
+	if !ok || rc.Grade != "S" {
+		t.Errorf("Condition: got %T %+v, want RatingCondition{S}", ifNode.Condition, ifNode.Condition)
+	}
+	if len(ifNode.Then) != 1 {
+		t.Errorf("Then length: got %d, want 1", len(ifNode.Then))
+	}
+	if len(ifNode.Else) != 1 {
+		t.Errorf("Else length: got %d, want 1", len(ifNode.Else))
 	}
 }

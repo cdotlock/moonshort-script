@@ -179,6 +179,7 @@ func TestEmitMinimal(t *testing.T) {
 }
 
 func TestEmitChoice(t *testing.T) {
+	// Brave option body now uses @if (check.success) { ... } @else { ... }.
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "The Choice",
@@ -193,13 +194,17 @@ func TestEmitChoice(t *testing.T) {
 							Attr: "CHA",
 							DC:   14,
 						},
-						OnSuccess: []ast.Node{
-							&ast.DialogueNode{Character: "MAURICIO", Text: "You got guts."},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then: []ast.Node{
+									&ast.DialogueNode{Character: "MAURICIO", Text: "You got guts."},
+								},
+								Else: []ast.Node{
+									&ast.DialogueNode{Character: "MAURICIO", Text: "Nice try."},
+								},
+							},
 						},
-						OnFail: []ast.Node{
-							&ast.DialogueNode{Character: "MAURICIO", Text: "Nice try."},
-						},
-						Body: nil,
 					},
 					{
 						ID:   "B",
@@ -265,24 +270,28 @@ func TestEmitChoice(t *testing.T) {
 		t.Errorf("check.dc = %v", check["dc"])
 	}
 
-	onSuccess := optA["on_success"].([]interface{})
-	if len(onSuccess) != 1 {
-		t.Fatalf("len(on_success) = %d, want 1", len(onSuccess))
+	// on_success/on_fail are gone — the body is emitted as "steps".
+	if _, has := optA["on_success"]; has {
+		t.Error("brave option should not have 'on_success' key (body is in 'steps' now)")
 	}
-	successStep := onSuccess[0].(map[string]interface{})
-	if successStep["type"] != "dialogue" {
-		t.Errorf("on_success[0].type = %v", successStep["type"])
-	}
-
-	onFail := optA["on_fail"].([]interface{})
-	if len(onFail) != 1 {
-		t.Fatalf("len(on_fail) = %d, want 1", len(onFail))
+	if _, has := optA["on_fail"]; has {
+		t.Error("brave option should not have 'on_fail' key (body is in 'steps' now)")
 	}
 
-	if stepsA, ok := optA["steps"]; ok && stepsA != nil {
-		if arr, ok := stepsA.([]interface{}); ok && len(arr) != 0 {
-			t.Fatalf("len(optA.steps) = %d, want 0", len(arr))
-		}
+	stepsA := optA["steps"].([]interface{})
+	if len(stepsA) != 1 {
+		t.Fatalf("len(optA.steps) = %d, want 1 (the @if tree)", len(stepsA))
+	}
+	ifStep := stepsA[0].(map[string]interface{})
+	if ifStep["type"] != "if" {
+		t.Errorf("optA.steps[0].type = %v, want 'if'", ifStep["type"])
+	}
+	cond := ifStep["condition"].(map[string]interface{})
+	if cond["type"] != "check" {
+		t.Errorf("optA.steps[0].condition.type = %v, want 'check'", cond["type"])
+	}
+	if cond["result"] != "success" {
+		t.Errorf("optA.steps[0].condition.result = %v, want 'success'", cond["result"])
 	}
 
 	// Option B: safe.
@@ -654,10 +663,9 @@ func TestEmitAchievements(t *testing.T) {
 		Achievements: []*ast.AchievementNode{
 			{
 				ID:          "HEEL_WARRIOR",
-				Name:        "【高跟鞋战士】",
+				Name:        "Heel Warrior",
 				Rarity:      ast.RarityRare,
 				Description: "desc",
-				Trigger:     &ast.FlagCondition{Name: "HEEL_EP05"},
 			},
 		},
 	}
@@ -677,17 +685,52 @@ func TestEmitAchievements(t *testing.T) {
 		t.Fatalf("achievements len: got %d, want 1", len(ach))
 	}
 	a := ach[0].(map[string]interface{})
-	for _, key := range []string{"id", "name", "rarity", "description", "when"} {
+	// Only id/name/rarity/description — no 'when' key anymore.
+	for _, key := range []string{"id", "name", "rarity", "description"} {
 		if _, ok := a[key]; !ok {
 			t.Errorf("achievement missing %q key", key)
 		}
 	}
+	if _, has := a["when"]; has {
+		t.Error("achievement declaration should not have 'when' key (triggering moved to @achievement step)")
+	}
 	if a["rarity"] != "rare" {
 		t.Errorf("rarity: got %v", a["rarity"])
 	}
-	when := a["when"].(map[string]interface{})
-	if when["type"] != "flag" || when["name"] != "HEEL_EP05" {
-		t.Errorf("when: got %+v, want flag/HEEL_EP05", when)
+}
+
+// TestEmitAchievementTrigger verifies that an inline @achievement <id>
+// directive emits an "achievement" step with just the id.
+func TestEmitAchievementTrigger(t *testing.T) {
+	r := &mockResolver{}
+	e := New(r)
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.AchievementTriggerNode{ID: "HEEL_WARRIOR"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	out, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit err: %v", err)
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	steps := parsed["steps"].([]interface{})
+	if len(steps) != 1 {
+		t.Fatalf("steps len: got %d, want 1", len(steps))
+	}
+	step := steps[0].(map[string]interface{})
+	if step["type"] != "achievement" {
+		t.Errorf("step type: got %v, want 'achievement'", step["type"])
+	}
+	if step["id"] != "HEEL_WARRIOR" {
+		t.Errorf("step id: got %v", step["id"])
 	}
 }
 
@@ -710,6 +753,9 @@ func TestEmitAchievementsAlwaysArray(t *testing.T) {
 	}
 }
 
+// TestEmitSignalKind verifies the emitter includes the signal kind in its
+// output. Only "mark" is currently valid — the previous "achievement" kind
+// is gone; triggering achievements is now a separate AchievementTriggerNode.
 func TestEmitSignalKind(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
@@ -718,8 +764,7 @@ func TestEmitSignalKind(t *testing.T) {
 		BranchKey: "main:01",
 		Title:     "T",
 		Body: []ast.Node{
-			&ast.SignalNode{Kind: "mark", Event: "A"},
-			&ast.SignalNode{Kind: "achievement", Event: "B"},
+			&ast.SignalNode{Kind: ast.SignalKindMark, Event: "A"},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
@@ -731,7 +776,7 @@ func TestEmitSignalKind(t *testing.T) {
 	if !strings.Contains(s, `"kind": "mark"`) {
 		t.Errorf("missing mark kind:\n%s", s)
 	}
-	if !strings.Contains(s, `"kind": "achievement"`) {
-		t.Errorf("missing achievement kind:\n%s", s)
+	if !strings.Contains(s, `"event": "A"`) {
+		t.Errorf("missing event:\n%s", s)
 	}
 }

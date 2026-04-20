@@ -260,7 +260,7 @@ func TestParseStateChanges(t *testing.T) {
 	}
 }
 
-// TestParseChoice tests a choice with brave (check + on success/fail) and safe options.
+// TestParseChoice tests a choice with brave (check + @if check.success) and safe options.
 func TestParseChoice(t *testing.T) {
 	src := `@episode main:01 "Choice" {
 	@choice {
@@ -269,10 +269,9 @@ func TestParseChoice(t *testing.T) {
 				attr: STR
 				dc: 14
 			}
-			@on success {
+			@if (check.success) {
 				NARRATOR: You overpower the guard.
-			}
-			@on fail {
+			} @else {
 				NARRATOR: The guard throws you back.
 			}
 		}
@@ -308,29 +307,42 @@ func TestParseChoice(t *testing.T) {
 	if optA.Check.Attr != "STR" || optA.Check.DC != 14 {
 		t.Errorf("Check: attr=%q dc=%d, want STR/14", optA.Check.Attr, optA.Check.DC)
 	}
-	if len(optA.OnSuccess) != 1 {
-		t.Fatalf("OnSuccess length: got %d, want 1", len(optA.OnSuccess))
-	}
-	if len(optA.OnFail) != 1 {
-		t.Fatalf("OnFail length: got %d, want 1", len(optA.OnFail))
+	if len(optA.Body) != 1 {
+		t.Fatalf("Body length: got %d, want 1 (single @if with check.success)", len(optA.Body))
 	}
 
-	// Verify success body content.
-	succNarr, ok := optA.OnSuccess[0].(*ast.NarratorNode)
+	// The body is a single @if with check.success / @else branches.
+	ifNode, ok := optA.Body[0].(*ast.IfNode)
 	if !ok {
-		t.Fatalf("OnSuccess[0]: expected *NarratorNode, got %T", optA.OnSuccess[0])
+		t.Fatalf("optA.Body[0]: expected *IfNode, got %T", optA.Body[0])
+	}
+	cc, ok := ifNode.Condition.(*ast.CheckCondition)
+	if !ok {
+		t.Fatalf("IfNode.Condition: expected *CheckCondition, got %T", ifNode.Condition)
+	}
+	if cc.Result != "success" {
+		t.Errorf("CheckCondition.Result: got %q, want 'success'", cc.Result)
+	}
+
+	// Verify success (then) body content.
+	succNarr, ok := ifNode.Then[0].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("Then[0]: expected *NarratorNode, got %T", ifNode.Then[0])
 	}
 	if succNarr.Text != "You overpower the guard." {
-		t.Errorf("OnSuccess narr: got %q", succNarr.Text)
+		t.Errorf("Success narr: got %q", succNarr.Text)
 	}
 
-	// Verify fail body content.
-	failNarr, ok := optA.OnFail[0].(*ast.NarratorNode)
+	// Verify fail (else) body content.
+	if len(ifNode.Else) != 1 {
+		t.Fatalf("Else length: got %d, want 1", len(ifNode.Else))
+	}
+	failNarr, ok := ifNode.Else[0].(*ast.NarratorNode)
 	if !ok {
-		t.Fatalf("OnFail[0]: expected *NarratorNode, got %T", optA.OnFail[0])
+		t.Fatalf("Else[0]: expected *NarratorNode, got %T", ifNode.Else[0])
 	}
 	if failNarr.Text != "The guard throws you back." {
-		t.Errorf("OnFail narr: got %q", failNarr.Text)
+		t.Errorf("Fail narr: got %q", failNarr.Text)
 	}
 
 	// Safe option
@@ -346,19 +358,17 @@ func TestParseChoice(t *testing.T) {
 	}
 }
 
-// TestParseMinigame tests minigame with @on blocks for different rating groups.
+// TestParseMinigame tests minigame with @if (rating.X) branches.
 func TestParseMinigame(t *testing.T) {
 	src := `@episode main:01 "Mini" {
-	@minigame arm_wrestle STR {
-		@on S {
+	@minigame arm_wrestle STR "an arm wrestling duel" {
+		@if (rating.S) {
 			NARRATOR: Perfect victory!
 			@affection mauricio +10
-		}
-		@on A B {
+		} @else @if (rating.A || rating.B) {
 			NARRATOR: Good job.
 			@affection mauricio +5
-		}
-		@on C D {
+		} @else {
 			NARRATOR: Could be better.
 			@affection mauricio +1
 		}
@@ -381,30 +391,60 @@ func TestParseMinigame(t *testing.T) {
 	if mg.Attr != "STR" {
 		t.Errorf("MinigameNode.Attr: got %q, want %q", mg.Attr, "STR")
 	}
-	if len(mg.OnResult) != 3 {
-		t.Fatalf("OnResult count: got %d, want 3", len(mg.OnResult))
+	if mg.Description != "an arm wrestling duel" {
+		t.Errorf("MinigameNode.Description: got %q", mg.Description)
 	}
 
-	// Check each rating group exists.
-	for _, key := range []string{"S", "A B", "C D"} {
-		body, exists := mg.OnResult[key]
-		if !exists {
-			t.Errorf("OnResult[%q]: missing", key)
-			continue
-		}
-		if len(body) != 2 {
-			t.Errorf("OnResult[%q]: got %d nodes, want 2", key, len(body))
-		}
+	if len(mg.Body) != 1 {
+		t.Fatalf("Body length: got %d, want 1 (single if chain)", len(mg.Body))
 	}
 
-	// Verify S block content.
-	sBody := mg.OnResult["S"]
-	narr, ok := sBody[0].(*ast.NarratorNode)
+	topIf, ok := mg.Body[0].(*ast.IfNode)
 	if !ok {
-		t.Fatalf("OnResult[S][0]: expected *NarratorNode, got %T", sBody[0])
+		t.Fatalf("Body[0]: expected *IfNode, got %T", mg.Body[0])
+	}
+	// Top if: rating.S
+	rc, ok := topIf.Condition.(*ast.RatingCondition)
+	if !ok {
+		t.Fatalf("top if condition: expected *RatingCondition, got %T", topIf.Condition)
+	}
+	if rc.Grade != "S" {
+		t.Errorf("top rating grade: got %q, want 'S'", rc.Grade)
+	}
+	// Then contains narrator + affection
+	if len(topIf.Then) != 2 {
+		t.Errorf("top Then length: got %d, want 2", len(topIf.Then))
+	}
+	narr, ok := topIf.Then[0].(*ast.NarratorNode)
+	if !ok {
+		t.Fatalf("top Then[0]: expected *NarratorNode, got %T", topIf.Then[0])
 	}
 	if narr.Text != "Perfect victory!" {
-		t.Errorf("S narr: got %q", narr.Text)
+		t.Errorf("top then narr: got %q", narr.Text)
+	}
+
+	// Else: rating.A || rating.B (CompoundCondition)
+	if len(topIf.Else) != 1 {
+		t.Fatalf("Else length: got %d, want 1", len(topIf.Else))
+	}
+	elseIf, ok := topIf.Else[0].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("Else[0]: expected *IfNode, got %T", topIf.Else[0])
+	}
+	cc, ok := elseIf.Condition.(*ast.CompoundCondition)
+	if !ok {
+		t.Fatalf("else-if condition: expected *CompoundCondition, got %T", elseIf.Condition)
+	}
+	if cc.Op != "||" {
+		t.Errorf("compound op: got %q, want '||'", cc.Op)
+	}
+	leftRC, ok := cc.Left.(*ast.RatingCondition)
+	if !ok || leftRC.Grade != "A" {
+		t.Errorf("compound.Left: expected *RatingCondition{A}, got %T %+v", cc.Left, cc.Left)
+	}
+	rightRC, ok := cc.Right.(*ast.RatingCondition)
+	if !ok || rightRC.Grade != "B" {
+		t.Errorf("compound.Right: expected *RatingCondition{B}, got %T %+v", cc.Right, cc.Right)
 	}
 }
 
@@ -1005,6 +1045,8 @@ func TestParseNestedParenCondition(t *testing.T) {
 func TestParseCgShow(t *testing.T) {
 	src := `@episode main:01 "T" {
 		@cg show sunset fade {
+			duration: medium
+			content: "cg content placeholder"
 			NARRATOR: Beautiful.
 		}
 		@gate { @next main:02 }
@@ -1016,6 +1058,12 @@ func TestParseCgShow(t *testing.T) {
 	}
 	if cg.Transition != "fade" {
 		t.Errorf("want transition=fade, got %s", cg.Transition)
+	}
+	if cg.Duration != "medium" {
+		t.Errorf("want duration=medium, got %s", cg.Duration)
+	}
+	if cg.Content != "cg content placeholder" {
+		t.Errorf("want content set, got %q", cg.Content)
 	}
 	if len(cg.Body) != 1 {
 		t.Errorf("want 1 body node, got %d", len(cg.Body))
@@ -1101,17 +1149,26 @@ func TestParseBgNoTransition(t *testing.T) {
 	}
 }
 
-// --- CG without body ---
+// --- CG without body (still requires duration/content fields) ---
 
 func TestParseCgNoBody(t *testing.T) {
 	src := `@episode main:01 "T" {
-		@cg show sunset
+		@cg show sunset {
+			duration: low
+			content: "cg content placeholder"
+		}
 		@gate { @next main:02 }
 	}`
 	ep := parseOrFail(t, src)
 	cg := ep.Body[0].(*ast.CgShowNode)
 	if cg.Name != "sunset" {
 		t.Errorf("want name=sunset, got %s", cg.Name)
+	}
+	if cg.Duration != "low" {
+		t.Errorf("want duration=low, got %s", cg.Duration)
+	}
+	if cg.Content != "cg content placeholder" {
+		t.Errorf("want content set, got %q", cg.Content)
 	}
 	if len(cg.Body) != 0 {
 		t.Errorf("want 0 body nodes, got %d", len(cg.Body))
@@ -1178,7 +1235,7 @@ func TestParseGateNextSlashTarget(t *testing.T) {
 	}
 }
 
-// --- Brave option with body after check/on blocks ---
+// --- Brave option with @if (check.success) body and trailing narration ---
 
 func TestParseBraveOptionWithBody(t *testing.T) {
 	src := `@episode main:01 "T" {
@@ -1188,10 +1245,9 @@ func TestParseBraveOptionWithBody(t *testing.T) {
 					attr: STR
 					dc: 14
 				}
-				@on success {
+				@if (check.success) {
 					NARRATOR: You win.
-				}
-				@on fail {
+				} @else {
 					NARRATOR: You lose.
 				}
 				NARRATOR: The dust settles.
@@ -1202,12 +1258,16 @@ func TestParseBraveOptionWithBody(t *testing.T) {
 	ep := parseOrFail(t, src)
 	choice := ep.Body[0].(*ast.ChoiceNode)
 	optA := choice.Options[0]
-	if len(optA.Body) != 1 {
-		t.Fatalf("expected 1 body node after on blocks, got %d", len(optA.Body))
+	// Body now contains the @if tree followed by the trailing narrator.
+	if len(optA.Body) != 2 {
+		t.Fatalf("expected 2 body nodes (@if + trailing narrator), got %d", len(optA.Body))
 	}
-	narr, ok := optA.Body[0].(*ast.NarratorNode)
+	if _, ok := optA.Body[0].(*ast.IfNode); !ok {
+		t.Fatalf("Body[0]: expected *IfNode, got %T", optA.Body[0])
+	}
+	narr, ok := optA.Body[1].(*ast.NarratorNode)
 	if !ok {
-		t.Fatalf("Body[0]: expected *NarratorNode, got %T", optA.Body[0])
+		t.Fatalf("Body[1]: expected *NarratorNode, got %T", optA.Body[1])
 	}
 	if narr.Text != "The dust settles." {
 		t.Errorf("narr text: got %q", narr.Text)
@@ -1592,10 +1652,9 @@ func TestParseAchievementBasic(t *testing.T) {
 	src := `@episode main:01 "T" {
 		NARRATOR: Hi.
 		@achievement HIGH_HEEL_WARRIOR {
-			name: "【高跟鞋战士】"
+			name: "High Heel Warrior"
 			rarity: rare
-			description: "用高跟鞋当武器，一次是即兴，签名招式从此诞生。"
-			when: (HIGH_HEEL_EP05)
+			description: "The first time you used a high heel as a weapon — improvised, then unforgettable."
 		}
 		@gate { @next main:02 }
 	}`
@@ -1607,7 +1666,7 @@ func TestParseAchievementBasic(t *testing.T) {
 	if a.ID != "HIGH_HEEL_WARRIOR" {
 		t.Errorf("ID: got %q", a.ID)
 	}
-	if a.Name != "【高跟鞋战士】" {
+	if a.Name != "High Heel Warrior" {
 		t.Errorf("Name: got %q", a.Name)
 	}
 	if a.Rarity != ast.RarityRare {
@@ -1616,28 +1675,36 @@ func TestParseAchievementBasic(t *testing.T) {
 	if a.Description == "" {
 		t.Error("Description: empty")
 	}
-	fc, ok := a.Trigger.(*ast.FlagCondition)
-	if !ok || fc.Name != "HIGH_HEEL_EP05" {
-		t.Errorf("Trigger: got %T %+v, want FlagCondition{Name:HIGH_HEEL_EP05}", a.Trigger, a.Trigger)
-	}
 }
 
-func TestParseAchievementArcTrigger(t *testing.T) {
-	src := `@episode main:24 "Arc" {
+// TestParseAchievementTriggerInline verifies that the bare `@achievement <id>`
+// form produces an AchievementTriggerNode in the body, not a declaration.
+func TestParseAchievementTriggerInline(t *testing.T) {
+	src := `@episode main:05 "T" {
 		NARRATOR: hi.
-		@achievement HIGH_HEEL_DOUBLE_KILL {
-			name: "【高跟鞋双杀】"
-			rarity: epic
-			description: "用高跟鞋当武器，一次是即兴，两次是签名招式。"
-			when: (HIGH_HEEL_EP05 && HIGH_HEEL_EP24)
+		@if (HIGH_HEEL_EP05) {
+			@achievement HIGH_HEEL_WARRIOR
 		}
-		@ending complete
+		@gate { @next main:06 }
 	}`
 	ep := parseOrFail(t, src)
-	a := ep.Achievements[0]
-	cc, ok := a.Trigger.(*ast.CompoundCondition)
-	if !ok || cc.Op != "&&" {
-		t.Fatalf("Trigger: got %T, want CompoundCondition(&&)", a.Trigger)
+	// The declaration-side should be empty (only the trigger is present).
+	if len(ep.Achievements) != 0 {
+		t.Errorf("Achievements: got %d, want 0 (trigger is inline, not a declaration)", len(ep.Achievements))
+	}
+	ifNode, ok := ep.Body[1].(*ast.IfNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *IfNode, got %T", ep.Body[1])
+	}
+	if len(ifNode.Then) != 1 {
+		t.Fatalf("IfNode.Then length: got %d, want 1", len(ifNode.Then))
+	}
+	trig, ok := ifNode.Then[0].(*ast.AchievementTriggerNode)
+	if !ok {
+		t.Fatalf("Then[0]: expected *AchievementTriggerNode, got %T", ifNode.Then[0])
+	}
+	if trig.ID != "HIGH_HEEL_WARRIOR" {
+		t.Errorf("AchievementTriggerNode.ID: got %q, want HIGH_HEEL_WARRIOR", trig.ID)
 	}
 }
 
@@ -1648,7 +1715,6 @@ func TestParseAchievementRejectsInvalidRarity(t *testing.T) {
 			name: "x"
 			rarity: common
 			description: "y"
-			when: (X)
 		}
 		@gate { @next main:02 }
 	}`
@@ -1667,7 +1733,6 @@ func TestParseAchievementRejectsMissingField(t *testing.T) {
 		@achievement A1 {
 			name: "x"
 			rarity: rare
-			when: (X)
 		}
 		@gate { @next main:02 }
 	}`
@@ -1677,18 +1742,17 @@ func TestParseAchievementRejectsMissingField(t *testing.T) {
 	}
 }
 
-func TestParseSignalAchievementKind(t *testing.T) {
+// TestParseSignalRejectsAchievementKind verifies the parser no longer accepts
+// the legacy `@signal achievement <id>` form — achievement triggering is now
+// the bare `@achievement <id>` directive.
+func TestParseSignalRejectsAchievementKind(t *testing.T) {
 	src := `@episode main:01 "T" {
 		NARRATOR: hi.
 		@signal achievement FIRST_KISS
 		@gate { @next main:02 }
 	}`
-	ep := parseOrFail(t, src)
-	sig := ep.Body[1].(*ast.SignalNode)
-	if sig.Kind != ast.SignalKindAchievement {
-		t.Errorf("Kind: got %q, want %q", sig.Kind, ast.SignalKindAchievement)
-	}
-	if sig.Event != "FIRST_KISS" {
-		t.Errorf("Event: got %q", sig.Event)
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error: @signal achievement is no longer valid")
 	}
 }

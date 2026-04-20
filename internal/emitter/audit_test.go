@@ -370,9 +370,9 @@ func TestAuditD_EmitterLowercaseScope(t *testing.T) {
 // ---------- Audit E: Choice/option structure ----------
 
 func TestAuditE_ChoiceOptionStructure(t *testing.T) {
-	// Brave option with check, on_success, on_fail
-	// Safe option with steps
-	// Concurrent groups inside options
+	// Brave option with check and an @if (check.success) / @else body.
+	// Safe option with steps.
+	// Concurrent groups inside the success branch and inside safe steps.
 	musicNode := &ast.MusicPlayNode{Track: "calm_morning"}
 	musicNode.SetConcurrent(true)
 	josieNode := &ast.CharShowNode{Char: "josie", Look: "cheerful_wave", Position: "right"}
@@ -389,13 +389,18 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 						Mode:  "brave",
 						Text:  "Stand your ground.",
 						Check: &ast.CheckBlock{Attr: "CHA", DC: 12},
-						OnSuccess: []ast.Node{
-							&ast.CharLookNode{Char: "malia", Look: "worried"},
-							josieNode,
-							&ast.DialogueNode{Character: "MALIA", Text: "You did it."},
-						},
-						OnFail: []ast.Node{
-							&ast.NarratorNode{Text: "You faltered."},
+						Body: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CheckCondition{Result: "success"},
+								Then: []ast.Node{
+									&ast.CharLookNode{Char: "malia", Look: "worried"},
+									josieNode,
+									&ast.DialogueNode{Character: "MALIA", Text: "You did it."},
+								},
+								Else: []ast.Node{
+									&ast.NarratorNode{Text: "You faltered."},
+								},
+							},
 						},
 					},
 					{
@@ -455,30 +460,44 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 		t.Errorf("check.dc = %v", check["dc"])
 	}
 
-	// on_success should contain concurrent group
-	onSuccess := optA["on_success"].([]interface{})
-	// Expected: [concurrent_group_array, dialogue_object]
-	if len(onSuccess) != 2 {
-		t.Fatalf("len(on_success) = %d, want 2", len(onSuccess))
+	// No more on_success/on_fail keys — the body is emitted as "steps".
+	if _, has := optA["on_success"]; has {
+		t.Error("brave option should not have 'on_success' key")
 	}
-	// First item should be a concurrent group (array)
-	successGroup, ok := onSuccess[0].([]interface{})
+	if _, has := optA["on_fail"]; has {
+		t.Error("brave option should not have 'on_fail' key")
+	}
+
+	// Brave option body is under "steps".
+	stepsA := optA["steps"].([]interface{})
+	if len(stepsA) != 1 {
+		t.Fatalf("len(optA.steps) = %d, want 1 (the @if tree)", len(stepsA))
+	}
+	ifStep := stepsA[0].(map[string]interface{})
+	if ifStep["type"] != "if" {
+		t.Errorf("optA.steps[0].type = %v, want 'if'", ifStep["type"])
+	}
+	cond := ifStep["condition"].(map[string]interface{})
+	if cond["type"] != "check" || cond["result"] != "success" {
+		t.Errorf("condition: got %+v, want check/success", cond)
+	}
+
+	// then branch should contain concurrent group + dialogue
+	thenBranch := ifStep["then"].([]interface{})
+	if len(thenBranch) != 2 {
+		t.Fatalf("then length = %d, want 2", len(thenBranch))
+	}
+	if _, ok := thenBranch[0].([]interface{}); !ok {
+		t.Fatalf("then[0] should be a concurrent-group array, got %T", thenBranch[0])
+	}
+
+	// else branch should contain the narrator (emitted as plain array)
+	elseBranch, ok := ifStep["else"].([]interface{})
 	if !ok {
-		t.Fatalf("on_success[0] should be array (concurrent group), got %T", onSuccess[0])
+		t.Fatalf("else should be array, got %T", ifStep["else"])
 	}
-	if len(successGroup) != 2 {
-		t.Fatalf("on_success[0] length = %d, want 2", len(successGroup))
-	}
-
-	// on_fail
-	onFail := optA["on_fail"].([]interface{})
-	if len(onFail) != 1 {
-		t.Fatalf("len(on_fail) = %d, want 1", len(onFail))
-	}
-
-	// Brave option should NOT have "steps" key
-	if _, hasSteps := optA["steps"]; hasSteps {
-		t.Error("brave option should not have 'steps' key")
+	if len(elseBranch) != 1 {
+		t.Fatalf("else length = %d, want 1", len(elseBranch))
 	}
 
 	// Option B (safe)
@@ -718,16 +737,30 @@ func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
 // ---------- Additional structural checks ----------
 
 func TestAuditG_MinigameStructure(t *testing.T) {
+	// Minigame body now uses standard @if (rating.X) { ... } branching.
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
 		Body: []ast.Node{
 			&ast.MinigameNode{
-				ID:   "qte_challenge",
-				Attr: "ATK",
-				OnResult: map[string][]ast.Node{
-					"S":   {&ast.NarratorNode{Text: "Perfect!"}},
-					"A B": {&ast.NarratorNode{Text: "Good."}},
+				ID:          "qte_challenge",
+				Attr:        "ATK",
+				Description: "minigame description placeholder",
+				Body: []ast.Node{
+					&ast.IfNode{
+						Condition: &ast.RatingCondition{Grade: "S"},
+						Then:      []ast.Node{&ast.NarratorNode{Text: "Perfect!"}},
+						Else: []ast.Node{
+							&ast.IfNode{
+								Condition: &ast.CompoundCondition{
+									Op:    "||",
+									Left:  &ast.RatingCondition{Grade: "A"},
+									Right: &ast.RatingCondition{Grade: "B"},
+								},
+								Then: []ast.Node{&ast.NarratorNode{Text: "Good."}},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -752,13 +785,29 @@ func TestAuditG_MinigameStructure(t *testing.T) {
 	if mg["attr"] != "ATK" {
 		t.Errorf("attr = %v", mg["attr"])
 	}
-
-	onResults := mg["on_results"].(map[string]interface{})
-	if _, ok := onResults["S"]; !ok {
-		t.Error("missing on_results.S")
+	if mg["description"] != "minigame description placeholder" {
+		t.Errorf("description = %v", mg["description"])
 	}
-	if _, ok := onResults["A B"]; !ok {
-		t.Error("missing on_results['A B']")
+
+	// on_results is gone; body is now emitted as "steps".
+	if _, has := mg["on_results"]; has {
+		t.Error("minigame should not have 'on_results' key; use 'steps' with @if (rating.X)")
+	}
+
+	mgSteps, ok := mg["steps"].([]interface{})
+	if !ok {
+		t.Fatalf("minigame steps: got %T, want []interface{}", mg["steps"])
+	}
+	if len(mgSteps) != 1 {
+		t.Fatalf("minigame steps len: got %d, want 1 (one @if)", len(mgSteps))
+	}
+	ifStep := mgSteps[0].(map[string]interface{})
+	if ifStep["type"] != "if" {
+		t.Errorf("minigame step[0] type: got %v, want 'if'", ifStep["type"])
+	}
+	cond := ifStep["condition"].(map[string]interface{})
+	if cond["type"] != "rating" || cond["grade"] != "S" {
+		t.Errorf("condition: got %+v, want rating/S", cond)
 	}
 }
 
