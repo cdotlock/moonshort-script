@@ -18,9 +18,10 @@ type FixResult struct {
 
 // knownKeywords are directive keywords that follow @ and must NOT be lowercased.
 //
-// `on` is intentionally absent: MSS v2.4 retired the @on directive in favour
-// of @if (check.success) / @if (rating.X) trees. A line starting with `@on`
-// is now caught by checkOldFormatSyntax, which surfaces a migration hint.
+// `on` is intentionally absent — outcome branching in brave options uses
+// @if (check.success) / @else and rating branches use @if (rating.X);
+// a line starting with `@on` is caught by checkOldFormatSyntax and
+// surfaces a hint pointing at the correct syntax.
 var knownKeywords = map[string]bool{
 	"bg":          true,
 	"cg":          true,
@@ -328,11 +329,9 @@ func checkMissingGate(lines []string, r *FixResult) {
 
 func checkBraveOptions(lines []string, r *FixResult) {
 	// Simple text scan: find @option X brave, then look for a check block
-	// within the same option body. The old @on success / @on fail
-	// completeness check is gone in v2.4 — authors express outcome
-	// branching via @if (check.success) / @else, and the validator
-	// deliberately does not enforce that both branches exist (a missing
-	// @else is a story choice, not a syntax error).
+	// within the same option body. Outcome completeness is not enforced —
+	// authors express success/fail branching via @if (check.success) /
+	// @else, and a missing @else is a story choice, not a syntax error.
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
@@ -559,7 +558,7 @@ var oldFormatKeywords = map[string]string{
 	"@wait":      "use @pause for N",
 	"@timeskip":  "removed — use @bg set with transition",
 	"@group":     "use & prefix for concurrent directives",
-	"@on":        "removed in v2.4 — use @if (check.success) / @else inside brave options and @if (rating.X) inside minigames",
+	"@on":        "not part of MSS syntax — use @if (check.success) / @else inside brave options and @if (rating.X) inside minigames",
 }
 
 func checkOldFormatSyntax(lines []string, r *FixResult) {

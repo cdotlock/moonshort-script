@@ -177,9 +177,8 @@ func TestEmptyPositionOnMove(t *testing.T) {
 
 // E2. Labels and gotos throughout the option body (including inside the
 // @if (check.success) / @else tree) must all be discoverable. The
-// OptionNode only exposes a single Body slice now — the old
-// OnSuccess/OnFail compartments were merged into it when @on was
-// retired — so the walk must descend through IfNode.Then/Else too.
+// OptionNode exposes a single Body slice, so the walk has to descend
+// through IfNode.Then/Else to find everything.
 func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -215,9 +214,8 @@ func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
 	}
 }
 
-// E3. checkValues must recurse into MinigameNode.Body — the @on S/A/B/C/D
-// compartments are gone, rating branching lives inside an @if (rating.X)
-// tree in the plain body now.
+// E3. checkValues must recurse into MinigameNode.Body — rating branching
+// lives inside an @if (rating.X) tree in the plain body.
 func TestRecursion_ValuesInsideMinigame(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -407,9 +405,8 @@ func TestValidatorEmptyChoice(t *testing.T) {
 	}
 }
 
-// EDGE: MinigameNode with empty body — valid after v2.4 (minigame body is
-// now a plain []Node; rating branching lives in @if (rating.X) trees the
-// author writes). The validator must not fault an empty body.
+// EDGE: MinigameNode with empty body — rating branching is optional, so
+// an empty body is valid and must not raise a validator error.
 func TestValidatorEmptyMinigameBody(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
@@ -450,10 +447,9 @@ func TestValidatorNilMinigameBody(t *testing.T) {
 }
 
 // EDGE: A brave option whose body covers only the check.success branch
-// (no @else for check.fail) is NOT a validation error in v2.4 — authors
-// own the completeness of their @if tree. The old BRAVE_MISSING_OUTCOME
-// code was retired when @on disappeared; we keep this test as a pinning
-// regression ensuring the validator does not resurrect the check.
+// (no @else for check.fail) is not a validation error — authors own the
+// completeness of their @if tree. This test pins that the validator
+// never emits BRAVE_MISSING_OUTCOME.
 func TestBraveOptionSuccessOnlyBodyIsValid(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",

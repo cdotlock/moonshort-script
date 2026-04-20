@@ -308,9 +308,9 @@ NARRATOR: Duplicate
 }
 
 func TestErrorBraveNoCheck(t *testing.T) {
-	// Brave option without a check block — still a fixer-detectable error.
-	// The body uses the v2.4 @if (check.success) form; the fixer only
-	// cares that `check { }` is missing.
+	// Brave option without a check block — the fixer surfaces this as an
+	// error. The body uses the canonical @if (check.success) form; the
+	// fixer only cares that `check { }` is missing.
 	input := `@episode "Test" {
 @choice {
 @option A brave {
@@ -341,10 +341,8 @@ NARRATOR: Lose
 }
 
 // TestErrorOnSyntaxIsOldFormat verifies that `@on success` / `@on fail`
-// inside a brave option is now surfaced as an old-format migration hint
-// rather than a "missing outcomes" complaint. The previous
-// TestErrorBraveMissingOutcomes test targeted a rule that was retired
-// when @on disappeared.
+// inside a brave option is surfaced as an old-format hint pointing at
+// the correct @if (check.success) / @else syntax.
 func TestErrorOnSyntaxIsOldFormat(t *testing.T) {
 	input := `@episode "Test" {
 @choice {
@@ -369,12 +367,12 @@ NARRATOR: Lose
 
 	foundOnHint := false
 	for _, e := range r.Errors {
-		if strings.Contains(e, "@on") && strings.Contains(e, "removed in v2.4") {
+		if strings.Contains(e, "@on") && strings.Contains(e, "not part of MSS syntax") {
 			foundOnHint = true
 		}
 	}
 	if !foundOnHint {
-		t.Errorf("expected @on removed-in-v2.4 old-format hint, got errors: %v", r.Errors)
+		t.Errorf("expected @on old-format hint, got errors: %v", r.Errors)
 	}
 }
 

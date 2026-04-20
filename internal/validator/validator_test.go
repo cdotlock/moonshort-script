@@ -938,37 +938,35 @@ func TestInvalidCompoundConditionOp(t *testing.T) {
 	}
 }
 
-func TestDuplicateAchievementID(t *testing.T) {
+// TestAchievementIdDuplicationAllowed pins the decision that two inline
+// @achievement steps sharing the same id are valid — engines dedup at
+// unlock time, and authors may deliberately echo a single unlock point
+// from several narrative branches.
+func TestAchievementIdDuplicationAllowed(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
-		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-		Achievements: []*ast.AchievementNode{
-			{ID: "A", Name: "x", Rarity: "rare", Description: "d"},
-			{ID: "A", Name: "y", Rarity: "epic", Description: "d"},
+		Body: []ast.Node{
+			&ast.AchievementNode{ID: "A", Name: "x", Rarity: ast.RarityRare, Description: "d"},
+			&ast.AchievementNode{ID: "A", Name: "x", Rarity: ast.RarityRare, Description: "d"},
 		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
-	found := false
 	for _, e := range errs {
 		if e.Code == DuplicateAchievement {
-			found = true
+			t.Errorf("duplicate-id check should no longer fire: %v", e)
 		}
-	}
-	if !found {
-		t.Errorf("expected DUPLICATE_ACHIEVEMENT_ID, got %v", errs)
 	}
 }
 
 func TestInvalidRarityValidation(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{&ast.NarratorNode{Text: "hi"}},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-		Achievements: []*ast.AchievementNode{
-			{ID: "A", Name: "n", Rarity: "common", Description: "d"},
+		Body: []ast.Node{
+			&ast.AchievementNode{ID: "A", Name: "n", Rarity: "common", Description: "d"},
 		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	errs := Validate(ep)
 	found := false

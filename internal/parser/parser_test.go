@@ -1648,7 +1648,9 @@ func conditionOp(c ast.Condition) string {
 
 // ---- @achievement directive + @signal kind tests ----
 
-func TestParseAchievementBasic(t *testing.T) {
+// TestParseAchievementInline verifies that @achievement always parses as an
+// inline body step carrying its full metadata.
+func TestParseAchievementInline(t *testing.T) {
 	src := `@episode main:01 "T" {
 		NARRATOR: Hi.
 		@achievement HIGH_HEEL_WARRIOR {
@@ -1659,10 +1661,13 @@ func TestParseAchievementBasic(t *testing.T) {
 		@gate { @next main:02 }
 	}`
 	ep := parseOrFail(t, src)
-	if len(ep.Achievements) != 1 {
-		t.Fatalf("Achievements: got %d, want 1", len(ep.Achievements))
+	if len(ep.Body) != 2 {
+		t.Fatalf("Body length: got %d, want 2 (narrator + achievement)", len(ep.Body))
 	}
-	a := ep.Achievements[0]
+	a, ok := ep.Body[1].(*ast.AchievementNode)
+	if !ok {
+		t.Fatalf("Body[1]: expected *AchievementNode, got %T", ep.Body[1])
+	}
 	if a.ID != "HIGH_HEEL_WARRIOR" {
 		t.Errorf("ID: got %q", a.ID)
 	}
@@ -1677,21 +1682,21 @@ func TestParseAchievementBasic(t *testing.T) {
 	}
 }
 
-// TestParseAchievementTriggerInline verifies that the bare `@achievement <id>`
-// form produces an AchievementTriggerNode in the body, not a declaration.
-func TestParseAchievementTriggerInline(t *testing.T) {
+// TestParseAchievementInsideIf verifies that @achievement works when wrapped
+// in a conditional @if — the standard idiom for conditional unlocks.
+func TestParseAchievementInsideIf(t *testing.T) {
 	src := `@episode main:05 "T" {
 		NARRATOR: hi.
 		@if (HIGH_HEEL_EP05) {
-			@achievement HIGH_HEEL_WARRIOR
+			@achievement HIGH_HEEL_WARRIOR {
+				name: "High Heel Warrior"
+				rarity: rare
+				description: "You turned an accessory into a warning."
+			}
 		}
 		@gate { @next main:06 }
 	}`
 	ep := parseOrFail(t, src)
-	// The declaration-side should be empty (only the trigger is present).
-	if len(ep.Achievements) != 0 {
-		t.Errorf("Achievements: got %d, want 0 (trigger is inline, not a declaration)", len(ep.Achievements))
-	}
 	ifNode, ok := ep.Body[1].(*ast.IfNode)
 	if !ok {
 		t.Fatalf("Body[1]: expected *IfNode, got %T", ep.Body[1])
@@ -1699,12 +1704,31 @@ func TestParseAchievementTriggerInline(t *testing.T) {
 	if len(ifNode.Then) != 1 {
 		t.Fatalf("IfNode.Then length: got %d, want 1", len(ifNode.Then))
 	}
-	trig, ok := ifNode.Then[0].(*ast.AchievementTriggerNode)
+	ach, ok := ifNode.Then[0].(*ast.AchievementNode)
 	if !ok {
-		t.Fatalf("Then[0]: expected *AchievementTriggerNode, got %T", ifNode.Then[0])
+		t.Fatalf("Then[0]: expected *AchievementNode, got %T", ifNode.Then[0])
 	}
-	if trig.ID != "HIGH_HEEL_WARRIOR" {
-		t.Errorf("AchievementTriggerNode.ID: got %q, want HIGH_HEEL_WARRIOR", trig.ID)
+	if ach.ID != "HIGH_HEEL_WARRIOR" {
+		t.Errorf("AchievementNode.ID: got %q, want HIGH_HEEL_WARRIOR", ach.ID)
+	}
+	if ach.Rarity != ast.RarityRare {
+		t.Errorf("Rarity: got %q, want rare", ach.Rarity)
+	}
+}
+
+// TestParseAchievementRejectsBareForm verifies that @achievement without a
+// metadata block is a parse error.
+func TestParseAchievementRejectsBareForm(t *testing.T) {
+	src := `@episode main:01 "T" {
+		@achievement HIGH_HEEL_WARRIOR
+		@gate { @next main:02 }
+	}`
+	_, err := New(lexer.New(src)).Parse()
+	if err == nil {
+		t.Fatal("expected parse error for bare @achievement without metadata block")
+	}
+	if !strings.Contains(err.Error(), "requires a block") {
+		t.Errorf("err = %v, want one mentioning 'requires a block'", err)
 	}
 }
 

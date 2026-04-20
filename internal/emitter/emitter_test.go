@@ -651,57 +651,9 @@ func TestEmitEndingAbsent(t *testing.T) {
 	}
 }
 
-func TestEmitAchievements(t *testing.T) {
-	r := &mockResolver{}
-	e := New(r)
-
-	ep := &ast.Episode{
-		BranchKey: "main:01",
-		Title:     "T",
-		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-		Achievements: []*ast.AchievementNode{
-			{
-				ID:          "HEEL_WARRIOR",
-				Name:        "Heel Warrior",
-				Rarity:      ast.RarityRare,
-				Description: "desc",
-			},
-		},
-	}
-	out, err := e.Emit(ep)
-	if err != nil {
-		t.Fatalf("Emit err: %v", err)
-	}
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(out, &parsed); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	ach, ok := parsed["achievements"].([]interface{})
-	if !ok {
-		t.Fatalf("achievements: got %T, want []interface{}", parsed["achievements"])
-	}
-	if len(ach) != 1 {
-		t.Fatalf("achievements len: got %d, want 1", len(ach))
-	}
-	a := ach[0].(map[string]interface{})
-	// Only id/name/rarity/description — no 'when' key anymore.
-	for _, key := range []string{"id", "name", "rarity", "description"} {
-		if _, ok := a[key]; !ok {
-			t.Errorf("achievement missing %q key", key)
-		}
-	}
-	if _, has := a["when"]; has {
-		t.Error("achievement declaration should not have 'when' key (triggering moved to @achievement step)")
-	}
-	if a["rarity"] != "rare" {
-		t.Errorf("rarity: got %v", a["rarity"])
-	}
-}
-
-// TestEmitAchievementTrigger verifies that an inline @achievement <id>
-// directive emits an "achievement" step with just the id.
-func TestEmitAchievementTrigger(t *testing.T) {
+// TestEmitAchievementStep verifies that @achievement emits an inline step
+// carrying id, name, rarity, and description.
+func TestEmitAchievementStep(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
 
@@ -709,7 +661,12 @@ func TestEmitAchievementTrigger(t *testing.T) {
 		BranchKey: "main:01",
 		Title:     "T",
 		Body: []ast.Node{
-			&ast.AchievementTriggerNode{ID: "HEEL_WARRIOR"},
+			&ast.AchievementNode{
+				ID:          "HEEL_WARRIOR",
+				Name:        "Heel Warrior",
+				Rarity:      ast.RarityRare,
+				Description: "desc",
+			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
@@ -721,6 +678,9 @@ func TestEmitAchievementTrigger(t *testing.T) {
 	if err := json.Unmarshal(out, &parsed); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	if _, has := parsed["achievements"]; has {
+		t.Error("top-level 'achievements' key should not be present")
+	}
 	steps := parsed["steps"].([]interface{})
 	if len(steps) != 1 {
 		t.Fatalf("steps len: got %d, want 1", len(steps))
@@ -729,12 +689,17 @@ func TestEmitAchievementTrigger(t *testing.T) {
 	if step["type"] != "achievement" {
 		t.Errorf("step type: got %v, want 'achievement'", step["type"])
 	}
-	if step["id"] != "HEEL_WARRIOR" {
-		t.Errorf("step id: got %v", step["id"])
+	for _, key := range []string{"id", "name", "rarity", "description"} {
+		if _, ok := step[key]; !ok {
+			t.Errorf("achievement step missing %q key", key)
+		}
+	}
+	if step["rarity"] != "rare" {
+		t.Errorf("rarity: got %v", step["rarity"])
 	}
 }
 
-func TestEmitAchievementsAlwaysArray(t *testing.T) {
+func TestEmitNoTopLevelAchievementsKey(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
 
@@ -748,14 +713,14 @@ func TestEmitAchievementsAlwaysArray(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Emit err: %v", err)
 	}
-	if !strings.Contains(string(out), `"achievements": []`) {
-		t.Errorf("achievements should always be an array (possibly empty):\n%s", string(out))
+	if strings.Contains(string(out), `"achievements"`) {
+		t.Errorf("top-level 'achievements' key should not appear when body has no achievement step:\n%s", string(out))
 	}
 }
 
-// TestEmitSignalKind verifies the emitter includes the signal kind in its
-// output. Only "mark" is currently valid — the previous "achievement" kind
-// is gone; triggering achievements is now a separate AchievementTriggerNode.
+// TestEmitSignalKind verifies the emitter includes the signal kind in the
+// output step. The kind slot is retained so future kinds can be added
+// without breaking consumers.
 func TestEmitSignalKind(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)

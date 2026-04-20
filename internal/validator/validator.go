@@ -133,8 +133,8 @@ func Validate(ep *ast.Episode) []Error {
 	// Validate signal kinds (recursive over whole body).
 	checkSignals(ep.Body, &errs)
 
-	// Validate achievements.
-	checkAchievements(ep.Achievements, &errs)
+	// Validate inline @achievement steps (field completeness + rarity).
+	checkAchievements(ep.Body, &errs)
 
 	return errs
 }
@@ -167,43 +167,52 @@ func checkSignals(nodes []ast.Node, errs *[]Error) {
 	}
 }
 
-// checkAchievements validates rarity whitelist, required fields, duplicate ids.
-// Triggering is a separate step (AchievementTriggerNode); declarations just
-// carry metadata.
-func checkAchievements(list []*ast.AchievementNode, errs *[]Error) {
-	seen := map[string]bool{}
-	for _, a := range list {
-		if a.ID == "" {
-			*errs = append(*errs, Error{
-				Code:    AchievementMissingField,
-				Message: "achievement has empty id",
-			})
-			continue
-		}
-		if seen[a.ID] {
-			*errs = append(*errs, Error{
-				Code:    DuplicateAchievement,
-				Message: fmt.Sprintf("duplicate @achievement id %q", a.ID),
-			})
-		}
-		seen[a.ID] = true
-		if a.Name == "" {
-			*errs = append(*errs, Error{
-				Code:    AchievementMissingField,
-				Message: fmt.Sprintf("achievement %q missing 'name'", a.ID),
-			})
-		}
-		if a.Description == "" {
-			*errs = append(*errs, Error{
-				Code:    AchievementMissingField,
-				Message: fmt.Sprintf("achievement %q missing 'description'", a.ID),
-			})
-		}
-		if !validRarities[a.Rarity] {
-			*errs = append(*errs, Error{
-				Code:    InvalidRarity,
-				Message: fmt.Sprintf("achievement %q has invalid rarity %q (must be uncommon, rare, epic, or legendary)", a.ID, a.Rarity),
-			})
+// checkAchievements walks the body and validates every @achievement node:
+// required metadata fields are present and rarity is in the whitelist.
+// Duplicate ids are not checked — two inline triggers sharing an id are
+// valid source; the engine handles dedup at unlock time.
+func checkAchievements(nodes []ast.Node, errs *[]Error) {
+	for _, n := range nodes {
+		switch v := n.(type) {
+		case *ast.AchievementNode:
+			if v.ID == "" {
+				*errs = append(*errs, Error{
+					Code:    AchievementMissingField,
+					Message: "achievement has empty id",
+				})
+				continue
+			}
+			if v.Name == "" {
+				*errs = append(*errs, Error{
+					Code:    AchievementMissingField,
+					Message: fmt.Sprintf("achievement %q missing 'name'", v.ID),
+				})
+			}
+			if v.Description == "" {
+				*errs = append(*errs, Error{
+					Code:    AchievementMissingField,
+					Message: fmt.Sprintf("achievement %q missing 'description'", v.ID),
+				})
+			}
+			if !validRarities[v.Rarity] {
+				*errs = append(*errs, Error{
+					Code:    InvalidRarity,
+					Message: fmt.Sprintf("achievement %q has invalid rarity %q (must be uncommon, rare, epic, or legendary)", v.ID, v.Rarity),
+				})
+			}
+		case *ast.CgShowNode:
+			checkAchievements(v.Body, errs)
+		case *ast.ChoiceNode:
+			for _, opt := range v.Options {
+				checkAchievements(opt.Body, errs)
+			}
+		case *ast.IfNode:
+			checkAchievements(v.Then, errs)
+			checkAchievements(v.Else, errs)
+		case *ast.MinigameNode:
+			checkAchievements(v.Body, errs)
+		case *ast.PhoneShowNode:
+			checkAchievements(v.Body, errs)
 		}
 	}
 }

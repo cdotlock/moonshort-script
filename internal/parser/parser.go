@@ -122,14 +122,13 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 		Title:     title.Literal,
 	}
 
-	body, gates, ending, achievements, err := p.parseEpisodeBody()
+	body, gates, ending, err := p.parseEpisodeBody()
 	if err != nil {
 		return nil, err
 	}
 	episode.Body = body
 	episode.Gate = gates
 	episode.Ending = ending
-	episode.Achievements = achievements
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
@@ -137,19 +136,17 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 	return episode, nil
 }
 
-// parseEpisodeBody parses body nodes until RBRACE. @gate, @ending, and
-// @achievement are hoisted to episode-level fields instead of remaining in
-// the body.  @gate and @ending are mutually exclusive terminals. Multiple
-// @achievement declarations are accumulated.
-func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, []*ast.AchievementNode, error) {
+// parseEpisodeBody parses body nodes until RBRACE. @gate and @ending are
+// lifted to episode-level fields (mutually exclusive terminals); everything
+// else — including @achievement triggers — stays in the body as steps.
+func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, error) {
 	var body []ast.Node
 	var gates *ast.GateBlock
 	var ending *ast.EndingNode
-	var achievements []*ast.AchievementNode
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr before
-		// checking the @gate / @ending / @achievement short-circuit paths.
+		// checking the @gate / @ending short-circuit paths.
 		if p.pending != nil {
 			body = append(body, p.pending)
 			p.pending = nil
@@ -157,44 +154,37 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
 			if gates != nil {
-				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
 			}
 			if ending != nil {
-				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
 			}
 			g, err := p.parseGateBlock()
 			if err != nil {
-				return nil, nil, nil, nil, err
+				return nil, nil, nil, err
 			}
 			gates = g
 			continue
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "ending" {
 			if ending != nil {
-				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
 			}
 			if gates != nil {
-				return nil, nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
+				return nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
 			}
 			e, err := p.parseEnding()
 			if err != nil {
-				return nil, nil, nil, nil, err
+				return nil, nil, nil, err
 			}
 			ending = e
 			continue
 		}
 		node, err := p.parseStatement()
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, err
 		}
 		if node == nil {
-			continue
-		}
-		// Declarative achievement blocks (with `{` ... `}`) are hoisted out
-		// of the body into Episode.Achievements. Bare @achievement <id>
-		// triggers (without `{`) stay in the body like any other step.
-		if decl, ok := node.(*ast.AchievementNode); ok {
-			achievements = append(achievements, decl)
 			continue
 		}
 		body = append(body, node)
@@ -204,7 +194,7 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 		body = append(body, p.pending)
 		p.pending = nil
 	}
-	return body, gates, ending, achievements, nil
+	return body, gates, ending, nil
 }
 
 // parseBlock parses body nodes until RBRACE (but does NOT consume the RBRACE).
@@ -935,21 +925,17 @@ func (p *Parser) parseSignal() (ast.Node, error) {
 	return &ast.SignalNode{Kind: kindTok.Literal, Event: event}, nil
 }
 
-// parseAchievement parses both achievement forms, selected by the presence
-// of a following `{`:
+// parseAchievement parses:
 //
-//   - Declaration (hoisted to Episode.Achievements):
-//     @achievement <id> {
-//       name: "..."
-//       rarity: <uncommon|rare|epic|legendary>
-//       description: "..."
-//     }
+//	@achievement <id> {
+//	  name: "..."
+//	  rarity: <uncommon|rare|epic|legendary>
+//	  description: "..."
+//	}
 //
-//   - Trigger (stays in body as an AchievementTriggerNode):
-//     @achievement <id>
-//
-// The caller (parseEpisodeBody) inspects the returned node's type and
-// hoists AchievementNode; AchievementTriggerNode stays inline as a step.
+// The block form is the only form — reaching this node in execution
+// fires the achievement. Conditional triggering is expressed by wrapping
+// in @if (condition) { @achievement ... { ... } }.
 func (p *Parser) parseAchievement() (ast.Node, error) {
 	// AT and "achievement" have already been consumed by parseDirective
 	// (parseDirective calls advance() once before dispatching, then the
@@ -962,12 +948,10 @@ func (p *Parser) parseAchievement() (ast.Node, error) {
 			idTok.Line, idTok.Col, idTok.Type, idTok.Literal)
 	}
 
-	// Bare form (trigger): no LBRACE follows → emit AchievementTriggerNode.
 	if p.cur.Type != token.LBRACE {
-		return &ast.AchievementTriggerNode{ID: idTok.Literal}, nil
+		return nil, fmt.Errorf("line %d col %d: @achievement %s requires a block with name / rarity / description fields",
+			p.cur.Line, p.cur.Col, idTok.Literal)
 	}
-
-	// Block form (declaration): parse fields.
 	p.advance() // consume LBRACE
 
 	node := &ast.AchievementNode{ID: idTok.Literal}

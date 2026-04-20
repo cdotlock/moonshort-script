@@ -41,12 +41,11 @@ func (c *ConcurrentFlag) SetConcurrent(v bool) { c.Concurrent = v }
 // Both set is disallowed: an ending is final, a gate is a router, they
 // cannot coexist in the same episode.
 type Episode struct {
-	BranchKey    string            // e.g. "main:01"
-	Title        string            // e.g. "Butterfly"
-	Body         []Node            // ordered list of top-level nodes
-	Gate         *GateBlock        // optional routing table at end of episode
-	Ending       *EndingNode       // optional terminal marker (mutually exclusive with Gate)
-	Achievements []*AchievementNode // declarative achievement table (order-independent)
+	BranchKey string      // e.g. "main:01"
+	Title     string      // e.g. "Butterfly"
+	Body      []Node      // ordered list of top-level nodes
+	Gate      *GateBlock  // optional routing table at end of episode
+	Ending    *EndingNode // optional terminal marker (mutually exclusive with Gate)
 }
 
 // ----------------------------------------------------------------------------
@@ -462,24 +461,8 @@ type SignalNode struct {
 
 func (s *SignalNode) nodeType() string { return "signal" }
 
-// AchievementTriggerNode fires a previously-declared achievement by id.
-// Source syntax: @achievement <id> (bare, no block). The block form with
-// curly braces declares an AchievementNode instead (hoisted to
-// Episode.Achievements).
-//
-// Conditions are expressed via an enclosing @if — there is no `when`
-// field on the declaration. Authors place the trigger at whatever
-// narrative beat should unlock the achievement.
-type AchievementTriggerNode struct {
-	ConcurrentFlag
-	ID string // must match an AchievementNode.ID declared in this episode or a sibling
-}
-
-func (a *AchievementTriggerNode) nodeType() string { return "achievement" }
-
-// Valid achievement rarities. Aligned with the story-achievement-generator
-// schema (cdotlock/story-achievement-generator). "common" is intentionally
-// excluded — achievements must require deliberate player action.
+// Valid achievement rarities. "common" is intentionally excluded —
+// achievements must require deliberate player action.
 const (
 	RarityUncommon  = "uncommon"
 	RarityRare      = "rare"
@@ -487,26 +470,28 @@ const (
 	RarityLegendary = "legendary"
 )
 
-// AchievementNode is a declarative achievement definition hoisted to the
-// episode level (Episode.Achievements). Not a runtime step — the engine
-// loads all declared achievements into a registry. Firing is a separate
-// step (AchievementTriggerNode), placed in-body wherever the author
-// wants the unlock to happen (typically inside an @if that checks the
-// required marks).
+// AchievementNode is an inline achievement trigger carrying its full
+// metadata. Source syntax: @achievement <id> { name / rarity / description }.
+// The block is both the declaration and the firing point — reaching this
+// node in execution unlocks the achievement.
 //
-// Fields mirror the story-achievement-generator output schema:
-//   - ID: stable identifier referenced by @achievement <id> triggers
+// Conditional triggering is expressed by wrapping in @if, e.g.
+// @if (MARK_A && MARK_B) { @achievement X { ... } }.
+//
+// Fields:
+//   - ID: stable identifier
 //   - Name: short English display name
 //   - Rarity: uncommon | rare | epic | legendary (no "common")
 //   - Description: DM-voice 1–2 sentence English flavor text
 type AchievementNode struct {
+	ConcurrentFlag
 	ID          string
 	Name        string
 	Rarity      string
 	Description string
 }
 
-func (a *AchievementNode) nodeType() string { return "achievement_decl" }
+func (a *AchievementNode) nodeType() string { return "achievement" }
 
 // ButterflyNode records a butterfly-effect narrative branch decision.
 type ButterflyNode struct {
