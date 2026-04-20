@@ -17,29 +17,34 @@ type FixResult struct {
 }
 
 // knownKeywords are directive keywords that follow @ and must NOT be lowercased.
+//
+// `on` is intentionally absent: MSS v2.4 retired the @on directive in favour
+// of @if (check.success) / @if (rating.X) trees. A line starting with `@on`
+// is now caught by checkOldFormatSyntax, which surfaces a migration hint.
 var knownKeywords = map[string]bool{
-	"bg":        true,
-	"cg":        true,
-	"phone":     true,
-	"text":      true,
-	"music":     true,
-	"sfx":       true,
-	"minigame":  true,
-	"choice":    true,
-	"option":    true,
-	"affection": true,
-	"signal":    true,
-	"butterfly": true,
-	"if":        true,
-	"else":      true,
-	"label":     true,
-	"goto":      true,
-	"gate":      true,
-	"next":      true,
-	"episode":   true,
-	"on":        true,
-	"check":     true,
-	"pause":     true,
+	"bg":          true,
+	"cg":          true,
+	"phone":       true,
+	"text":        true,
+	"music":       true,
+	"sfx":         true,
+	"minigame":    true,
+	"choice":      true,
+	"option":      true,
+	"affection":   true,
+	"signal":      true,
+	"butterfly":   true,
+	"if":          true,
+	"else":        true,
+	"label":       true,
+	"goto":        true,
+	"gate":        true,
+	"next":        true,
+	"episode":     true,
+	"check":       true,
+	"pause":       true,
+	"ending":      true,
+	"achievement": true,
 }
 
 // allCapsColonRe matches lines like "@NARRATOR: text" or "&NARRATOR: text".
@@ -321,18 +326,13 @@ func checkMissingGate(lines []string, r *FixResult) {
 	r.Errors = append(r.Errors, "missing @gate block \u2014 every episode must declare routing")
 }
 
-// braveOptionInfo tracks context while scanning for brave option problems.
-type braveOptionInfo struct {
-	id       string
-	lineNum  int
-	hasCheck bool
-	hasOnSuccess bool
-	hasOnFail    bool
-}
-
 func checkBraveOptions(lines []string, r *FixResult) {
-	// Simple text scan: find @option X brave, then look for check {, @on success, @on fail
-	// within the same block scope.
+	// Simple text scan: find @option X brave, then look for a check block
+	// within the same option body. The old @on success / @on fail
+	// completeness check is gone in v2.4 — authors express outcome
+	// branching via @if (check.success) / @else, and the validator
+	// deliberately does not enforce that both branches exist (a missing
+	// @else is a story choice, not a syntax error).
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 
@@ -348,10 +348,7 @@ func checkBraveOptions(lines []string, r *FixResult) {
 		optionID := parts[1]
 		lineNum := i + 1
 
-		// Scan forward within this option's block
 		hasCheck := false
-		hasOnSuccess := false
-		hasOnFail := false
 		depth := 0
 		started := false
 
@@ -370,14 +367,7 @@ func checkBraveOptions(lines []string, r *FixResult) {
 			if strings.HasPrefix(t, "check") && strings.Contains(t, "{") {
 				hasCheck = true
 			}
-			if t == "@on success" || strings.HasPrefix(t, "@on success ") || strings.HasPrefix(t, "@on success\t") {
-				hasOnSuccess = true
-			}
-			if t == "@on fail" || strings.HasPrefix(t, "@on fail ") || strings.HasPrefix(t, "@on fail\t") {
-				hasOnFail = true
-			}
 
-			// End of block
 			if started && depth <= 0 {
 				break
 			}
@@ -385,9 +375,6 @@ func checkBraveOptions(lines []string, r *FixResult) {
 
 		if !hasCheck {
 			r.Errors = append(r.Errors, fmt.Sprintf("option %s is brave but has no check block \u2014 D20 check parameters required (line %d)", optionID, lineNum))
-		}
-		if !hasOnSuccess || !hasOnFail {
-			r.Errors = append(r.Errors, fmt.Sprintf("option %s is brave but missing @on success/@on fail \u2014 both outcomes required (line %d)", optionID, lineNum))
 		}
 	}
 }
@@ -559,19 +546,20 @@ func fixAffectionCharCase(line string, lineNum int, r *FixResult) string {
 
 // oldFormatKeywords are keywords from the old MSS format that are no longer valid.
 var oldFormatKeywords = map[string]string{
-	"@show":       "use @<character> show",
-	"@hide":       "use @<character> hide",
-	"@expr":       "use @<character> look",
-	"@move":       "use @<character> move",
-	"@endep":      "use closing } for @episode block",
-	"@endbranch":  "use closing } for option blocks",
-	"@endchoice":  "use closing } for @choice block",
-	"@endgroup":   "use & prefix for concurrent directives",
-	"@branch":     "use @option inside @choice block",
-	"@gain":       "use @affection",
-	"@wait":       "use @pause for N",
-	"@timeskip":   "removed — use @bg set with transition",
-	"@group":      "use & prefix for concurrent directives",
+	"@show":      "use @<character> show",
+	"@hide":      "use @<character> hide",
+	"@expr":      "use @<character> look",
+	"@move":      "use @<character> move",
+	"@endep":     "use closing } for @episode block",
+	"@endbranch": "use closing } for option blocks",
+	"@endchoice": "use closing } for @choice block",
+	"@endgroup":  "use & prefix for concurrent directives",
+	"@branch":    "use @option inside @choice block",
+	"@gain":      "use @affection",
+	"@wait":      "use @pause for N",
+	"@timeskip":  "removed — use @bg set with transition",
+	"@group":     "use & prefix for concurrent directives",
+	"@on":        "removed in v2.4 — use @if (check.success) / @else inside brave options and @if (rating.X) inside minigames",
 }
 
 func checkOldFormatSyntax(lines []string, r *FixResult) {
