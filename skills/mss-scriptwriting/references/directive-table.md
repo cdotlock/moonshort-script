@@ -101,8 +101,7 @@ Check-outcome branching inside a brave option uses `@if (check.success) { } @els
 | `@affection <char> <+/-N>` | `@affection easton +2` |
 | `@signal <kind> <event>` | `@signal mark EP01_COMPLETE` — `<kind>` is mandatory; only `mark` is currently implemented. The kind slot is kept in the source grammar for future expansion |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
-| `@achievement <id> { name / rarity / description }` | Declarative achievement (hoisted to episode top-level) |
-| `@achievement <id>` | Imperative achievement trigger — fires a previously declared achievement at this narrative beat |
+| `@achievement <id> { name / rarity / description }` | Achievement unlock (block carries metadata; reaching this node fires it). Wrap in `@if (...) { ... }` for conditional triggers |
 
 ## Flow Control
 
@@ -136,28 +135,21 @@ The two are mutually exclusive. Missing both is a validator error.
 
 ## Achievements
 
-Declarations are hoisted to episode top-level. Field names align with the `cdotlock/story-achievement-generator` skill output.
+One form: `@achievement <id> { name / rarity / description }`. The block carries the full metadata and reaching this node in execution fires the achievement. Conditional triggering is just standard `@if` wrapping.
 
 ```
-@achievement HIGH_HEEL_DOUBLE_KILL {
-  name: "Heel Twice Over"
-  rarity: epic
-  description: "Once is improvisation. Twice is a signature move."
+@if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
+  @achievement HIGH_HEEL_DOUBLE_KILL {
+    name: "Heel Twice Over"
+    rarity: epic
+    description: "Once is improvisation. Twice is a signature move."
+  }
 }
 ```
 
 - `rarity` must be one of `uncommon` / `rare` / `epic` / `legendary` (no `common`)
-- Declaration holds only metadata (`name` / `rarity` / `description`). There is no `when` field — trigger conditions live in the story body.
-
-Trigger via bare `@achievement <id>` at the exact narrative beat the achievement unlocks. Wrap it in `@if (...) { @achievement <id> }` whenever the unlock depends on accumulated marks or other conditions:
-
-```
-@if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
-  @achievement HIGH_HEEL_DOUBLE_KILL
-}
-```
-
-Parser disambiguates: `@achievement <id>` with no `{` is the trigger form; with `{ ... }` is the declaration form.
+- All three fields are required; bare `@achievement <id>` without a block is a parse error
+- Same id triggered from multiple places is fine — the engine dedupes by id at unlock time
 
 ## Signals
 

@@ -300,27 +300,31 @@ These are declarations — the game engine handles the actual math.
 @affection easton +2                                   // Character relationship
 @butterfly "Accepted Easton's approach"                // Flavor memory for LLM route evaluation
 @signal mark HIGH_HEEL_EP05                            // Key story point — queried later
-@achievement HIGH_HEEL_WARRIOR                         // Imperative achievement trigger
+@achievement HIGH_HEEL_WARRIOR {                       // Achievement unlock
+  name: "Heel as Weapon"
+  rarity: rare
+  description: "You turned an accessory into a warning."
+}
 ```
 
 > **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
-**`@signal <kind> <event>` — kind is mandatory.** Currently only `mark` is implemented; the kind slot is kept in the grammar and AST so future kinds can be added without a language break. Achievements are **not** a signal kind — use the dedicated `@achievement <id>` trigger for those.
+**`@signal <kind> <event>` — kind is mandatory.** Currently only `mark` is implemented; the kind slot is kept in the grammar and AST so future kinds can be added without a language break. Achievements are **not** a signal kind — use `@achievement <id> { ... }` for those.
 
 | kind | Role | Checkable in `@if`? |
 |------|------|---------------------|
-| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement-unlock conditions. | **Yes** — becomes a `FlagCondition` in conditions |
+| `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement-unlock guards. | **Yes** — becomes a `FlagCondition` in conditions |
 
 `event` can be a bare identifier or a double-quoted string.
 
 ### Mark discipline — marks are NOT wayposts
 
-**Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@if (X && ...) { @achievement ID }` unlock guard references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
+**Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@if (X && ...) { @achievement ID { ... } }` unlock guard references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
 
 **Write the mark second.** Start from the reader:
 
 1. Identify the payoff — a hidden line of dialogue, a secret scene, an arc achievement
-2. Write the `@if` or `@achievement.when` that would unlock it
+2. Write the `@if` guard that would unlock it
 3. *Then* trace back to where the mark should be emitted
 
 **Do NOT emit marks for things the engine already tracks:**
@@ -353,13 +357,21 @@ These are declarations — the game engine handles the actual math.
   MALIA: And again. Same shoe, same precision.
   @signal mark HIGH_HEEL_EP24
   @if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
-    @achievement HIGH_HEEL_DOUBLE_KILL
+    @achievement HIGH_HEEL_DOUBLE_KILL {
+      name: "Heel Twice Over"
+      rarity: epic
+      description: "Once is improvisation. Twice is a signature move."
+    }
   }
   ```
 - ✅ **Single-beat achievement**: A singular narrative moment unlocks an achievement directly:
   ```
   YOU: I leaned in. He didn't pull back.
-  @achievement FIRST_KISS
+  @achievement FIRST_KISS {
+    name: "First Kiss"
+    rarity: uncommon
+    description: "You stopped calculating and let it happen."
+  }
   ```
 
 **Name all signal events and achievement ids in `SCREAMING_SNAKE_CASE` English.** Keeps the flag store grep-able and unambiguous across the pipeline.
@@ -368,24 +380,21 @@ These are declarations — the game engine handles the actual math.
 
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
 
-### Achievements — `@achievement` (declaration and trigger)
+### Achievements — `@achievement`
 
-`@achievement` is a single directive with two forms, disambiguated by whether a `{` follows the id:
-
-- `@achievement <id> { ... }` — **declaration block.** Hoisted to episode top-level, carries metadata only. Declaration does not unlock anything on its own.
-- `@achievement <id>` — **imperative trigger.** Stays inline as a body step; fires the named achievement at that exact narrative beat. Wrap it in `@if (...) { @achievement <id> }` when the unlock depends on marks or other conditions.
-
-Declaration field names and rarity vocabulary mirror the [`cdotlock/story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill output, so the generator's table can be dropped into MSS mechanically.
+One directive, one form: `@achievement <id> { name / rarity / description }`. The block carries the full metadata and reaching this node in execution fires the achievement. Conditional triggering is just standard `@if` wrapping — there is no separate declaration step.
 
 ```
-@achievement HIGH_HEEL_DOUBLE_KILL {
-  name: "Heel Twice Over"
-  rarity: epic
-  description: "Once is improvisation. Twice is a signature move."
+@if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
+  @achievement HIGH_HEEL_DOUBLE_KILL {
+    name: "Heel Twice Over"
+    rarity: epic
+    description: "Once is improvisation. Twice is a signature move."
+  }
 }
 ```
 
-**Required declaration fields (all three). Use English for all user-facing text:**
+**Required fields (all three). Use English for all user-facing text:**
 
 | Field | Type | Rule |
 |-------|------|------|
@@ -393,27 +402,31 @@ Declaration field names and rarity vocabulary mirror the [`cdotlock/story-achiev
 | `rarity` | identifier | One of: `uncommon` / `rare` / `epic` / `legendary`. **`common` is banned** — if every player gets it, it's not an achievement |
 | `description` | quoted string | English DM-voice flavor text (1-2 sentences) |
 
-Declarations do not carry a `when` field. Trigger logic lives in the story body where the author decides — this keeps the engine simple (no mark-watcher, no automatic re-evaluation) and puts narrative timing in the writer's hands.
-
 **Trigger placement patterns:**
 
-1. **Single-beat achievement** — fire the trigger inline at the moment the achievement makes narrative sense:
+1. **Single-beat achievement** — fire inline at the moment the achievement makes narrative sense:
    ```
    YOU: I leaned in. He didn't pull back.
-   @achievement FIRST_KISS
+   @achievement FIRST_KISS {
+     name: "First Kiss"
+     rarity: uncommon
+     description: "You stopped calculating and let it happen."
+   }
    ```
-2. **Arc achievement** — wrap the trigger in an `@if` that checks every required mark, placed right after the last mark in the chain is emitted:
+2. **Arc achievement** — wrap in an `@if` that checks every required mark, placed right after the last mark in the chain is emitted:
    ```
    // Episode 24
    @signal mark HIGH_HEEL_EP24
    @if (HIGH_HEEL_EP05 && HIGH_HEEL_EP24) {
-     @achievement HIGH_HEEL_DOUBLE_KILL
+     @achievement HIGH_HEEL_DOUBLE_KILL {
+       name: "Heel Twice Over"
+       rarity: epic
+       description: "Once is improvisation. Twice is a signature move."
+     }
    }
    ```
 
-**Declaration placement:** Put the `@achievement { ... }` block in whatever episode most naturally "owns" it — usually the episode where it unlocks, or the one that introduces the arc. Order within the episode doesn't matter (declarations are hoisted to the episode level). An achievement must be declared before it can be triggered, but the declaration and trigger can live in different episodes as long as the runtime registry has seen the declaration first.
-
-**Generating achievements:** The [`story-achievement-generator`](https://github.com/cdotlock/story-achievement-generator) skill reads a finished script set and produces a curated ~15-achievement table. Dramatizer should run it after scripts are complete, then each achievement is translated into an `@achievement { ... }` declaration (and any required `@signal mark` instrumentation plus the final `@if ... { @achievement <id> }` trigger) in the appropriate episode.
+**Same id in multiple places is fine** — the engine dedupes by id at unlock time. If you deliberately echo the same achievement from several narrative branches, write it out each time.
 
 ## Flow Control
 
@@ -542,7 +555,7 @@ Example bad-path terminal:
 2. **Both `@gate` and `@ending`** — The two are mutually exclusive: a routing block cannot coexist with a terminal ending. Pick one.
 3. **Missing `@else`** — Gate block without fallback = interpreter error.
 4. **Brave option without `check { }`** — Brave means D20 check. No check block = error.
-5. **Brave option still using `@on`** — `@on success` / `@on fail` are retired. Use `@if (check.success) { } @else { }`. A missing `@else` is allowed (the validator no longer forces both branches), but it's usually still what you want.
+5. **Brave option with `@on` blocks** — `@on` is not part of MSS. Use `@if (check.success) { } @else { }`. A missing `@else` is allowed (the validator does not force both branches), but it's usually still what you want.
 6. **`@goto` without matching `@label`** — The target label must exist in the same episode.
 7. **Putting `@gate` anywhere except the end** — Gate must be the last thing in `@episode`.
 8. **Using character names inconsistently** — `@mauricio show ...` and `MAURICIO:` must use the same name (case-insensitive).
@@ -561,12 +574,12 @@ Example bad-path terminal:
 21. **Orphan marks** — `@signal mark X` with no reader. If no `@if (X)` and no `@if (X && ...) { @achievement ... }` references `X`, delete the mark. Marks that no one reads are noise: they dilute the flag store and mislead downstream tools. Never emit marks for "episode completed", "chose option A", "affection raised", or anything else the engine already tracks.
 22. **Using non-English names** — All `event` identifiers, `@achievement` ids, achievement `name`, and `description` strings must be English. Mixed-language ids cause grep/search failures and ambiguous meaning across the pipeline.
 23. **Using `common` rarity on `@achievement`** — banned. Rarity must be one of `uncommon` / `rare` / `epic` / `legendary`. If every player gets it, it's not an achievement.
-24. **Writing a `when:` field on `@achievement`** — retired in v2.4. Declarations carry only `name` / `rarity` / `description`. Trigger logic lives in the body via `@achievement <id>` (or `@if (...) { @achievement <id> }` for conditional triggers).
+24. **Writing a `when:` field on `@achievement`** — `when` is not part of the grammar. Achievements carry only `name` / `rarity` / `description`; trigger logic lives in the outer `@if (...)` that wraps the `@achievement` directive.
 25. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes, declare it once in whichever one most naturally owns it.
 26. **Triggering an achievement that was never declared** — `@achievement <id>` inline without a matching `@achievement <id> { ... }` declaration is a runtime dead letter. The runtime registry must have seen the declaration first. (Cross-episode is fine; the engine loads all declarations.)
 27. **Using `check.success` outside a brave option body, or `rating.S` outside a minigame body** — both are context-local pseudo-identifiers. Outside their scope the runtime always returns false — that's a narrative bug, not a syntax error.
 
-**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags legacy `@on` usage with a v2.4 migration hint. Always run the fixer before compiling if the script was generated by an LLM.
+**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags `@on` usage with a migration hint pointing at `@if (check.success)` / `@if (rating.X)`. Always run the fixer before compiling if the script was generated by an LLM.
 
 ## Remix Scripts
 
