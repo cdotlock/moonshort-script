@@ -8,7 +8,7 @@
         "else": {
           "else": {
             "else": {
-              "next": "main:02"
+              "next": "main/stress:01"
             },
             "if": {
               "description": "Player showed consistent kindness",
@@ -877,7 +877,7 @@
               },
               "else": [
                 {
-                  "text": "[T29f → main:02] no condition matched, fallback @else → will jump to ep02.md",
+                  "text": "[T29f → main/stress:01] no condition matched, fallback @else → will jump to stress.md (then stress's own gate will fall through to ep02.md)",
                   "type": "narrator"
                 }
               ],

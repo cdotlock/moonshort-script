@@ -112,7 +112,7 @@ mapping.json 的 `base_url` 指向 OSS 根路径；minigame key 为下划线风�
 | T29c | comparison | `affection.easton < 0` | `[T29c → main/bad/001:01]` | [bad01.md](bad01.md) |
 | T29d | compound | `EP01_COMPLETE && affection.easton >= 3` | `[T29d → main/route/easton:01]` | [cont01.md](cont01.md) |
 | T29e | influence | `influence "Player showed..."` | `[T29e → main/route/easton:01]` | [cont01.md](cont01.md) |
-| T29f | fallback | `@else` | `[T29f → main:02]` | [ep02.md](ep02.md) |
+| T29f | fallback | `@else` | `[T29f → main/stress:01]` | [stress.md](stress.md) → [ep02.md](ep02.md) |
 
 ### EP02 —— 补全剧本（T30–T35）
 
