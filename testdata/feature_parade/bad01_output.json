@@ -1,0 +1,100 @@
+{
+  "branch_key": "main/bad/001",
+  "ending": {
+    "type": "bad_ending"
+  },
+  "episode_id": "main/bad/001:01",
+  "gate": null,
+  "seq": 1,
+  "steps": [
+    [
+      {
+        "name": "bedroom",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
+      },
+      {
+        "name": "night",
+        "type": "music_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
+      }
+    ],
+    {
+      "text": "[T36] @label declares a jump target named START.",
+      "type": "narrator"
+    },
+    {
+      "name": "START",
+      "type": "label"
+    },
+    {
+      "text": "[T37] The door closed. You never opened it again.",
+      "type": "narrator"
+    },
+    {
+      "text": "One wrong move, one closed door.",
+      "type": "you"
+    },
+    {
+      "text": "[T38] @if with flag condition drives a @goto jump below.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "name": "EP01_FACED_EASTON",
+        "type": "flag"
+      },
+      "else": [
+        {
+          "text": "[T38c] EP01_FACED_EASTON false — no goto, fall through to [T39].",
+          "type": "you"
+        }
+      ],
+      "then": [
+        {
+          "text": "[T38a] Even the ones I tried for.",
+          "type": "you"
+        },
+        {
+          "text": "[T38b → label END] @goto END will fire next — the following [T39] narrator line should be SKIPPED.",
+          "type": "narrator"
+        },
+        {
+          "target": "END",
+          "type": "goto"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T39] SKIP CHECK: this line appears ONLY when T38's goto was NOT taken.",
+      "type": "narrator"
+    },
+    {
+      "name": "END",
+      "type": "label"
+    },
+    {
+      "text": "[T40] @label END reached (either by fall-through or by goto jump).",
+      "type": "narrator"
+    },
+    {
+      "character": "malia",
+      "look": "shocked",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_shocked.png"
+    },
+    {
+      "type": "music_fadeout"
+    },
+    {
+      "text": "[T41] Weeks later, nothing has changed.",
+      "type": "narrator"
+    },
+    {
+      "text": "[T42] @ending bad_ending fires now.",
+      "type": "narrator"
+    }
+  ],
+  "title": "Bad Ending — Regret"
+}

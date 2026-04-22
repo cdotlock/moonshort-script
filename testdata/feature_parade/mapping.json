@@ -1,0 +1,66 @@
+{
+  "base_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade",
+  "assets": {
+    "bg": {
+      "bedroom": "bg/bedroom.png",
+      "school": "bg/school.png",
+      "hallway": "bg/hallway.png",
+      "classroom": "bg/classroom.png",
+      "cafeteria": "bg/cafeteria.png",
+      "gym": "bg/gym.png"
+    },
+    "characters": {
+      "malia": {
+        "phone": "characters/malia_phone.png",
+        "flat": "characters/malia_flat.png",
+        "smile": "characters/malia_smile.png",
+        "laugh": "characters/malia_laugh.png",
+        "worried": "characters/malia_worried.png",
+        "shocked": "characters/malia_shocked.png"
+      },
+      "mauricio": {
+        "smirk": "characters/mauricio_smirk.png",
+        "angry": "characters/mauricio_angry.png",
+        "eyebrow_raise": "characters/mauricio_eyebrow_raise.png",
+        "almost_smile": "characters/mauricio_almost_smile.png"
+      },
+      "easton": {
+        "hopeful": "characters/easton_hopeful.png",
+        "relieved": "characters/easton_relieved.png",
+        "hurt": "characters/easton_hurt.png"
+      },
+      "josie": {
+        "excited": "characters/josie_excited.png"
+      },
+      "mark": {
+        "grin": "characters/mark_grin.png"
+      },
+      "elias": {
+        "calm": "characters/elias_calm.png"
+      }
+    },
+    "music": {
+      "calm": "music/calm.mp3",
+      "upbeat": "music/upbeat.mp3",
+      "tense": "music/tense.mp3",
+      "lunch": "music/lunch.mp3",
+      "ambient": "music/ambient.mp3",
+      "night": "music/night.mp3"
+    },
+    "sfx": {
+      "bell": "sfx/bell.mp3",
+      "crowd": "sfx/crowd.mp3",
+      "huh": "sfx/huh.mp3"
+    },
+    "cg": {
+      "window_stare": "cg/cg_example.mp4"
+    },
+    "minigames": {
+      "parking_rush": "minigames/parking-rush/index.html",
+      "power_swing": "minigames/power-swing/index.html",
+      "slot_machine": "minigames/slot-machine/index.html",
+      "stardew_fishing": "minigames/stardew-fishing/index.html",
+      "survive_30_seconds": "minigames/survive-30-seconds/index.html"
+    }
+  }
+}

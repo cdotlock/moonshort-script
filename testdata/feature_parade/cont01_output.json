@@ -1,0 +1,71 @@
+{
+  "branch_key": "main/route/easton",
+  "ending": {
+    "type": "to_be_continued"
+  },
+  "episode_id": "main/route/easton:01",
+  "gate": null,
+  "seq": 1,
+  "steps": [
+    [
+      {
+        "name": "bedroom",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
+      },
+      {
+        "name": "calm",
+        "type": "music_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/calm.mp3"
+      },
+      {
+        "character": "easton",
+        "look": "hopeful",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hopeful.png"
+      },
+      {
+        "character": "malia",
+        "look": "phone",
+        "position": "left",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_phone.png"
+      }
+    ],
+    {
+      "text": "[T43] Reached Easton route via compound-flag OR influence condition in EP01 gate.",
+      "type": "narrator"
+    },
+    {
+      "character": "easton",
+      "text": "I didn't think you'd answer.",
+      "type": "dialogue"
+    },
+    {
+      "character": "malia",
+      "text": "I almost didn't.",
+      "type": "dialogue"
+    },
+    [
+      {
+        "character": "easton",
+        "delta": 3,
+        "type": "affection"
+      },
+      {
+        "description": "Malia opened the door for Easton after EP01",
+        "type": "butterfly"
+      }
+    ],
+    {
+      "text": "[T44] Where does this go?",
+      "type": "you"
+    },
+    {
+      "text": "[T45] @ending to_be_continued fires — expect \"next episode coming\" screen.",
+      "type": "narrator"
+    }
+  ],
+  "title": "To Be Continued — Easton's Route"
+}

@@ -1,0 +1,926 @@
+{
+  "branch_key": "main",
+  "ending": null,
+  "episode_id": "main:01",
+  "gate": {
+    "else": {
+      "else": {
+        "else": {
+          "else": {
+            "else": {
+              "next": "main:02"
+            },
+            "if": {
+              "description": "Player showed consistent kindness",
+              "type": "influence"
+            },
+            "next": "main/route/easton:01"
+          },
+          "if": {
+            "left": {
+              "name": "EP01_COMPLETE",
+              "type": "flag"
+            },
+            "op": "\u0026\u0026",
+            "right": {
+              "left": {
+                "char": "easton",
+                "kind": "affection"
+              },
+              "op": "\u003e=",
+              "right": 3,
+              "type": "comparison"
+            },
+            "type": "compound"
+          },
+          "next": "main/route/easton:01"
+        },
+        "if": {
+          "left": {
+            "char": "easton",
+            "kind": "affection"
+          },
+          "op": "\u003c",
+          "right": 0,
+          "type": "comparison"
+        },
+        "next": "main/bad/001:01"
+      },
+      "if": {
+        "name": "EP01_DEFLECTED",
+        "type": "flag"
+      },
+      "next": "main/bad/001:01"
+    },
+    "if": {
+      "option": "A",
+      "result": "fail",
+      "type": "choice"
+    },
+    "next": "main/bad/001:01"
+  },
+  "seq": 1,
+  "steps": [
+    [
+      {
+        "name": "bedroom",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
+      },
+      {
+        "name": "calm",
+        "type": "music_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/calm.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "phone",
+        "position": "left",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_phone.png"
+      }
+    ],
+    {
+      "text": "[T1] Concurrent group fired: bg + music_play + char_show (one \u0026 group).",
+      "type": "narrator"
+    },
+    {
+      "text": "[T2] YOU internal monologue renders here.",
+      "type": "you"
+    },
+    {
+      "text": "[T3] NARRATOR line (separate from dialogue).",
+      "type": "narrator"
+    },
+    {
+      "character": "malia",
+      "text": "[T4] CHARACTER dialogue line from MALIA.",
+      "type": "dialogue"
+    },
+    {
+      "messages": [
+        {
+          "character": "easton",
+          "direction": "from",
+          "text": "[T5] phone_show → @text from (incoming, left bubble)",
+          "type": "text_message"
+        },
+        {
+          "character": "easton",
+          "direction": "to",
+          "text": "[T6] phone_show → @text to (outgoing, right bubble)",
+          "type": "text_message"
+        },
+        {
+          "character": "easton",
+          "direction": "from",
+          "text": "[T7] multiple messages inside one phone_show block",
+          "type": "text_message"
+        }
+      ],
+      "type": "phone_show"
+    },
+    {
+      "type": "phone_hide"
+    },
+    {
+      "character": "malia",
+      "look": "worried",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_worried.png"
+    },
+    {
+      "character": "malia",
+      "text": "[T8] CHARACTER [look]: syntax sugar — changes look AND speaks in one line.",
+      "type": "dialogue"
+    },
+    [
+      {
+        "name": "school",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/school.png"
+      },
+      {
+        "name": "upbeat",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/upbeat.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "type": "char_look",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      },
+      {
+        "character": "josie",
+        "look": "excited",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/josie_excited.png"
+      }
+    ],
+    {
+      "text": "[T9] bg transition=fade + music_crossfade + char_look + char_show (concurrent).",
+      "type": "narrator"
+    },
+    {
+      "text": "[T10] Watch 9 bubbles fire in order below (heart/anger/sweat/question/exclaim/idea/music/doom/ellipsis).",
+      "type": "narrator"
+    },
+    {
+      "bubble_type": "heart",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "anger",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "sweat",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "question",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "exclaim",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "idea",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "music",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "doom",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "bubble_type": "ellipsis",
+      "character": "josie",
+      "type": "bubble"
+    },
+    {
+      "text": "[T11] @pause for 2 — expect TWO clicks to advance past this line.",
+      "type": "narrator"
+    },
+    {
+      "clicks": 2,
+      "type": "pause"
+    },
+    [
+      {
+        "name": "hallway",
+        "transition": "cut",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/hallway.png"
+      },
+      {
+        "character": "josie",
+        "position": "left",
+        "type": "char_move"
+      },
+      {
+        "character": "mauricio",
+        "look": "smirk",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_smirk.png"
+      },
+      {
+        "name": "bell",
+        "type": "sfx_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/bell.mp3"
+      }
+    ],
+    {
+      "text": "[T12] bg transition=cut + char_move + new char_show + sfx_play (concurrent).",
+      "type": "narrator"
+    },
+    {
+      "character": "mauricio",
+      "text": "[T13] Dialogue from right side of the stage.",
+      "type": "dialogue"
+    },
+    {
+      "character": "josie",
+      "transition": "fade",
+      "type": "char_hide"
+    },
+    {
+      "text": "[T14] char_hide with transition=fade — Josie should fade out.",
+      "type": "narrator"
+    },
+    [
+      {
+        "name": "classroom",
+        "transition": "slow",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/classroom.png"
+      },
+      {
+        "name": "tense",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/tense.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "type": "char_look",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      },
+      {
+        "character": "mauricio",
+        "look": "angry",
+        "type": "char_look",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_angry.png"
+      }
+    ],
+    {
+      "text": "[T15] bg transition=slow + music_crossfade + char_look×2 (concurrent).",
+      "type": "narrator"
+    },
+    {
+      "text": "[T16] @minigame parking_rush with 4 rating branches — engine picks one based on play result.",
+      "type": "narrator"
+    },
+    {
+      "attr": "ATK",
+      "description": "Malia dashes through a cramped parking lot before the bell rings",
+      "game_id": "parking_rush",
+      "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/parking-rush/index.html",
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "else": {
+            "condition": {
+              "left": {
+                "grade": "A",
+                "type": "rating"
+              },
+              "op": "||",
+              "right": {
+                "grade": "B",
+                "type": "rating"
+              },
+              "type": "compound"
+            },
+            "else": {
+              "condition": {
+                "grade": "C",
+                "type": "rating"
+              },
+              "else": [
+                {
+                  "text": "[T16d] rating fallback @else branch hit.",
+                  "type": "narrator"
+                }
+              ],
+              "then": [
+                {
+                  "text": "[T16c] rating.C branch hit.",
+                  "type": "narrator"
+                }
+              ],
+              "type": "if"
+            },
+            "then": [
+              {
+                "text": "[T16b] rating.A || rating.B compound branch hit.",
+                "type": "narrator"
+              }
+            ],
+            "type": "if"
+          },
+          "then": [
+            {
+              "text": "[T16a] rating.S branch hit (context-local condition).",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "minigame"
+    },
+    [
+      {
+        "name": "cafeteria",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/cafeteria.png"
+      },
+      {
+        "name": "lunch",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/lunch.mp3"
+      },
+      {
+        "character": "mark",
+        "look": "grin",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mark_grin.png"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "type": "char_look",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      }
+    ],
+    {
+      "character": "mark",
+      "text": "[T17] Set up: a @choice block follows with a brave + a safe option.",
+      "type": "dialogue"
+    },
+    {
+      "name": "crowd",
+      "type": "sfx_play",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/crowd.mp3"
+    },
+    [
+      {
+        "character": "easton",
+        "look": "hopeful",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hopeful.png"
+      },
+      {
+        "character": "mark",
+        "type": "char_hide"
+      }
+    ],
+    {
+      "text": "[T18] Option A uses check(CHA, dc=12). Option B is safe (no check).",
+      "type": "narrator"
+    },
+    {
+      "options": [
+        {
+          "check": {
+            "attr": "CHA",
+            "dc": 12
+          },
+          "id": "A",
+          "mode": "brave",
+          "steps": [
+            {
+              "condition": {
+                "result": "success",
+                "type": "check"
+              },
+              "else": [
+                {
+                  "text": "[T19b] check.fail branch hit.",
+                  "type": "narrator"
+                },
+                {
+                  "character": "easton",
+                  "look": "hurt",
+                  "type": "char_look",
+                  "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hurt.png"
+                },
+                {
+                  "character": "malia",
+                  "text": "Not today.",
+                  "type": "dialogue"
+                },
+                {
+                  "character": "easton",
+                  "delta": -1,
+                  "type": "affection"
+                },
+                [
+                  {
+                    "text": "[T20d] @affection -1 (negative delta) applied.",
+                    "type": "narrator"
+                  },
+                  {
+                    "description": "Lost nerve facing Easton",
+                    "type": "butterfly"
+                  }
+                ]
+              ],
+              "then": [
+                {
+                  "text": "[T19a] check.success branch hit (context-local condition).",
+                  "type": "narrator"
+                },
+                {
+                  "character": "easton",
+                  "look": "relieved",
+                  "type": "char_look",
+                  "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_relieved.png"
+                },
+                {
+                  "character": "easton",
+                  "text": "Can I sit?",
+                  "type": "dialogue"
+                },
+                {
+                  "character": "malia",
+                  "text": "Two minutes.",
+                  "type": "dialogue"
+                },
+                {
+                  "character": "easton",
+                  "delta": 2,
+                  "type": "affection"
+                },
+                [
+                  {
+                    "text": "[T20a] @affection +2 applied.",
+                    "type": "narrator"
+                  },
+                  {
+                    "description": "Accepted Easton openly at lunch",
+                    "type": "butterfly"
+                  }
+                ],
+                {
+                  "text": "[T20b] @butterfly recorded.",
+                  "type": "narrator"
+                },
+                {
+                  "event": "EP01_FACED_EASTON",
+                  "kind": "mark",
+                  "type": "signal"
+                },
+                {
+                  "text": "[T20c] @signal mark EP01_FACED_EASTON written to flag store.",
+                  "type": "narrator"
+                },
+                {
+                  "description": "Didn't look away.",
+                  "id": "EYE_CONTACT",
+                  "name": "Eye Contact",
+                  "rarity": "uncommon",
+                  "type": "achievement"
+                },
+                {
+                  "text": "[T21a] @achievement rarity=uncommon unlocked.",
+                  "type": "narrator"
+                }
+              ],
+              "type": "if"
+            }
+          ],
+          "text": "[T19-brave] Face Easton (tests brave option + check block)."
+        },
+        {
+          "id": "B",
+          "mode": "safe",
+          "steps": [
+            [
+              {
+                "character": "mark",
+                "look": "grin",
+                "position": "right",
+                "type": "char_show",
+                "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mark_grin.png"
+              },
+              {
+                "character": "easton",
+                "transition": "fade",
+                "type": "char_hide"
+              }
+            ],
+            {
+              "character": "mark",
+              "text": "MOVE ALONG, lover boy!",
+              "type": "dialogue"
+            },
+            [
+              {
+                "bubble_type": "music",
+                "character": "mark",
+                "type": "bubble"
+              },
+              {
+                "description": "Had Mark deflect Easton",
+                "type": "butterfly"
+              }
+            ],
+            {
+              "event": "EP01_DEFLECTED",
+              "kind": "mark",
+              "type": "signal"
+            },
+            {
+              "text": "[T22a] Safe path executed — EP01_DEFLECTED flag set.",
+              "type": "narrator"
+            }
+          ],
+          "text": "[T22-safe] Have Mark intervene (tests safe option, no check)."
+        }
+      ],
+      "type": "choice"
+    },
+    [
+      {
+        "name": "gym",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
+      },
+      {
+        "name": "ambient",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/ambient.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "type": "char_look",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      }
+    ],
+    {
+      "text": "[T23] Top-level @if chain with compound(comparison \u0026\u0026 flag) / compound(comparison || flag) / @else.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "left": {
+            "char": "easton",
+            "kind": "affection"
+          },
+          "op": "\u003e=",
+          "right": 2,
+          "type": "comparison"
+        },
+        "op": "\u0026\u0026",
+        "right": {
+          "name": "EP01_FACED_EASTON",
+          "type": "flag"
+        },
+        "type": "compound"
+      },
+      "else": {
+        "condition": {
+          "left": {
+            "left": {
+              "char": "easton",
+              "kind": "affection"
+            },
+            "op": "\u003c",
+            "right": 0,
+            "type": "comparison"
+          },
+          "op": "||",
+          "right": {
+            "name": "EP01_DEFLECTED",
+            "type": "flag"
+          },
+          "type": "compound"
+        },
+        "else": [
+          {
+            "text": "[T23c] fallback @else.",
+            "type": "you"
+          },
+          {
+            "bubble_type": "ellipsis",
+            "character": "malia",
+            "type": "bubble"
+          }
+        ],
+        "then": [
+          {
+            "text": "[T23b] compound (comparison || flag) true.",
+            "type": "you"
+          },
+          {
+            "bubble_type": "doom",
+            "character": "malia",
+            "type": "bubble"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "text": "[T23a] compound (comparison \u0026\u0026 flag) true.",
+          "type": "you"
+        },
+        {
+          "bubble_type": "heart",
+          "character": "malia",
+          "type": "bubble"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T24] @cg show window_stare fade with duration=medium, content, and 2 body steps.",
+      "type": "narrator"
+    },
+    {
+      "content": "Wide shot pushes in as Malia stands at the gym window, late sunlight cutting through dust.",
+      "duration": "medium",
+      "name": "window_stare",
+      "steps": [
+        {
+          "text": "[T24a] NARRATOR line inside CG body.",
+          "type": "narrator"
+        },
+        {
+          "text": "[T24b] YOU line inside CG body.",
+          "type": "you"
+        }
+      ],
+      "transition": "fade",
+      "type": "cg_show",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/cg/cg_example.mp4"
+    },
+    [
+      {
+        "name": "bedroom",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
+      },
+      {
+        "name": "night",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "phone",
+        "position": "left",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_phone.png"
+      }
+    ],
+    {
+      "text": "[T25] @if with influence condition (LLM-judged at runtime).",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "description": "Player repeatedly chose kindness toward Easton",
+        "type": "influence"
+      },
+      "then": [
+        {
+          "messages": [
+            {
+              "character": "easton",
+              "direction": "from",
+              "text": "[T25a] influence=true branch reached.",
+              "type": "text_message"
+            }
+          ],
+          "type": "phone_show"
+        },
+        {
+          "type": "phone_hide"
+        },
+        {
+          "character": "easton",
+          "delta": 1,
+          "type": "affection"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T26] @if chain with comparison on ENGINE VALUE (san), not affection.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "kind": "value",
+          "name": "san"
+        },
+        "op": "\u003c=",
+        "right": 20,
+        "type": "comparison"
+      },
+      "else": {
+        "condition": {
+          "left": {
+            "kind": "value",
+            "name": "san"
+          },
+          "op": "\u003e=",
+          "right": 80,
+          "type": "comparison"
+        },
+        "else": [
+          {
+            "text": "[T26c] san middle branch.",
+            "type": "you"
+          }
+        ],
+        "then": [
+          {
+            "text": "[T26b] san \u003e= 80 branch.",
+            "type": "you"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "text": "[T26a] san \u003c= 20 branch.",
+          "type": "you"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T27] @music fadeout — music should fade to silence.",
+      "type": "narrator"
+    },
+    {
+      "type": "music_fadeout"
+    },
+    {
+      "character": "malia",
+      "look": "shocked",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_shocked.png"
+    },
+    {
+      "character": "mauricio",
+      "look": "eyebrow_raise",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_eyebrow_raise.png"
+    },
+    {
+      "character": "mauricio",
+      "text": "[T28] CHARACTER [look]: syntax sugar, second instance (Mauricio changes look + speaks).",
+      "type": "dialogue"
+    },
+    {
+      "description": "Accepted Mauricio calling her Butterfly again",
+      "type": "butterfly"
+    },
+    {
+      "event": "EP01_COMPLETE",
+      "kind": "mark",
+      "type": "signal"
+    },
+    {
+      "text": "[T28a] EP01_COMPLETE flag set — read by ep02's gate.",
+      "type": "narrator"
+    },
+    {
+      "text": "[T29] Gate routing preview — conditions evaluated top-to-bottom; the FIRST match decides @next target.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "option": "A",
+        "result": "fail",
+        "type": "choice"
+      },
+      "else": {
+        "condition": {
+          "name": "EP01_DEFLECTED",
+          "type": "flag"
+        },
+        "else": {
+          "condition": {
+            "left": {
+              "char": "easton",
+              "kind": "affection"
+            },
+            "op": "\u003c",
+            "right": 0,
+            "type": "comparison"
+          },
+          "else": {
+            "condition": {
+              "left": {
+                "name": "EP01_COMPLETE",
+                "type": "flag"
+              },
+              "op": "\u0026\u0026",
+              "right": {
+                "left": {
+                  "char": "easton",
+                  "kind": "affection"
+                },
+                "op": "\u003e=",
+                "right": 3,
+                "type": "comparison"
+              },
+              "type": "compound"
+            },
+            "else": {
+              "condition": {
+                "description": "Player showed consistent kindness",
+                "type": "influence"
+              },
+              "else": [
+                {
+                  "text": "[T29f → main:02] no condition matched, fallback @else → will jump to ep02.md",
+                  "type": "narrator"
+                }
+              ],
+              "then": [
+                {
+                  "text": "[T29e → main/route/easton:01] influence matched → will jump to cont01.md",
+                  "type": "narrator"
+                }
+              ],
+              "type": "if"
+            },
+            "then": [
+              {
+                "text": "[T29d → main/route/easton:01] compound (flag \u0026\u0026 comparison) matched → will jump to cont01.md",
+                "type": "narrator"
+              }
+            ],
+            "type": "if"
+          },
+          "then": [
+            {
+              "text": "[T29c → main/bad/001:01] comparison affection.easton \u003c 0 matched → will jump to bad01.md",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        },
+        "then": [
+          {
+            "text": "[T29b → main/bad/001:01] flag condition EP01_DEFLECTED matched → will jump to bad01.md",
+            "type": "narrator"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "text": "[T29a → main/bad/001:01] choice condition A.fail matched → will jump to bad01.md",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    }
+  ],
+  "title": "Feature Parade"
+}

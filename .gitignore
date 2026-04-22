@@ -2,3 +2,7 @@ bin/
 *.DS_Store
 mss
 db/
+
+# Local test-suite assets (mirrored to OSS; not versioned in git)
+testdata/feature_parade/assets/
+minigames-example/

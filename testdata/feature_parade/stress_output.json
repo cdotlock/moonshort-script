@@ -1,0 +1,583 @@
+{
+  "branch_key": "main/stress",
+  "ending": null,
+  "episode_id": "main/stress:01",
+  "gate": {
+    "next": "main:02"
+  },
+  "seq": 1,
+  "steps": [
+    [
+      {
+        "name": "classroom",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/classroom.png"
+      },
+      {
+        "name": "tense",
+        "type": "music_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/tense.mp3"
+      }
+    ],
+    {
+      "text": "[T50] Stress suite starts — each sub-test announces itself.",
+      "type": "narrator"
+    },
+    {
+      "name": "huh",
+      "type": "sfx_play",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/huh.mp3"
+    },
+    {
+      "text": "[T50a] @sfx play huh — the \"huh?\" sound effect plays once.",
+      "type": "narrator"
+    },
+    {
+      "text": "[T51] Three-level nested @if.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "name": "EP01_FACED_EASTON",
+        "type": "flag"
+      },
+      "else": [
+        {
+          "text": "[T51-O] outer @else (flag false).",
+          "type": "narrator"
+        }
+      ],
+      "then": [
+        {
+          "text": "[T51-L1] outer flag true.",
+          "type": "narrator"
+        },
+        {
+          "condition": {
+            "left": {
+              "char": "easton",
+              "kind": "affection"
+            },
+            "op": "\u003e=",
+            "right": 3,
+            "type": "comparison"
+          },
+          "else": {
+            "condition": {
+              "left": {
+                "char": "easton",
+                "kind": "affection"
+              },
+              "op": "\u003e=",
+              "right": 1,
+              "type": "comparison"
+            },
+            "else": [
+              {
+                "text": "[T51-N] mid fallback.",
+                "type": "narrator"
+              }
+            ],
+            "then": [
+              {
+                "text": "[T51-M] mid else-if (1 \u003c= affection \u003c 3).",
+                "type": "narrator"
+              }
+            ],
+            "type": "if"
+          },
+          "then": [
+            {
+              "text": "[T51-L2] mid comparison true.",
+              "type": "narrator"
+            },
+            {
+              "condition": {
+                "left": {
+                  "kind": "value",
+                  "name": "san"
+                },
+                "op": "\u003e=",
+                "right": 50,
+                "type": "comparison"
+              },
+              "else": [
+                {
+                  "text": "[T51-L3b] innermost @else (san \u003c 50).",
+                  "type": "narrator"
+                }
+              ],
+              "then": [
+                {
+                  "text": "[T51-L3a] innermost value comparison true — 3 levels deep.",
+                  "type": "narrator"
+                }
+              ],
+              "type": "if"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T52] Compound with parenthesized precedence: ((x||y) \u0026\u0026 (z||w)).",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "left": {
+            "option": "A",
+            "result": "success",
+            "type": "choice"
+          },
+          "op": "||",
+          "right": {
+            "option": "B",
+            "result": "any",
+            "type": "choice"
+          },
+          "type": "compound"
+        },
+        "op": "\u0026\u0026",
+        "right": {
+          "left": {
+            "left": {
+              "char": "easton",
+              "kind": "affection"
+            },
+            "op": "\u003e=",
+            "right": 2,
+            "type": "comparison"
+          },
+          "op": "||",
+          "right": {
+            "name": "EP01_COMPLETE",
+            "type": "flag"
+          },
+          "type": "compound"
+        },
+        "type": "compound"
+      },
+      "then": [
+        {
+          "text": "[T52a] outer-AND of two OR groups true.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T53] Union of two AND groups: (a \u0026\u0026 b) || (c \u0026\u0026 d).",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "left": {
+            "name": "EP01_FACED_EASTON",
+            "type": "flag"
+          },
+          "op": "\u0026\u0026",
+          "right": {
+            "left": {
+              "kind": "value",
+              "name": "san"
+            },
+            "op": "\u003e",
+            "right": 30,
+            "type": "comparison"
+          },
+          "type": "compound"
+        },
+        "op": "||",
+        "right": {
+          "left": {
+            "name": "EP01_DEFLECTED",
+            "type": "flag"
+          },
+          "op": "\u0026\u0026",
+          "right": {
+            "left": {
+              "char": "easton",
+              "kind": "affection"
+            },
+            "op": "\u003c",
+            "right": 0,
+            "type": "comparison"
+          },
+          "type": "compound"
+        },
+        "type": "compound"
+      },
+      "then": [
+        {
+          "text": "[T53a] either branch true.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T54] One @if chain mixing choice / flag / influence / comparison-affection / comparison-value / compound — 6 kinds.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "option": "A",
+        "result": "fail",
+        "type": "choice"
+      },
+      "else": {
+        "condition": {
+          "name": "EP01_COMPLETE",
+          "type": "flag"
+        },
+        "else": {
+          "condition": {
+            "description": "Player hesitated at every fork",
+            "type": "influence"
+          },
+          "else": {
+            "condition": {
+              "left": {
+                "char": "easton",
+                "kind": "affection"
+              },
+              "op": "\u003e=",
+              "right": 1,
+              "type": "comparison"
+            },
+            "else": {
+              "condition": {
+                "left": {
+                  "kind": "value",
+                  "name": "san"
+                },
+                "op": "\u003c=",
+                "right": 50,
+                "type": "comparison"
+              },
+              "else": {
+                "condition": {
+                  "left": {
+                    "option": "A",
+                    "result": "any",
+                    "type": "choice"
+                  },
+                  "op": "\u0026\u0026",
+                  "right": {
+                    "left": {
+                      "kind": "value",
+                      "name": "san"
+                    },
+                    "op": "\u003e",
+                    "right": 0,
+                    "type": "comparison"
+                  },
+                  "type": "compound"
+                },
+                "else": [
+                  {
+                    "text": "[T54g] fall-through @else.",
+                    "type": "narrator"
+                  }
+                ],
+                "then": [
+                  {
+                    "text": "[T54f] compound of choice \u0026\u0026 comparison.",
+                    "type": "narrator"
+                  }
+                ],
+                "type": "if"
+              },
+              "then": [
+                {
+                  "text": "[T54e] comparison on engine value.",
+                  "type": "narrator"
+                }
+              ],
+              "type": "if"
+            },
+            "then": [
+              {
+                "text": "[T54d] comparison on affection.",
+                "type": "narrator"
+              }
+            ],
+            "type": "if"
+          },
+          "then": [
+            {
+              "text": "[T54c] influence condition branch.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        },
+        "then": [
+          {
+            "text": "[T54b] flag condition branch.",
+            "type": "narrator"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "text": "[T54a] choice condition branch.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T55] minigame power_swing (attr=ATK) with SINGLE rating branch, no @else — validator must accept.",
+      "type": "narrator"
+    },
+    {
+      "attr": "ATK",
+      "description": "a timing-based power swing — release at peak for an S",
+      "game_id": "power_swing",
+      "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/power-swing/index.html",
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "then": [
+            {
+              "text": "[T55a] Only rating.S handled — others silently pass.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "minigame"
+    },
+    {
+      "text": "[T59] Minigame roundup — remaining 3 games each with a single-branch pass. Attrs cover CHA/INT/WIL (ATK was in T16/T55).",
+      "type": "narrator"
+    },
+    {
+      "attr": "CHA",
+      "description": "pull the slot machine lever and read the alignment",
+      "game_id": "slot_machine",
+      "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/slot-machine/index.html",
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "then": [
+            {
+              "text": "[T59a] slot_machine (CHA) S branch ran.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "minigame"
+    },
+    {
+      "attr": "INT",
+      "description": "reel in a fish with the classic bar-balance meter",
+      "game_id": "stardew_fishing",
+      "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/stardew-fishing/index.html",
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "then": [
+            {
+              "text": "[T59b] stardew_fishing (INT) S branch ran.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "minigame"
+    },
+    {
+      "attr": "WIL",
+      "description": "dodge falling hazards for 30 seconds",
+      "game_id": "survive_30_seconds",
+      "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/survive-30-seconds/index.html",
+      "steps": [
+        {
+          "condition": {
+            "grade": "S",
+            "type": "rating"
+          },
+          "then": [
+            {
+              "text": "[T59c] survive_30_seconds (WIL) S branch ran.",
+              "type": "narrator"
+            }
+          ],
+          "type": "if"
+        }
+      ],
+      "type": "minigame"
+    },
+    [
+      {
+        "name": "hallway",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/hallway.png"
+      },
+      {
+        "name": "upbeat",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/upbeat.mp3"
+      },
+      {
+        "name": "bell",
+        "type": "sfx_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/bell.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "position": "center",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      }
+    ],
+    {
+      "text": "[T56] Choice stress: brave omits @else; safe nests an @if.",
+      "type": "narrator"
+    },
+    {
+      "options": [
+        {
+          "check": {
+            "attr": "WIL",
+            "dc": 18
+          },
+          "id": "A",
+          "mode": "brave",
+          "steps": [
+            {
+              "condition": {
+                "result": "success",
+                "type": "check"
+              },
+              "then": [
+                {
+                  "text": "[T56a] brave check.success — no paired @else (allowed).",
+                  "type": "narrator"
+                },
+                {
+                  "character": "easton",
+                  "delta": 1,
+                  "type": "affection"
+                }
+              ],
+              "type": "if"
+            }
+          ],
+          "text": "[T56-brave] Take the risk — no @else branch."
+        },
+        {
+          "id": "B",
+          "mode": "safe",
+          "steps": [
+            {
+              "condition": {
+                "left": {
+                  "char": "easton",
+                  "kind": "affection"
+                },
+                "op": "\u003e=",
+                "right": 2,
+                "type": "comparison"
+              },
+              "else": [
+                {
+                  "text": "[T56c] safe body nested @else.",
+                  "type": "you"
+                }
+              ],
+              "then": [
+                {
+                  "text": "[T56b] safe body nested @if true.",
+                  "type": "you"
+                },
+                {
+                  "description": "Walked away but hesitated",
+                  "type": "butterfly"
+                }
+              ],
+              "type": "if"
+            }
+          ],
+          "text": "[T56-safe] Walk away — contains nested @if."
+        }
+      ],
+      "type": "choice"
+    },
+    {
+      "text": "[T57] @phone show with ZERO messages — empty block edge case.",
+      "type": "narrator"
+    },
+    {
+      "type": "phone_show"
+    },
+    {
+      "type": "phone_hide"
+    },
+    [
+      {
+        "name": "gym",
+        "transition": "cut",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
+      },
+      {
+        "character": "malia",
+        "position": "right",
+        "type": "char_move"
+      },
+      {
+        "character": "josie",
+        "look": "excited",
+        "position": "left",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/josie_excited.png"
+      }
+    ],
+    {
+      "text": "[T58] Concurrent-group boundary test: dialogue breaks the group above; new @ below starts a fresh group.",
+      "type": "narrator"
+    },
+    {
+      "clicks": 1,
+      "type": "pause"
+    },
+    {
+      "text": "[T58a] @pause for 1 — single click to advance.",
+      "type": "narrator"
+    },
+    {
+      "event": "STRESS_DONE",
+      "kind": "mark",
+      "type": "signal"
+    },
+    {
+      "text": "[T60 → main:02] Stress gate has only a fallback @else — will jump to ep02.md unconditionally.",
+      "type": "narrator"
+    }
+  ],
+  "title": "Stress Test"
+}

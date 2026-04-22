@@ -1,0 +1,289 @@
+{
+  "branch_key": "main",
+  "ending": {
+    "type": "complete"
+  },
+  "episode_id": "main:02",
+  "gate": null,
+  "seq": 2,
+  "steps": [
+    [
+      {
+        "name": "cafeteria",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/cafeteria.png"
+      },
+      {
+        "name": "lunch",
+        "type": "music_play",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/lunch.mp3"
+      },
+      {
+        "character": "malia",
+        "look": "flat",
+        "position": "left_far",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
+      },
+      {
+        "character": "josie",
+        "look": "excited",
+        "position": "left",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/josie_excited.png"
+      },
+      {
+        "character": "mark",
+        "look": "grin",
+        "position": "center",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mark_grin.png"
+      },
+      {
+        "character": "easton",
+        "look": "hopeful",
+        "position": "right",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hopeful.png"
+      },
+      {
+        "character": "mauricio",
+        "look": "smirk",
+        "position": "right_far",
+        "type": "char_show",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_smirk.png"
+      }
+    ],
+    {
+      "text": "[T30] position 5 档: left_far / left / center / right / right_far 一字排开。",
+      "type": "narrator"
+    },
+    {
+      "text": "[T31] char_look with transition=dissolve (Malia and Mauricio change looks).",
+      "type": "narrator"
+    },
+    {
+      "character": "malia",
+      "look": "smile",
+      "transition": "dissolve",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_smile.png"
+    },
+    {
+      "character": "mauricio",
+      "look": "almost_smile",
+      "transition": "dissolve",
+      "type": "char_look",
+      "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_almost_smile.png"
+    },
+    {
+      "text": "[T32] Comparison op == (strict equal).",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "char": "easton",
+          "kind": "affection"
+        },
+        "op": "==",
+        "right": 3,
+        "type": "comparison"
+      },
+      "else": {
+        "condition": {
+          "left": {
+            "char": "easton",
+            "kind": "affection"
+          },
+          "op": "!=",
+          "right": 0,
+          "type": "comparison"
+        },
+        "else": [
+          {
+            "text": "[T32c] all comparison fell through.",
+            "type": "you"
+          }
+        ],
+        "then": [
+          {
+            "text": "[T32b] affection.easton != 0 fallback.",
+            "type": "you"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "text": "[T32a] affection.easton == 3 exactly.",
+          "type": "you"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T33] Comparison op \u003e and \u003c on engine value.",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "left": {
+          "kind": "value",
+          "name": "san"
+        },
+        "op": "\u003e",
+        "right": 50,
+        "type": "comparison"
+      },
+      "else": {
+        "condition": {
+          "left": {
+            "kind": "value",
+            "name": "san"
+          },
+          "op": "\u003c",
+          "right": 50,
+          "type": "comparison"
+        },
+        "then": [
+          {
+            "character": "malia",
+            "text": "[T33b] san \u003c 50 branch.",
+            "type": "dialogue"
+          }
+        ],
+        "type": "if"
+      },
+      "then": [
+        {
+          "character": "malia",
+          "text": "[T33a] san \u003e 50 branch.",
+          "type": "dialogue"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "text": "[T34] Three achievements below cover rarity rare / epic / legendary (uncommon was in T21).",
+      "type": "narrator"
+    },
+    {
+      "condition": {
+        "name": "EP01_FACED_EASTON",
+        "type": "flag"
+      },
+      "then": [
+        {
+          "description": "You faced him twice.",
+          "id": "RARE_COURAGE",
+          "name": "Quiet Courage",
+          "rarity": "rare",
+          "type": "achievement"
+        },
+        {
+          "text": "[T34a] rarity=rare unlocked.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "condition": {
+        "left": {
+          "name": "EP01_COMPLETE",
+          "type": "flag"
+        },
+        "op": "\u0026\u0026",
+        "right": {
+          "left": {
+            "char": "easton",
+            "kind": "affection"
+          },
+          "op": "\u003e=",
+          "right": 3,
+          "type": "comparison"
+        },
+        "type": "compound"
+      },
+      "then": [
+        {
+          "description": "Two episodes. Still standing together.",
+          "id": "EPIC_BOND",
+          "name": "Full Circle",
+          "rarity": "epic",
+          "type": "achievement"
+        },
+        {
+          "text": "[T34b] rarity=epic unlocked.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
+      "condition": {
+        "left": {
+          "left": {
+            "name": "EP01_COMPLETE",
+            "type": "flag"
+          },
+          "op": "\u0026\u0026",
+          "right": {
+            "name": "EP01_FACED_EASTON",
+            "type": "flag"
+          },
+          "type": "compound"
+        },
+        "op": "\u0026\u0026",
+        "right": {
+          "left": {
+            "char": "easton",
+            "kind": "affection"
+          },
+          "op": "\u003e=",
+          "right": 5,
+          "type": "comparison"
+        },
+        "type": "compound"
+      },
+      "then": [
+        {
+          "description": "Every choice, every risk. You took the hard road.",
+          "id": "LEGENDARY_PARADE",
+          "name": "Parade Monarch",
+          "rarity": "legendary",
+          "type": "achievement"
+        },
+        {
+          "text": "[T34c] rarity=legendary unlocked.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    [
+      {
+        "name": "gym",
+        "transition": "fade",
+        "type": "bg",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
+      },
+      {
+        "name": "night",
+        "type": "music_crossfade",
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
+      }
+    ],
+    {
+      "text": "[T35] Final @ending complete — story wraps, credits roll.",
+      "type": "you"
+    },
+    {
+      "event": "EP02_DONE",
+      "kind": "mark",
+      "type": "signal"
+    }
+  ],
+  "title": "Parade Finale"
+}
