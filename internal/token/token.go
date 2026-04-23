@@ -28,8 +28,9 @@ const (
 	LTE Type = "LTE" // <=
 	GT  Type = "GT"  // >
 	LT  Type = "LT"  // <
-	EQ  Type = "EQ"  // ==
-	NEQ Type = "NEQ" // !=
+	EQ     Type = "EQ"     // ==
+	NEQ    Type = "NEQ"    // !=
+	ASSIGN Type = "ASSIGN" // single '=' (distinct from EQ '==')
 	AND Type = "AND" // &&
 	OR  Type = "OR"  // ||
 
@@ -82,6 +83,8 @@ func (t Type) String() string {
 		return "EQ"
 	case NEQ:
 		return "NEQ"
+	case ASSIGN:
+		return "ASSIGN"
 	case AND:
 		return "AND"
 	case OR:
