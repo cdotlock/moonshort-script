@@ -974,10 +974,12 @@ mss validate 01.md --assets mapping.json                     # 验证（不输�
               "type": "if",
               "condition": {"type": "check", "result": "success"},
               "then": [
+                {"type": "signal", "kind": "mark", "event": "EASTON_APPROACHED_EP01"},
                 {"type": "char_look", "character": "easton", "look": "relieved", "url": "https://oss.mobai.com/..."},
                 {"type": "dialogue", "character": "easton", "text": "Can I sit?"},
                 {"type": "dialogue", "character": "malia", "text": "You have two minutes."},
                 {"type": "affection", "character": "easton", "delta": 2},
+                {"type": "signal", "kind": "int", "name": "easton_approaches_accepted", "op": "+", "value": 1},
                 {"type": "butterfly", "description": "Accepted Easton's approach at the cafeteria"}
               ],
               "else": [
@@ -1189,10 +1191,12 @@ Remix Executor 输出标准 `.md` 文件，与 Dramatizer 产出完全一致。
         dc: 12
       }
       @if (check.success) {
+        @signal mark EASTON_APPROACHED_EP01
         @easton look relieved
         EASTON: Can I sit?
         MALIA: You have two minutes.
         @affection easton +2
+        @signal int easton_approaches_accepted +1
         @butterfly "Accepted Easton's approach at the cafeteria"
       } @else {
         @easton look hurt
