@@ -993,3 +993,44 @@ func TestInvalidSignalKindValidation(t *testing.T) {
 		t.Errorf("expected INVALID_SIGNAL_KIND, got %v", errs)
 	}
 }
+
+func TestValidateSignalIntReservedName(t *testing.T) {
+	// @signal int san should fail — "san" is an engine-reserved name.
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "t",
+		Body: []ast.Node{
+			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "san", Op: ast.SignalOpAssign, Value: 0},
+		},
+		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == ReservedIntName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ReservedIntName error, got: %v", errs)
+	}
+}
+
+func TestValidateSignalIntOK(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "t",
+		Body: []ast.Node{
+			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "rejections", Op: ast.SignalOpAssign, Value: 0},
+			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "rejections", Op: ast.SignalOpAdd, Value: 1},
+		},
+		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+	}
+	errs := Validate(ep)
+	for _, e := range errs {
+		if e.Code == ReservedIntName || e.Code == InvalidSignalKind {
+			t.Fatalf("unexpected error: %v", e)
+		}
+	}
+}

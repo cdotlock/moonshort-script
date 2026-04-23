@@ -26,10 +26,23 @@ const (
 	InvalidCgDuration          = "INVALID_CG_DURATION"
 	CgMissingContent           = "CG_MISSING_CONTENT"
 	MinigameMissingDescription = "MINIGAME_MISSING_DESCRIPTION"
+	ReservedIntName            = "RESERVED_INT_NAME"
 )
 
 var validSignalKinds = map[string]bool{
 	ast.SignalKindMark: true,
+	ast.SignalKindInt:  true,
+}
+
+// reservedIntNames blocks @signal int declarations from shadowing
+// engine-managed numeric values that scripts may only read.
+//
+// The list is intentionally conservative: concrete names the engine
+// currently defines. Expand as the engine grows.
+var reservedIntNames = map[string]bool{
+	"san": true, "cha": true, "atk": true,
+	"hp": true, "xp": true, "dex": true,
+	"int": true, "str": true, "wis": true, "con": true,
 }
 
 var validCgDurations = map[string]bool{
@@ -136,8 +149,17 @@ func checkSignals(nodes []ast.Node, errs *[]Error) {
 			if !validSignalKinds[v.Kind] {
 				*errs = append(*errs, Error{
 					Code:    InvalidSignalKind,
-					Message: fmt.Sprintf("@signal %q has invalid kind %q (only 'mark' is currently supported)", v.Event, v.Kind),
+					Message: fmt.Sprintf("@signal has invalid kind %q (valid: mark, int)", v.Kind),
 				})
+				continue
+			}
+			if v.Kind == ast.SignalKindInt {
+				if reservedIntNames[v.Name] {
+					*errs = append(*errs, Error{
+						Code:    ReservedIntName,
+						Message: fmt.Sprintf("@signal int %q: name collides with an engine-managed numeric value; choose a different name", v.Name),
+					})
+				}
 			}
 		case *ast.CgShowNode:
 			checkSignals(v.Body, errs)
