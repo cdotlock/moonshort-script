@@ -300,6 +300,8 @@ These are declarations — the game engine handles the actual math.
 @affection easton +2                                   // Character relationship
 @butterfly "Accepted Easton's approach"                // Flavor memory for LLM route evaluation
 @signal mark HIGH_HEEL_EP05                            // Key story point — queried later
+@signal int rejections +1                              // Persistent integer counter — free to mutate
+@signal int rejections = 0                             // Explicit reset / initialization
 @achievement HIGH_HEEL_WARRIOR {                       // Achievement unlock
   name: "Heel as Weapon"
   rarity: rare
@@ -309,17 +311,31 @@ These are declarations — the game engine handles the actual math.
 
 > **Engine-managed values** (XP, SAN/HP, etc.) are set by the game engine, not scripts. You can reference them in `@if` conditions (e.g., `@if (san <= 20) { }`) but cannot modify them from scripts. The value names (san, xp, hp, etc.) are defined by the engine, not the script.
 
-**`@signal <kind> <event>` — kind is mandatory.** Currently only `mark` is implemented; the kind slot is kept in the grammar and AST so future kinds can be added without a language break. Achievements are **not** a signal kind — use `@achievement <id> { ... }` for those.
+**`@signal <kind> <...>` — kind is mandatory.** Two kinds are implemented:
+
+- `@signal mark <event>` — persistent boolean flag. Use sparingly; every mark must have a reader (see below).
+- `@signal int <name> <op> <value>` — persistent integer counter. Free to mutate (`= N`, `+N`, `-N`). Read via `@if (name >= N)` comparison.
+
+Achievements are **not** a signal kind — use `@achievement <id> { ... }` for those.
 
 | kind | Role | Checkable in `@if`? |
 |------|------|---------------------|
 | `mark` | Persistent boolean flag. Engine stores it forever. `@if (NAME)` queries this store. **Use only for key story points** — hidden-route triggers and achievement-unlock guards. | **Yes** — becomes a `FlagCondition` in conditions |
+| `int` | Persistent integer variable. Engine stores across episodes. `@if (NAME <cmp> N)` queries the value via comparison. Free to mutate as often as needed — counters are the whole point. | **Yes** — becomes a `ComparisonCondition` with `left.kind="value"` |
 
-`event` can be a bare identifier or a double-quoted string.
+For `mark`, `event` can be a bare identifier or a double-quoted string. For `int`, `name` is a bare `snake_case` identifier.
 
 ### Mark discipline — marks are NOT wayposts
 
 **Every `@signal mark X` must have a reader.** Either some later `@if (X)` branch depends on it, or some `@if (X && ...) { @achievement ID { ... } }` unlock guard references it. If nothing reads it, delete it. Cluttering the flag store dilutes the signal (pun intended) and confuses downstream tooling.
+
+**`@signal int` is not mark.** Counters are expected to be written often — `rejections +1` every time the player rejects Easton is exactly the point. The "marks are precious" discipline does NOT apply. Use `@signal int` whenever you need "if player did X at least N times" or "N-of-M threshold" branching. Prefer `@signal int counter +1` + `@if (counter >= N)` over stacking multiple boolean marks.
+
+Guidelines for ints:
+- Name in `snake_case` (e.g. `rejections`, `brave_count`, `times_met_easton`).
+- Avoid names that look like engine values (`san`, `cha`, `hp`, `xp`) — the validator will reject these.
+- `@signal int x = 0` is an unconditional assignment — if placed somewhere the player can revisit, it will reset the counter. That is the author's responsibility; the engine does not protect.
+- For first-time reads, the engine treats undeclared variables as 0, so `@signal int x +1` and `@if (x >= 1)` work without any prior `= 0`.
 
 **Write the mark second.** Start from the reader:
 
@@ -333,6 +349,7 @@ These are declarations — the game engine handles the actual math.
 - ❌ `@signal mark CHOSE_OPTION_A` after a choice — the choice history is in the engine's choice log; gate `@if (A.success)` queries it directly
 - ❌ `@signal mark AFFECTION_RAISED` — `@affection` already updated the number; `@if (affection.easton >= 5)` queries the value directly
 - ❌ `@signal mark EASTON_ACKNOWLEDGED` as a character-moment marker with no follow-up — that's what `@butterfly` is for (LLM-evaluated, not boolean-queried)
+- ❌ Don't use `@signal mark COUNTER_HIT_3` to track thresholds — that's what `@signal int` is for. Use `@signal int counter +1` then `@if (counter >= 3)`.
 
 **DO emit marks for these cases:**
 
