@@ -144,6 +144,19 @@
 
   @signal mark STRESS_DONE
 
+  // ================================================================
+  // [T58b] @signal int — persistent integer counter (assign / +/ -)
+  // ================================================================
+  NARRATOR: [T58b] @signal int — three write forms plus a comparison read.
+  @signal int stress_count = 0
+  @signal int stress_count +2
+  @signal int stress_count -1
+  @if (stress_count >= 2) {
+    NARRATOR: [T58b-hi] stress_count crossed the 2 threshold.
+  } @else {
+    NARRATOR: [T58b-lo] stress_count below threshold.
+  }
+
   NARRATOR: [T60 → main:02] Stress gate has only a fallback @else — will jump to ep02.md unconditionally.
   @gate {
     @else: @next main:02

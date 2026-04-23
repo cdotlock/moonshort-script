@@ -575,6 +575,55 @@
       "type": "signal"
     },
     {
+      "text": "[T58b] @signal int — three write forms plus a comparison read.",
+      "type": "narrator"
+    },
+    {
+      "kind": "int",
+      "name": "stress_count",
+      "op": "=",
+      "type": "signal",
+      "value": 0
+    },
+    {
+      "kind": "int",
+      "name": "stress_count",
+      "op": "+",
+      "type": "signal",
+      "value": 2
+    },
+    {
+      "kind": "int",
+      "name": "stress_count",
+      "op": "-",
+      "type": "signal",
+      "value": 1
+    },
+    {
+      "condition": {
+        "left": {
+          "kind": "value",
+          "name": "stress_count"
+        },
+        "op": "\u003e=",
+        "right": 2,
+        "type": "comparison"
+      },
+      "else": [
+        {
+          "text": "[T58b-lo] stress_count below threshold.",
+          "type": "narrator"
+        }
+      ],
+      "then": [
+        {
+          "text": "[T58b-hi] stress_count crossed the 2 threshold.",
+          "type": "narrator"
+        }
+      ],
+      "type": "if"
+    },
+    {
       "text": "[T60 → main:02] Stress gate has only a fallback @else — will jump to ep02.md unconditionally.",
       "type": "narrator"
     }
