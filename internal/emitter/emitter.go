@@ -158,11 +158,7 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 	case *ast.AffectionNode:
 		return e.emitAffection(v)
 	case *ast.SignalNode:
-		return map[string]interface{}{
-			"type":  "signal",
-			"kind":  v.Kind,
-			"event": v.Event,
-		}
+		return e.emitSignal(v)
 	case *ast.ButterflyNode:
 		return map[string]interface{}{"type": "butterfly", "description": v.Description}
 	case *ast.AchievementNode:
@@ -426,6 +422,33 @@ func (e *Emitter) emitAffection(n *ast.AffectionNode) map[string]interface{} {
 		"type":      "affection",
 		"character": n.Char,
 		"delta":     delta,
+	}
+}
+
+func (e *Emitter) emitSignal(n *ast.SignalNode) map[string]interface{} {
+	switch n.Kind {
+	case ast.SignalKindMark:
+		return map[string]interface{}{
+			"type":  "signal",
+			"kind":  "mark",
+			"event": n.Event,
+		}
+	case ast.SignalKindInt:
+		return map[string]interface{}{
+			"type":  "signal",
+			"kind":  "int",
+			"name":  n.Name,
+			"op":    n.Op,
+			"value": n.Value,
+		}
+	default:
+		// Defensive: unknown kind is caught by validator, but keep the
+		// emitter resilient — emit a best-effort shape so downstream
+		// debugging isn't hampered.
+		return map[string]interface{}{
+			"type": "signal",
+			"kind": n.Kind,
+		}
 	}
 }
 

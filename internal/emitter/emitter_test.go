@@ -3,10 +3,13 @@ package emitter
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/cdotlock/moonshort-script/internal/ast"
+	"github.com/cdotlock/moonshort-script/internal/lexer"
+	"github.com/cdotlock/moonshort-script/internal/parser"
 )
 
 // mockResolver implements AssetResolver for testing.
@@ -744,4 +747,100 @@ func TestEmitSignalKind(t *testing.T) {
 	if !strings.Contains(s, `"event": "A"`) {
 		t.Errorf("missing event:\n%s", s)
 	}
+}
+
+// firstBodyStep parses + emits an episode source and returns the first
+// step of the resulting JSON, as a generic map.
+func firstBodyStep(t *testing.T, src string) map[string]interface{} {
+	t.Helper()
+	l := lexer.New(src)
+	p := parser.New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	e := New(newMockResolver())
+	data, err := e.Emit(ep)
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	steps := m["steps"].([]interface{})
+	first := steps[0]
+	if arr, ok := first.([]interface{}); ok && len(arr) == 1 {
+		return arr[0].(map[string]interface{})
+	}
+	return first.(map[string]interface{})
+}
+
+func assertStepEquals(t *testing.T, got, want map[string]interface{}) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("step mismatch\nwant: %#v\n got: %#v", want, got)
+	}
+}
+
+func TestEmitSignalIntAssign(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections = 0
+  @ending complete
+}`
+	step := firstBodyStep(t, src)
+	want := map[string]interface{}{
+		"type":  "signal",
+		"kind":  "int",
+		"name":  "rejections",
+		"op":    "=",
+		"value": float64(0),
+	}
+	assertStepEquals(t, step, want)
+}
+
+func TestEmitSignalIntAdd(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections +1
+  @ending complete
+}`
+	step := firstBodyStep(t, src)
+	want := map[string]interface{}{
+		"type":  "signal",
+		"kind":  "int",
+		"name":  "rejections",
+		"op":    "+",
+		"value": float64(1),
+	}
+	assertStepEquals(t, step, want)
+}
+
+func TestEmitSignalIntSub(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections -2
+  @ending complete
+}`
+	step := firstBodyStep(t, src)
+	want := map[string]interface{}{
+		"type":  "signal",
+		"kind":  "int",
+		"name":  "rejections",
+		"op":    "-",
+		"value": float64(2),
+	}
+	assertStepEquals(t, step, want)
+}
+
+func TestEmitSignalMarkUnchanged(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal mark HIGH_HEEL_EP05
+  @ending complete
+}`
+	step := firstBodyStep(t, src)
+	want := map[string]interface{}{
+		"type":  "signal",
+		"kind":  "mark",
+		"event": "HIGH_HEEL_EP05",
+	}
+	assertStepEquals(t, step, want)
 }
