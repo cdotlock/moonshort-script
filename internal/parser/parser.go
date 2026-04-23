@@ -34,6 +34,7 @@ var validEndingTypes = map[string]bool{
 // kinds will expand this whitelist.
 var validSignalKinds = map[string]bool{
 	"mark": true,
+	"int":  true,
 }
 
 // validRarities enumerates accepted achievement rarities. Common is
@@ -888,28 +889,40 @@ func (p *Parser) parseAffection() (ast.Node, error) {
 	return &ast.AffectionNode{Char: char.Literal, Delta: delta.Literal}, nil
 }
 
-// parseSignal parses: @signal <kind> <event>
+// parseSignal parses: @signal <kind> ...
 //
-// Kind is mandatory. The whitelist is deliberately open-ended — currently
-// only "mark" is implemented, but the slot is kept in source syntax so
-// future signal kinds can be added without a grammar break.
-//
-// "mark" emits a persistent boolean flag testable via @if (NAME).
-// Triggering achievements is a separate directive (@achievement <id>),
-// not a signal kind.
-//
-// Event may be a bare IDENT or a double-quoted STRING.
+// Two kinds:
+//   - mark: @signal mark <event>    — event is IDENT or STRING
+//   - int:  @signal int <name> <op> <value>
+//     op ∈ { "=", "+", "-" }; value is an integer literal.
+//     "=" accepts NUMBER or SIGNED_NUMBER (may be negative).
+//     "+"/"-" accepts NUMBER only (the sign is in the operator).
 func (p *Parser) parseSignal() (ast.Node, error) {
 	p.advance() // consume "signal"
 	kindTok, err := p.expect(token.IDENT)
 	if err != nil {
-		return nil, fmt.Errorf("line %d col %d: expected signal kind after '@signal' (currently only 'mark' is supported), got %s (%q)",
+		return nil, fmt.Errorf("line %d col %d: expected signal kind after '@signal' (one of: mark, int), got %s (%q)",
 			kindTok.Line, kindTok.Col, kindTok.Type, kindTok.Literal)
 	}
 	if !validSignalKinds[kindTok.Literal] {
-		return nil, fmt.Errorf("line %d col %d: invalid signal kind %q (currently only 'mark' is supported)",
+		return nil, fmt.Errorf("line %d col %d: invalid signal kind %q (valid: mark, int)",
 			kindTok.Line, kindTok.Col, kindTok.Literal)
 	}
+
+	switch kindTok.Literal {
+	case ast.SignalKindMark:
+		return p.parseSignalMark(kindTok)
+	case ast.SignalKindInt:
+		return p.parseSignalInt(kindTok)
+	default:
+		// Unreachable due to validSignalKinds whitelist above.
+		return nil, fmt.Errorf("line %d col %d: unhandled signal kind %q", kindTok.Line, kindTok.Col, kindTok.Literal)
+	}
+}
+
+// parseSignalMark parses the event name (IDENT or STRING) following
+// `@signal mark`.
+func (p *Parser) parseSignalMark(kindTok token.Token) (ast.Node, error) {
 	var event string
 	if p.cur.Type == token.STRING {
 		event = p.cur.Literal
@@ -917,12 +930,75 @@ func (p *Parser) parseSignal() (ast.Node, error) {
 	} else {
 		tok, err := p.expect(token.IDENT)
 		if err != nil {
-			return nil, fmt.Errorf("line %d col %d: expected event name after '@signal %s', got %s (%q)",
-				tok.Line, tok.Col, kindTok.Literal, tok.Type, tok.Literal)
+			return nil, fmt.Errorf("line %d col %d: expected event name after '@signal mark', got %s (%q)",
+				tok.Line, tok.Col, tok.Type, tok.Literal)
 		}
 		event = tok.Literal
 	}
-	return &ast.SignalNode{Kind: kindTok.Literal, Event: event}, nil
+	return &ast.SignalNode{Kind: ast.SignalKindMark, Event: event}, nil
+}
+
+// parseSignalInt parses `<name> <op> <value>` following `@signal int`.
+func (p *Parser) parseSignalInt(kindTok token.Token) (ast.Node, error) {
+	nameTok, err := p.expect(token.IDENT)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: expected variable name after '@signal int', got %s (%q)",
+			nameTok.Line, nameTok.Col, nameTok.Type, nameTok.Literal)
+	}
+
+	// Operator: ASSIGN ('='), or a sign merged into SIGNED_NUMBER ('+N' / '-N').
+	switch p.cur.Type {
+	case token.ASSIGN:
+		p.advance() // consume '='
+		// Value: NUMBER or SIGNED_NUMBER.
+		if p.cur.Type != token.NUMBER && p.cur.Type != token.SIGNED_NUMBER {
+			return nil, fmt.Errorf("line %d col %d: expected integer literal after '@signal int %s =', got %s (%q)",
+				p.cur.Line, p.cur.Col, nameTok.Literal, p.cur.Type, p.cur.Literal)
+		}
+		valTok := p.cur
+		p.advance()
+		n, err := strconv.Atoi(valTok.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("line %d col %d: invalid integer %q in '@signal int %s = ...': %v",
+				valTok.Line, valTok.Col, valTok.Literal, nameTok.Literal, err)
+		}
+		return &ast.SignalNode{
+			Kind:  ast.SignalKindInt,
+			Name:  nameTok.Literal,
+			Op:    ast.SignalOpAssign,
+			Value: n,
+		}, nil
+
+	case token.SIGNED_NUMBER:
+		// '+N' or '-N' lexed as a single signed number token.
+		valTok := p.cur
+		p.advance()
+		n, err := strconv.Atoi(valTok.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("line %d col %d: invalid signed integer %q in '@signal int %s ...': %v",
+				valTok.Line, valTok.Col, valTok.Literal, nameTok.Literal, err)
+		}
+		if n == 0 {
+			return nil, fmt.Errorf("line %d col %d: '@signal int %s +0' or '-0' is meaningless; use '@signal int %s = 0' to assign",
+				valTok.Line, valTok.Col, nameTok.Literal, nameTok.Literal)
+		}
+		op := ast.SignalOpAdd
+		abs := n
+		if n < 0 {
+			op = ast.SignalOpSub
+			abs = -n
+		}
+		return &ast.SignalNode{
+			Kind:  ast.SignalKindInt,
+			Name:  nameTok.Literal,
+			Op:    op,
+			Value: abs,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("line %d col %d: expected '=', '+N', or '-N' after '@signal int %s', got %s (%q)",
+			p.cur.Line, p.cur.Col, nameTok.Literal, p.cur.Type, p.cur.Literal)
+	}
 }
 
 // parseAchievement parses:

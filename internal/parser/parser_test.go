@@ -1780,3 +1780,35 @@ func TestParseSignalRejectsAchievementKind(t *testing.T) {
 		t.Fatal("expected parse error: @signal achievement is not a valid kind")
 	}
 }
+
+func TestParseSignalIntAssignZero(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections = 0
+  @ending complete
+}`
+	l := lexer.New(src)
+	p := New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(ep.Body) < 1 {
+		t.Fatalf("expected at least 1 body node")
+	}
+	sig, ok := ep.Body[0].(*ast.SignalNode)
+	if !ok {
+		t.Fatalf("expected SignalNode, got %T", ep.Body[0])
+	}
+	if sig.Kind != ast.SignalKindInt {
+		t.Fatalf("expected kind %q, got %q", ast.SignalKindInt, sig.Kind)
+	}
+	if sig.Name != "rejections" {
+		t.Fatalf("expected name 'rejections', got %q", sig.Name)
+	}
+	if sig.Op != ast.SignalOpAssign {
+		t.Fatalf("expected op '=', got %q", sig.Op)
+	}
+	if sig.Value != 0 {
+		t.Fatalf("expected value 0, got %d", sig.Value)
+	}
+}
