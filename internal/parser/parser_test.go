@@ -1863,3 +1863,35 @@ func TestParseSignalIntAssignNegative(t *testing.T) {
 		t.Fatalf("got op=%q value=%d", sig.Op, sig.Value)
 	}
 }
+
+func TestParseSignalIntErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		src    string
+		substr string // expected substring in error
+	}{
+		{"missing name", `@episode main:01 "t" { @signal int @ending complete }`, "expected variable name"},
+		{"missing op", `@episode main:01 "t" { @signal int rejections
+@ending complete }`, "expected '=', '+N', or '-N'"},
+		{"missing value after =", `@episode main:01 "t" { @signal int x = @ending complete }`, "expected integer literal"},
+		{"non-integer after =", `@episode main:01 "t" { @signal int x = abc
+@ending complete }`, "expected integer literal"},
+		{"plus-zero rejected", `@episode main:01 "t" { @signal int x +0
+@ending complete }`, "meaningless"},
+		{"unknown kind", `@episode main:01 "t" { @signal foo x = 0
+@ending complete }`, "invalid signal kind"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			l := lexer.New(c.src)
+			p := New(l)
+			_, err := p.Parse()
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), c.substr) {
+				t.Fatalf("expected error containing %q, got: %v", c.substr, err)
+			}
+		})
+	}
+}
