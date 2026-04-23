@@ -957,6 +957,10 @@ func (p *Parser) parseSignalInt(kindTok token.Token) (ast.Node, error) {
 		}
 		valTok := p.cur
 		p.advance()
+		if p.cur.Type == token.DOT {
+			return nil, fmt.Errorf("line %d col %d: '@signal int %s = ...' requires an integer literal; %q looks like a float",
+				valTok.Line, valTok.Col, nameTok.Literal, valTok.Literal+".")
+		}
 		n, err := strconv.Atoi(valTok.Literal)
 		if err != nil {
 			return nil, fmt.Errorf("line %d col %d: invalid integer %q in '@signal int %s = ...': %v",
