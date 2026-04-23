@@ -1812,3 +1812,54 @@ func TestParseSignalIntAssignZero(t *testing.T) {
 		t.Fatalf("expected value 0, got %d", sig.Value)
 	}
 }
+
+func TestParseSignalIntAdd(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections +1
+  @ending complete
+}`
+	l := lexer.New(src)
+	p := New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	sig := ep.Body[0].(*ast.SignalNode)
+	if sig.Op != ast.SignalOpAdd || sig.Value != 1 || sig.Name != "rejections" {
+		t.Fatalf("got kind=%q name=%q op=%q value=%d", sig.Kind, sig.Name, sig.Op, sig.Value)
+	}
+}
+
+func TestParseSignalIntSub(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int rejections -2
+  @ending complete
+}`
+	l := lexer.New(src)
+	p := New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	sig := ep.Body[0].(*ast.SignalNode)
+	if sig.Op != ast.SignalOpSub || sig.Value != 2 {
+		t.Fatalf("got op=%q value=%d", sig.Op, sig.Value)
+	}
+}
+
+func TestParseSignalIntAssignNegative(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @signal int x = -3
+  @ending complete
+}`
+	l := lexer.New(src)
+	p := New(l)
+	ep, err := p.Parse()
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	sig := ep.Body[0].(*ast.SignalNode)
+	if sig.Op != ast.SignalOpAssign || sig.Value != -3 {
+		t.Fatalf("got op=%q value=%d", sig.Op, sig.Value)
+	}
+}
