@@ -439,24 +439,57 @@ type AffectionNode struct {
 
 func (a *AffectionNode) nodeType() string { return "affection" }
 
-// Valid signal kinds. Only "mark" is currently implemented. The kind
-// word is mandatory in the source syntax (@signal <kind> <event>) —
-// future kinds will be added to this whitelist as the engine grows.
+// Valid signal kinds.
+//
+//   - "mark" — persistent boolean flag (set-once-true)
+//   - "int"  — persistent integer variable (assign / increment / decrement)
+//
+// The kind word is mandatory in source syntax (@signal <kind> ...).
 const (
 	SignalKindMark = "mark"
+	SignalKindInt  = "int"
 )
 
-// SignalNode emits a named persistent boolean flag (a "mark"). The engine
-// stores every emitted mark forever; scripts test them in @if (NAME)
-// conditions (resolved as FlagCondition). Use only for key story points
-// that a later @if or @achievement trigger will actually query — orphan
-// marks are a documented anti-pattern.
+// Int-signal operators. @signal int <name> <op> <value>.
 //
-// Source syntax: @signal <kind> <event>. Currently kind must be "mark".
+//   - "="  — unconditional assignment (value may be negative)
+//   - "+"  — increment by value (value must be non-negative)
+//   - "-"  — decrement by value (value must be non-negative)
+const (
+	SignalOpAssign = "="
+	SignalOpAdd    = "+"
+	SignalOpSub    = "-"
+)
+
+// SignalNode emits a persistent state write. Two kinds are supported:
+//
+//   - SignalKindMark: sets a named boolean flag to true. Queried via
+//     @if (NAME) (resolved as FlagCondition). Event carries the flag
+//     name (e.g. "HIGH_HEEL_EP05"). Author discipline: only use for
+//     key story points a later reader (@if / achievement guard) needs.
+//
+//   - SignalKindInt: mutates a named persistent integer variable.
+//     Name carries the variable id (snake_case lowercase). Op is one
+//     of SignalOp{Assign,Add,Sub}. Value is the operand (Assign may
+//     be negative; Add/Sub are always non-negative). Queried via
+//     @if (NAME <op> N) comparison (bare name, resolved as a regular
+//     value-comparison through the existing left.kind="value" path).
+//     Author discipline: free use for counters and thresholds; the
+//     "marks are precious" rule does NOT apply here.
+//
+// For backward compatibility, Event is retained and used only for
+// SignalKindMark. Name/Op/Value are used only for SignalKindInt.
 type SignalNode struct {
 	ConcurrentFlag
-	Kind  string // currently always SignalKindMark (parser-enforced whitelist)
+	Kind string // SignalKindMark or SignalKindInt
+
+	// Fields for SignalKindMark.
 	Event string // e.g. "HIGH_HEEL_EP05"
+
+	// Fields for SignalKindInt.
+	Name  string // e.g. "rejections"
+	Op    string // SignalOp{Assign,Add,Sub}
+	Value int    // operand
 }
 
 func (s *SignalNode) nodeType() string { return "signal" }
