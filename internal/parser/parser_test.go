@@ -1881,6 +1881,7 @@ func TestParseSignalIntErrors(t *testing.T) {
 		{"unknown kind", `@episode main:01 "t" { @signal foo x = 0
 @ending complete }`, "invalid signal kind"},
 		{"float value", "@episode main:01 \"t\" { @signal int x = 3.5\n@ending complete }", "integer literal"},
+		{"spaced plus sign", "@episode main:01 \"t\" { @signal int x + 3\n@ending complete }", "no whitespace allowed"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

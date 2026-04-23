@@ -1000,6 +1000,10 @@ func (p *Parser) parseSignalInt(kindTok token.Token) (ast.Node, error) {
 		}, nil
 
 	default:
+		if p.cur.Type == token.ILLEGAL && (p.cur.Literal == "+" || p.cur.Literal == "-") {
+			return nil, fmt.Errorf("line %d col %d: '@signal int %s %s...': no whitespace allowed between sign and digit (write '%s1' or '%s2', not '%s 1')",
+				p.cur.Line, p.cur.Col, nameTok.Literal, p.cur.Literal, p.cur.Literal, p.cur.Literal, p.cur.Literal)
+		}
 		return nil, fmt.Errorf("line %d col %d: expected '=', '+N', or '-N' after '@signal int %s', got %s (%q)",
 			p.cur.Line, p.cur.Col, nameTok.Literal, p.cur.Type, p.cur.Literal)
 	}
