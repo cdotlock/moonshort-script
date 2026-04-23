@@ -323,3 +323,22 @@ func TestLexOperators(t *testing.T) {
 		}
 	}
 }
+
+func TestLexSingleEqualsAsAssign(t *testing.T) {
+	l := New("=")
+	tok := l.NextToken()
+	if tok.Type != token.ASSIGN {
+		t.Fatalf("expected ASSIGN, got %s (%q)", tok.Type, tok.Literal)
+	}
+	if tok.Literal != "=" {
+		t.Fatalf("expected literal '=', got %q", tok.Literal)
+	}
+}
+
+func TestLexDoubleEqualsStillEQ(t *testing.T) {
+	l := New("==")
+	tok := l.NextToken()
+	if tok.Type != token.EQ {
+		t.Fatalf("expected EQ, got %s (%q)", tok.Type, tok.Literal)
+	}
+}

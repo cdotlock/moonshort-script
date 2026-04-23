@@ -225,6 +225,10 @@ func (l *Lexer) NextToken() token.Token {
 		l.advance(); l.advance()
 		return l.makeToken(token.EQ, "==", line, col)
 
+	case ch == '=':
+		l.advance()
+		return l.makeToken(token.ASSIGN, "=", line, col)
+
 	case ch == '!' && l.peekAt(1) == '=':
 		l.advance(); l.advance()
 		return l.makeToken(token.NEQ, "!=", line, col)
