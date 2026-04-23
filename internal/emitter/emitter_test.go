@@ -844,3 +844,30 @@ func TestEmitSignalMarkUnchanged(t *testing.T) {
 	}
 	assertStepEquals(t, step, want)
 }
+
+func TestEmitIfReadsIntVariableAsComparison(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (rejections >= 3) {
+    NARRATOR: too many
+  }
+  @ending complete
+}`
+	step := firstBodyStep(t, src)
+	if step["type"] != "if" {
+		t.Fatalf("expected if, got %v", step["type"])
+	}
+	cond := step["condition"].(map[string]interface{})
+	if cond["type"] != "comparison" {
+		t.Fatalf("expected comparison, got %v", cond["type"])
+	}
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "value" || left["name"] != "rejections" {
+		t.Fatalf("unexpected left: %#v", left)
+	}
+	if cond["op"] != ">=" {
+		t.Fatalf("unexpected op: %v", cond["op"])
+	}
+	if cond["right"].(float64) != 3 {
+		t.Fatalf("unexpected right: %v", cond["right"])
+	}
+}
