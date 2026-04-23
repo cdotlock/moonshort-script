@@ -1017,6 +1017,30 @@ func TestValidateSignalIntReservedName(t *testing.T) {
 	}
 }
 
+func TestValidateSignalIntReservedNameIsItself(t *testing.T) {
+	// @signal int int = 0 — 'int' is both the kind word and in the
+	// reserved-names list. Must be rejected by the ReservedIntName check.
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "t",
+		Body: []ast.Node{
+			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "int", Op: ast.SignalOpAssign, Value: 0},
+		},
+		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == ReservedIntName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected ReservedIntName error for '@signal int int', got: %v", errs)
+	}
+}
+
 func TestValidateSignalIntOK(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
