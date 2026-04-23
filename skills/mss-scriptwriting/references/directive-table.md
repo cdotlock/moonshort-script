@@ -99,7 +99,8 @@ Check-outcome branching inside a brave option uses `@if (check.success) { } @els
 | Directive | Example |
 |-----------|---------|
 | `@affection <char> <+/-N>` | `@affection easton +2` |
-| `@signal <kind> <event>` | `@signal mark EP01_COMPLETE` — `<kind>` is mandatory; only `mark` is currently implemented. The kind slot is kept in the source grammar for future expansion |
+| `@signal mark <event>` | `@signal mark EP01_COMPLETE` — persistent boolean flag. Use sparingly; every mark must have a later reader. |
+| `@signal int <name> <op> <value>` | `@signal int rejections +1` / `= 0` / `-2` — persistent integer counter. Free to mutate. Read via `@if (name >= N)` comparison. |
 | `@butterfly <desc>` | `@butterfly "Accepted Easton's approach"` |
 | `@achievement <id> { name / rarity / description }` | Achievement unlock (block carries metadata; reaching this node fires it). Wrap in `@if (...) { ... }` for conditional triggers |
 
@@ -153,8 +154,14 @@ One form: `@achievement <id> { name / rarity / description }`. The block carries
 
 ## Signals
 
-`@signal <kind> <event>` — kind is mandatory. Currently only `mark` is implemented:
+`@signal <kind> <...>` — kind is mandatory. Two kinds are implemented:
 
-- `@signal mark <event>` — persistent boolean flag. Engine stores it forever; `@if (NAME)` queries this store. Use only for key story points with a reader (a later `@if` branch or achievement trigger).
+- `@signal mark <event>` — persistent boolean flag. Engine stores forever; `@if (NAME)` queries the store. Use only for key story points with a reader (a later `@if` branch or achievement trigger).
+- `@signal int <name> <op> <value>` — persistent integer counter. Three forms:
+  - `= <int>` — unconditional assignment (value may be negative)
+  - `+<N>` — increment by N (N is non-negative)
+  - `-<N>` — decrement by N (N is non-negative)
 
-The kind slot is kept in the source grammar and AST so future kinds can be added without breaking scripts. Achievements are **not** a signal kind — use the dedicated `@achievement <id>` trigger instead.
+  Read via `@if (name <cmp> N)` bare-name comparison. First-time reads default to 0. Names must be `snake_case` and must not collide with engine-reserved names (`san`, `cha`, `hp`, `xp`, etc.).
+
+Achievements are **not** a signal kind — use the dedicated `@achievement <id>` trigger instead.
