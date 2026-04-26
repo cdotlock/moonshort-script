@@ -24,17 +24,20 @@
   "steps": [
     [
       {
+        "id": "0001_bg",
         "name": "malias_bedroom_morning",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/malias_bedroom_morning.png"
       },
       {
+        "id": "0002_mus",
         "name": "calm_morning",
         "type": "music_play",
         "url": "https://oss.mobai.com/novel_001/music/calm_morning.mp3"
       },
       {
         "character": "malia",
+        "id": "0003_char",
         "look": "neutral_phone",
         "position": "left",
         "type": "char_show",
@@ -42,24 +45,29 @@
       }
     ],
     {
+      "id": "0004_nar",
       "text": "Senior year. Day one. Status: already complicated.",
       "type": "narrator"
     },
     {
+      "id": "0005_you",
       "text": "Another year. Same mess.",
       "type": "you"
     },
     {
+      "id": "0006_phn",
       "messages": [
         {
           "character": "easton",
           "direction": "from",
+          "id": "0001_phn",
           "text": "Can we talk? I miss you.",
           "type": "text_message"
         },
         {
           "character": "easton",
           "direction": "from",
+          "id": "0002_phn",
           "text": "I know I messed up.",
           "type": "text_message"
         }
@@ -67,32 +75,38 @@
       "type": "phone_show"
     },
     {
+      "id": "0007_phn",
       "type": "phone_hide"
     },
     {
+      "id": "0008_you",
       "text": "Eight months and he still won't stop.",
       "type": "you"
     },
     {
       "character": "malia",
+      "id": "0009_char",
       "look": "worried",
       "type": "char_look",
       "url": "https://oss.mobai.com/novel_001/characters/malia_worried.png"
     },
     [
       {
+        "id": "0010_bg",
         "name": "school_front",
         "transition": "fade",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/school_front.png"
       },
       {
+        "id": "0011_mus",
         "name": "upbeat_school",
         "type": "music_crossfade",
         "url": "https://oss.mobai.com/novel_001/music/upbeat_school.mp3"
       },
       {
         "character": "malia",
+        "id": "0012_char",
         "look": "neutral_flat",
         "position": "left",
         "type": "char_show",
@@ -100,6 +114,7 @@
       },
       {
         "character": "josie",
+        "id": "0013_char",
         "look": "cheerful_wave",
         "position": "right",
         "type": "char_show",
@@ -108,30 +123,36 @@
     ],
     {
       "character": "josie",
+      "id": "0014_dlg",
       "text": "Malia! Over here!",
       "type": "dialogue"
     },
     {
       "bubble_type": "heart",
       "character": "josie",
+      "id": "0015_char",
       "type": "bubble"
     },
     {
       "character": "malia",
+      "id": "0016_dlg",
       "text": "Hey, Jo.",
       "type": "dialogue"
     },
     {
       "character": "josie",
+      "id": "0017_dlg",
       "text": "New year, new Malia. That's the plan, right?",
       "type": "dialogue"
     },
     {
+      "id": "0018_you",
       "text": "If only it were that simple.",
       "type": "you"
     },
     [
       {
+        "id": "0019_bg",
         "name": "school_hallway",
         "transition": "fade",
         "type": "bg",
@@ -139,6 +160,7 @@
       },
       {
         "character": "josie",
+        "id": "0020_char",
         "look": "nervous_whisper",
         "type": "char_look",
         "url": "https://oss.mobai.com/novel_001/characters/josie_nervous_whisper.png"
@@ -146,12 +168,14 @@
     ],
     {
       "character": "josie",
+      "id": "0021_dlg",
       "text": "Don't look. Three o'clock.",
       "type": "dialogue"
     },
     [
       {
         "character": "mauricio",
+        "id": "0022_char",
         "look": "neutral_smirk",
         "position": "right",
         "type": "char_show",
@@ -159,37 +183,44 @@
       },
       {
         "character": "malia",
+        "id": "0023_char",
         "type": "char_hide"
       }
     ],
     {
       "character": "mauricio",
+      "id": "0024_dlg",
       "text": "Hey, Butterfly.",
       "type": "dialogue"
     },
     {
       "bubble_type": "sweat",
       "character": "josie",
+      "id": "0025_char",
       "type": "bubble"
     },
     {
+      "id": "0026_you",
       "text": "He hasn't called me that in eight years.",
       "type": "you"
     },
     [
       {
+        "id": "0027_bg",
         "name": "school_classroom",
         "transition": "fade",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/school_classroom.png"
       },
       {
+        "id": "0028_mus",
         "name": "tense_strings",
         "type": "music_crossfade",
         "url": "https://oss.mobai.com/novel_001/music/tense_strings.mp3"
       },
       {
         "character": "malia",
+        "id": "0029_char",
         "look": "neutral_flat",
         "position": "left",
         "type": "char_show",
@@ -197,6 +228,7 @@
       }
     ],
     {
+      "id": "0030_nar",
       "text": "Mr. Chen paired them together. Of course he did.",
       "type": "narrator"
     },
@@ -205,6 +237,7 @@
       "description": "a quick hallway partner-assignment check where Malia matches Mauricio's beat or drops the rhythm",
       "game_id": "qte_challenge",
       "game_url": "https://oss.mobai.com/novel_001/minigames/qte_challenge/index.html",
+      "id": "0031_mg",
       "steps": [
         {
           "condition": {
@@ -226,20 +259,24 @@
             },
             "else": [
               {
+                "id": "0001_nar",
                 "text": "Sloppy. You're distracted.",
                 "type": "narrator"
               }
             ],
             "then": [
               {
+                "id": "0001_nar",
                 "text": "Not bad. You kept up.",
                 "type": "narrator"
               }
             ],
             "type": "if"
           },
+          "id": "0001_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "Your reflexes are razor-sharp today.",
               "type": "narrator"
             }
@@ -251,18 +288,21 @@
     },
     [
       {
+        "id": "0032_bg",
         "name": "school_cafeteria",
         "transition": "fade",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/school_cafeteria.png"
       },
       {
+        "id": "0033_mus",
         "name": "casual_lunch",
         "type": "music_crossfade",
         "url": "https://oss.mobai.com/novel_001/music/casual_lunch.mp3"
       },
       {
         "character": "mark",
+        "id": "0034_char",
         "look": "grin_confident",
         "position": "right",
         "type": "char_show",
@@ -270,6 +310,7 @@
       },
       {
         "character": "malia",
+        "id": "0035_char",
         "look": "neutral_flat",
         "position": "left",
         "type": "char_show",
@@ -278,10 +319,12 @@
     ],
     {
       "character": "mark",
+      "id": "0036_dlg",
       "text": "Yo, Malia! Sit with us!",
       "type": "dialogue"
     },
     {
+      "id": "0037_sfx",
       "name": "crowd_noise",
       "type": "sfx_play",
       "url": "https://oss.mobai.com/novel_001/sfx/crowd_noise.mp3"
@@ -289,6 +332,7 @@
     [
       {
         "character": "easton",
+        "id": "0038_char",
         "look": "vulnerable_hopeful",
         "position": "right",
         "type": "char_show",
@@ -296,14 +340,17 @@
       },
       {
         "character": "mark",
+        "id": "0039_char",
         "type": "char_hide"
       }
     ],
     {
+      "id": "0040_nar",
       "text": "Easton is walking toward your table.",
       "type": "narrator"
     },
     {
+      "id": "0041_ch",
       "options": [
         {
           "check": {
@@ -321,46 +368,55 @@
               "else": [
                 {
                   "character": "easton",
+                  "id": "0001_char",
                   "look": "hurt",
                   "type": "char_look",
                   "url": "https://oss.mobai.com/novel_001/characters/easton_hurt.png"
                 },
                 {
                   "character": "malia",
+                  "id": "0002_dlg",
                   "text": "I... I can't do this.",
                   "type": "dialogue"
                 },
                 {
                   "character": "easton",
+                  "id": "0003_dlg",
                   "text": "Malia, please",
                   "type": "dialogue"
                 },
                 [
                   {
                     "character": "malia",
+                    "id": "0004_dlg",
                     "text": "Not here. Not now.",
                     "type": "dialogue"
                   },
                   {
                     "description": "Tried to face Easton but lost courage",
+                    "id": "0005_btf",
                     "type": "butterfly"
                   }
                 ]
               ],
+              "id": "0001_ctrl",
               "then": [
                 {
                   "character": "easton",
+                  "id": "0001_char",
                   "look": "relieved",
                   "type": "char_look",
                   "url": "https://oss.mobai.com/novel_001/characters/easton_relieved.png"
                 },
                 {
                   "character": "easton",
+                  "id": "0002_dlg",
                   "text": "Can I sit?",
                   "type": "dialogue"
                 },
                 {
                   "character": "malia",
+                  "id": "0003_dlg",
                   "text": "You have two minutes.",
                   "type": "dialogue"
                 },
@@ -368,16 +424,18 @@
                   {
                     "character": "easton",
                     "delta": 2,
+                    "id": "0004_aff",
                     "type": "affection"
                   },
                   {
                     "description": "Accepted Easton's approach at the cafeteria",
+                    "id": "0005_btf",
                     "type": "butterfly"
                   }
                 ],
                 {
                   "description": "You let him come close. Didn't look away.",
-                  "id": "FACED_EASTON",
+                  "id": "0006_ach",
                   "name": "Eye Contact",
                   "rarity": "uncommon",
                   "type": "achievement"
@@ -395,6 +453,7 @@
             [
               {
                 "character": "mark",
+                "id": "0001_char",
                 "look": "grin_mischief",
                 "position": "right",
                 "type": "char_show",
@@ -402,27 +461,32 @@
               },
               {
                 "character": "easton",
+                "id": "0002_char",
                 "transition": "fade",
                 "type": "char_hide"
               }
             ],
             {
               "character": "mark",
+              "id": "0003_dlg",
               "text": "HEY EASTON! You want some of my mystery casserole?",
               "type": "dialogue"
             },
             {
               "bubble_type": "music",
               "character": "mark",
+              "id": "0004_char",
               "type": "bubble"
             },
             [
               {
+                "id": "0005_you",
                 "text": "Thank god for Mark.",
                 "type": "you"
               },
               {
                 "description": "Had Mark create a diversion to avoid Easton",
+                "id": "0006_btf",
                 "type": "butterfly"
               }
             ]
@@ -434,18 +498,21 @@
     },
     [
       {
+        "id": "0042_bg",
         "name": "school_gymnasium",
         "transition": "fade",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/school_gymnasium.png"
       },
       {
+        "id": "0043_mus",
         "name": "ambient_gym",
         "type": "music_crossfade",
         "url": "https://oss.mobai.com/novel_001/music/ambient_gym.mp3"
       },
       {
         "character": "malia",
+        "id": "0044_char",
         "look": "neutral_flat",
         "position": "left",
         "type": "char_show",
@@ -453,6 +520,7 @@
       },
       {
         "character": "josie",
+        "id": "0045_char",
         "look": "excited",
         "position": "right",
         "type": "char_show",
@@ -461,16 +529,19 @@
     ],
     {
       "character": "josie",
+      "id": "0046_dlg",
       "text": "Did you see Elias in practice today?",
       "type": "dialogue"
     },
     {
+      "id": "0047_you",
       "text": "I was trying not to.",
       "type": "you"
     },
     [
       {
         "character": "elias",
+        "id": "0048_char",
         "look": "neutral_calm",
         "position": "right",
         "type": "char_show",
@@ -478,32 +549,38 @@
       },
       {
         "character": "josie",
+        "id": "0049_char",
         "type": "char_hide"
       }
     ],
     {
+      "id": "0050_nar",
       "text": "He didn't say a word. He didn't have to.",
       "type": "narrator"
     },
     {
       "bubble_type": "heart",
       "character": "malia",
+      "id": "0051_char",
       "type": "bubble"
     },
     [
       {
+        "id": "0052_bg",
         "name": "malias_bedroom_night",
         "transition": "fade",
         "type": "bg",
         "url": "https://oss.mobai.com/novel_001/bg/malias_bedroom_night.png"
       },
       {
+        "id": "0053_mus",
         "name": "night_piano",
         "type": "music_crossfade",
         "url": "https://oss.mobai.com/novel_001/music/night_piano.mp3"
       },
       {
         "character": "malia",
+        "id": "0054_char",
         "look": "neutral_phone",
         "position": "left",
         "type": "char_show",
@@ -511,14 +588,17 @@
       }
     ],
     {
+      "id": "0055_you",
       "text": "Day one. Survived. Barely.",
       "type": "you"
     },
     {
+      "id": "0056_phn",
       "messages": [
         {
           "character": "unknown",
           "direction": "from",
+          "id": "0001_phn",
           "text": "nice curtains, Butterfly",
           "type": "text_message"
         }
@@ -526,15 +606,18 @@
       "type": "phone_show"
     },
     {
+      "id": "0057_phn",
       "type": "phone_hide"
     },
     {
       "character": "malia",
+      "id": "0058_char",
       "look": "shocked",
       "type": "char_look",
       "url": "https://oss.mobai.com/novel_001/characters/malia_shocked.png"
     },
     {
+      "id": "0059_you",
       "text": "...How does he know which window is mine?",
       "type": "you"
     }

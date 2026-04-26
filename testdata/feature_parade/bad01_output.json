@@ -9,33 +9,40 @@
   "steps": [
     [
       {
+        "id": "0001_bg",
         "name": "bedroom",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
       },
       {
+        "id": "0002_mus",
         "name": "night",
         "type": "music_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
       }
     ],
     {
+      "id": "0003_nar",
       "text": "[T36] @label declares a jump target named START.",
       "type": "narrator"
     },
     {
+      "id": "0004_ctrl",
       "name": "START",
       "type": "label"
     },
     {
+      "id": "0005_nar",
       "text": "[T37] The door closed. You never opened it again.",
       "type": "narrator"
     },
     {
+      "id": "0006_you",
       "text": "One wrong move, one closed door.",
       "type": "you"
     },
     {
+      "id": "0007_nar",
       "text": "[T38] @if with flag condition drives a @goto jump below.",
       "type": "narrator"
     },
@@ -46,20 +53,25 @@
       },
       "else": [
         {
+          "id": "0001_you",
           "text": "[T38c] EP01_FACED_EASTON false — no goto, fall through to [T39].",
           "type": "you"
         }
       ],
+      "id": "0008_ctrl",
       "then": [
         {
+          "id": "0001_you",
           "text": "[T38a] Even the ones I tried for.",
           "type": "you"
         },
         {
+          "id": "0002_nar",
           "text": "[T38b → label END] @goto END will fire next — the following [T39] narrator line should be SKIPPED.",
           "type": "narrator"
         },
         {
+          "id": "0003_ctrl",
           "target": "END",
           "type": "goto"
         }
@@ -67,31 +79,38 @@
       "type": "if"
     },
     {
+      "id": "0009_nar",
       "text": "[T39] SKIP CHECK: this line appears ONLY when T38's goto was NOT taken.",
       "type": "narrator"
     },
     {
+      "id": "0010_ctrl",
       "name": "END",
       "type": "label"
     },
     {
+      "id": "0011_nar",
       "text": "[T40] @label END reached (either by fall-through or by goto jump).",
       "type": "narrator"
     },
     {
       "character": "malia",
+      "id": "0012_char",
       "look": "shocked",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_shocked.png"
     },
     {
+      "id": "0013_mus",
       "type": "music_fadeout"
     },
     {
+      "id": "0014_nar",
       "text": "[T41] Weeks later, nothing has changed.",
       "type": "narrator"
     },
     {
+      "id": "0015_nar",
       "text": "[T42] @ending bad_ending fires now.",
       "type": "narrator"
     }

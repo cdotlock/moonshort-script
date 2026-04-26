@@ -9,17 +9,20 @@
   "steps": [
     [
       {
+        "id": "0001_bg",
         "name": "cafeteria",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/cafeteria.png"
       },
       {
+        "id": "0002_mus",
         "name": "lunch",
         "type": "music_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/lunch.mp3"
       },
       {
         "character": "malia",
+        "id": "0003_char",
         "look": "flat",
         "position": "left",
         "type": "char_show",
@@ -27,6 +30,7 @@
       },
       {
         "character": "mark",
+        "id": "0004_char",
         "look": "grin",
         "position": "center",
         "type": "char_show",
@@ -34,6 +38,7 @@
       },
       {
         "character": "mauricio",
+        "id": "0005_char",
         "look": "smirk",
         "position": "right",
         "type": "char_show",
@@ -41,15 +46,18 @@
       }
     ],
     {
+      "id": "0006_nar",
       "text": "[T30] position 3 档: left / center / right 同屏出场。",
       "type": "narrator"
     },
     {
+      "id": "0007_nar",
       "text": "[T31] char_look with transition=dissolve (Malia and Mauricio change looks).",
       "type": "narrator"
     },
     {
       "character": "malia",
+      "id": "0008_char",
       "look": "smile",
       "transition": "dissolve",
       "type": "char_look",
@@ -57,12 +65,14 @@
     },
     {
       "character": "mauricio",
+      "id": "0009_char",
       "look": "almost_smile",
       "transition": "dissolve",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_almost_smile.png"
     },
     {
+      "id": "0010_nar",
       "text": "[T32] Comparison op == (strict equal).",
       "type": "narrator"
     },
@@ -88,20 +98,24 @@
         },
         "else": [
           {
+            "id": "0001_you",
             "text": "[T32c] all comparison fell through.",
             "type": "you"
           }
         ],
         "then": [
           {
+            "id": "0001_you",
             "text": "[T32b] affection.easton != 0 fallback.",
             "type": "you"
           }
         ],
         "type": "if"
       },
+      "id": "0011_ctrl",
       "then": [
         {
+          "id": "0001_you",
           "text": "[T32a] affection.easton == 3 exactly.",
           "type": "you"
         }
@@ -109,6 +123,7 @@
       "type": "if"
     },
     {
+      "id": "0012_nar",
       "text": "[T33] Comparison op \u003e and \u003c on engine value.",
       "type": "narrator"
     },
@@ -135,15 +150,18 @@
         "then": [
           {
             "character": "malia",
+            "id": "0001_dlg",
             "text": "[T33b] san \u003c 50 branch.",
             "type": "dialogue"
           }
         ],
         "type": "if"
       },
+      "id": "0013_ctrl",
       "then": [
         {
           "character": "malia",
+          "id": "0001_dlg",
           "text": "[T33a] san \u003e 50 branch.",
           "type": "dialogue"
         }
@@ -151,6 +169,7 @@
       "type": "if"
     },
     {
+      "id": "0014_nar",
       "text": "[T34] Three achievements below cover rarity rare / epic / legendary (uncommon was in T21).",
       "type": "narrator"
     },
@@ -159,15 +178,17 @@
         "name": "EP01_FACED_EASTON",
         "type": "flag"
       },
+      "id": "0015_ctrl",
       "then": [
         {
           "description": "You faced him twice.",
-          "id": "RARE_COURAGE",
+          "id": "0001_ach",
           "name": "Quiet Courage",
           "rarity": "rare",
           "type": "achievement"
         },
         {
+          "id": "0002_nar",
           "text": "[T34a] rarity=rare unlocked.",
           "type": "narrator"
         }
@@ -192,15 +213,17 @@
         },
         "type": "compound"
       },
+      "id": "0016_ctrl",
       "then": [
         {
           "description": "Two episodes. Still standing together.",
-          "id": "EPIC_BOND",
+          "id": "0001_ach",
           "name": "Full Circle",
           "rarity": "epic",
           "type": "achievement"
         },
         {
+          "id": "0002_nar",
           "text": "[T34b] rarity=epic unlocked.",
           "type": "narrator"
         }
@@ -233,15 +256,17 @@
         },
         "type": "compound"
       },
+      "id": "0017_ctrl",
       "then": [
         {
           "description": "Every choice, every risk. You took the hard road.",
-          "id": "LEGENDARY_PARADE",
+          "id": "0001_ach",
           "name": "Parade Monarch",
           "rarity": "legendary",
           "type": "achievement"
         },
         {
+          "id": "0002_nar",
           "text": "[T34c] rarity=legendary unlocked.",
           "type": "narrator"
         }
@@ -250,23 +275,27 @@
     },
     [
       {
+        "id": "0018_bg",
         "name": "gym",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
       },
       {
+        "id": "0019_mus",
         "name": "night",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
       }
     ],
     {
+      "id": "0020_you",
       "text": "[T35] Final @ending complete — story wraps, credits roll.",
       "type": "you"
     },
     {
       "event": "EP02_DONE",
+      "id": "0021_sig",
       "kind": "mark",
       "type": "signal"
     }

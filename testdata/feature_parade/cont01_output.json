@@ -9,17 +9,20 @@
   "steps": [
     [
       {
+        "id": "0001_bg",
         "name": "bedroom",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
       },
       {
+        "id": "0002_mus",
         "name": "calm",
         "type": "music_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/calm.mp3"
       },
       {
         "character": "easton",
+        "id": "0003_char",
         "look": "hopeful",
         "position": "right",
         "type": "char_show",
@@ -27,6 +30,7 @@
       },
       {
         "character": "malia",
+        "id": "0004_char",
         "look": "phone",
         "position": "left",
         "type": "char_show",
@@ -34,16 +38,19 @@
       }
     ],
     {
+      "id": "0005_nar",
       "text": "[T43] Reached Easton route via compound-flag OR influence condition in EP01 gate.",
       "type": "narrator"
     },
     {
       "character": "easton",
+      "id": "0006_dlg",
       "text": "I didn't think you'd answer.",
       "type": "dialogue"
     },
     {
       "character": "malia",
+      "id": "0007_dlg",
       "text": "I almost didn't.",
       "type": "dialogue"
     },
@@ -51,18 +58,22 @@
       {
         "character": "easton",
         "delta": 3,
+        "id": "0008_aff",
         "type": "affection"
       },
       {
         "description": "Malia opened the door for Easton after EP01",
+        "id": "0009_btf",
         "type": "butterfly"
       }
     ],
     {
+      "id": "0010_you",
       "text": "[T44] Where does this go?",
       "type": "you"
     },
     {
+      "id": "0011_nar",
       "text": "[T45] @ending to_be_continued fires — expect \"next episode coming\" screen.",
       "type": "narrator"
     }

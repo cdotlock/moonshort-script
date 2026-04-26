@@ -9,30 +9,36 @@
   "steps": [
     [
       {
+        "id": "0001_bg",
         "name": "classroom",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/classroom.png"
       },
       {
+        "id": "0002_mus",
         "name": "tense",
         "type": "music_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/tense.mp3"
       }
     ],
     {
+      "id": "0003_nar",
       "text": "[T50] Stress suite starts — each sub-test announces itself.",
       "type": "narrator"
     },
     {
+      "id": "0004_sfx",
       "name": "huh",
       "type": "sfx_play",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/huh.mp3"
     },
     {
+      "id": "0005_nar",
       "text": "[T50a] @sfx play huh — the \"huh?\" sound effect plays once.",
       "type": "narrator"
     },
     {
+      "id": "0006_nar",
       "text": "[T51] Three-level nested @if.",
       "type": "narrator"
     },
@@ -43,12 +49,15 @@
       },
       "else": [
         {
+          "id": "0001_nar",
           "text": "[T51-O] outer @else (flag false).",
           "type": "narrator"
         }
       ],
+      "id": "0007_ctrl",
       "then": [
         {
+          "id": "0001_nar",
           "text": "[T51-L1] outer flag true.",
           "type": "narrator"
         },
@@ -74,20 +83,24 @@
             },
             "else": [
               {
+                "id": "0001_nar",
                 "text": "[T51-N] mid fallback.",
                 "type": "narrator"
               }
             ],
             "then": [
               {
+                "id": "0001_nar",
                 "text": "[T51-M] mid else-if (1 \u003c= affection \u003c 3).",
                 "type": "narrator"
               }
             ],
             "type": "if"
           },
+          "id": "0002_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T51-L2] mid comparison true.",
               "type": "narrator"
             },
@@ -103,12 +116,15 @@
               },
               "else": [
                 {
+                  "id": "0001_nar",
                   "text": "[T51-L3b] innermost @else (san \u003c 50).",
                   "type": "narrator"
                 }
               ],
+              "id": "0002_ctrl",
               "then": [
                 {
+                  "id": "0001_nar",
                   "text": "[T51-L3a] innermost value comparison true — 3 levels deep.",
                   "type": "narrator"
                 }
@@ -122,6 +138,7 @@
       "type": "if"
     },
     {
+      "id": "0008_nar",
       "text": "[T52] Compound with parenthesized precedence: ((x||y) \u0026\u0026 (z||w)).",
       "type": "narrator"
     },
@@ -161,8 +178,10 @@
         },
         "type": "compound"
       },
+      "id": "0009_ctrl",
       "then": [
         {
+          "id": "0001_nar",
           "text": "[T52a] outer-AND of two OR groups true.",
           "type": "narrator"
         }
@@ -170,6 +189,7 @@
       "type": "if"
     },
     {
+      "id": "0010_nar",
       "text": "[T53] Union of two AND groups: (a \u0026\u0026 b) || (c \u0026\u0026 d).",
       "type": "narrator"
     },
@@ -212,8 +232,10 @@
         },
         "type": "compound"
       },
+      "id": "0011_ctrl",
       "then": [
         {
+          "id": "0001_nar",
           "text": "[T53a] either branch true.",
           "type": "narrator"
         }
@@ -221,6 +243,7 @@
       "type": "if"
     },
     {
+      "id": "0012_nar",
       "text": "[T54] One @if chain mixing choice / flag / influence / comparison-affection / comparison-value / compound — 6 kinds.",
       "type": "narrator"
     },
@@ -281,12 +304,14 @@
                 },
                 "else": [
                   {
+                    "id": "0001_nar",
                     "text": "[T54g] fall-through @else.",
                     "type": "narrator"
                   }
                 ],
                 "then": [
                   {
+                    "id": "0001_nar",
                     "text": "[T54f] compound of choice \u0026\u0026 comparison.",
                     "type": "narrator"
                   }
@@ -295,6 +320,7 @@
               },
               "then": [
                 {
+                  "id": "0001_nar",
                   "text": "[T54e] comparison on engine value.",
                   "type": "narrator"
                 }
@@ -303,6 +329,7 @@
             },
             "then": [
               {
+                "id": "0001_nar",
                 "text": "[T54d] comparison on affection.",
                 "type": "narrator"
               }
@@ -311,6 +338,7 @@
           },
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T54c] influence condition branch.",
               "type": "narrator"
             }
@@ -319,14 +347,17 @@
         },
         "then": [
           {
+            "id": "0001_nar",
             "text": "[T54b] flag condition branch.",
             "type": "narrator"
           }
         ],
         "type": "if"
       },
+      "id": "0013_ctrl",
       "then": [
         {
+          "id": "0001_nar",
           "text": "[T54a] choice condition branch.",
           "type": "narrator"
         }
@@ -334,6 +365,7 @@
       "type": "if"
     },
     {
+      "id": "0014_nar",
       "text": "[T55] minigame power_swing (attr=ATK) with SINGLE rating branch, no @else — validator must accept.",
       "type": "narrator"
     },
@@ -342,14 +374,17 @@
       "description": "a timing-based power swing — release at peak for an S",
       "game_id": "power_swing",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/power-swing/index.html",
+      "id": "0015_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
+          "id": "0001_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T55a] Only rating.S handled — others silently pass.",
               "type": "narrator"
             }
@@ -360,6 +395,7 @@
       "type": "minigame"
     },
     {
+      "id": "0016_nar",
       "text": "[T59] Minigame roundup — remaining 3 games each with a single-branch pass. Attrs cover CHA/INT/WIL (ATK was in T16/T55).",
       "type": "narrator"
     },
@@ -368,14 +404,17 @@
       "description": "pull the slot machine lever and read the alignment",
       "game_id": "slot_machine",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/slot-machine/index.html",
+      "id": "0017_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
+          "id": "0001_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T59a] slot_machine (CHA) S branch ran.",
               "type": "narrator"
             }
@@ -390,14 +429,17 @@
       "description": "reel in a fish with the classic bar-balance meter",
       "game_id": "stardew_fishing",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/stardew-fishing/index.html",
+      "id": "0018_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
+          "id": "0001_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T59b] stardew_fishing (INT) S branch ran.",
               "type": "narrator"
             }
@@ -412,14 +454,17 @@
       "description": "dodge falling hazards for 30 seconds",
       "game_id": "survive_30_seconds",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/survive-30-seconds/index.html",
+      "id": "0019_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
+          "id": "0001_ctrl",
           "then": [
             {
+              "id": "0001_nar",
               "text": "[T59c] survive_30_seconds (WIL) S branch ran.",
               "type": "narrator"
             }
@@ -431,23 +476,27 @@
     },
     [
       {
+        "id": "0020_bg",
         "name": "hallway",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/hallway.png"
       },
       {
+        "id": "0021_mus",
         "name": "upbeat",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/upbeat.mp3"
       },
       {
+        "id": "0022_sfx",
         "name": "bell",
         "type": "sfx_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/bell.mp3"
       },
       {
         "character": "malia",
+        "id": "0023_char",
         "look": "flat",
         "position": "center",
         "type": "char_show",
@@ -455,10 +504,12 @@
       }
     ],
     {
+      "id": "0024_nar",
       "text": "[T56] Choice stress: brave omits @else; safe nests an @if.",
       "type": "narrator"
     },
     {
+      "id": "0025_ch",
       "options": [
         {
           "check": {
@@ -473,14 +524,17 @@
                 "result": "success",
                 "type": "check"
               },
+              "id": "0001_ctrl",
               "then": [
                 {
+                  "id": "0001_nar",
                   "text": "[T56a] brave check.success — no paired @else (allowed).",
                   "type": "narrator"
                 },
                 {
                   "character": "easton",
                   "delta": 1,
+                  "id": "0002_aff",
                   "type": "affection"
                 }
               ],
@@ -505,17 +559,21 @@
               },
               "else": [
                 {
+                  "id": "0001_you",
                   "text": "[T56c] safe body nested @else.",
                   "type": "you"
                 }
               ],
+              "id": "0001_ctrl",
               "then": [
                 {
+                  "id": "0001_you",
                   "text": "[T56b] safe body nested @if true.",
                   "type": "you"
                 },
                 {
                   "description": "Walked away but hesitated",
+                  "id": "0002_btf",
                   "type": "butterfly"
                 }
               ],
@@ -528,17 +586,21 @@
       "type": "choice"
     },
     {
+      "id": "0026_nar",
       "text": "[T57] @phone show with ZERO messages — empty block edge case.",
       "type": "narrator"
     },
     {
+      "id": "0027_phn",
       "type": "phone_show"
     },
     {
+      "id": "0028_phn",
       "type": "phone_hide"
     },
     [
       {
+        "id": "0029_bg",
         "name": "gym",
         "transition": "cut",
         "type": "bg",
@@ -546,11 +608,13 @@
       },
       {
         "character": "malia",
+        "id": "0030_char",
         "position": "right",
         "type": "char_move"
       },
       {
         "character": "josie",
+        "id": "0031_char",
         "look": "excited",
         "position": "left",
         "type": "char_show",
@@ -558,27 +622,33 @@
       }
     ],
     {
+      "id": "0032_nar",
       "text": "[T58] Concurrent-group boundary test: dialogue breaks the group above; new @ below starts a fresh group.",
       "type": "narrator"
     },
     {
       "clicks": 1,
+      "id": "0033_pau",
       "type": "pause"
     },
     {
+      "id": "0034_nar",
       "text": "[T58a] @pause for 1 — single click to advance.",
       "type": "narrator"
     },
     {
       "event": "STRESS_DONE",
+      "id": "0035_sig",
       "kind": "mark",
       "type": "signal"
     },
     {
+      "id": "0036_nar",
       "text": "[T58b] @signal int — three write forms plus a comparison read.",
       "type": "narrator"
     },
     {
+      "id": "0037_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "=",
@@ -586,6 +656,7 @@
       "value": 0
     },
     {
+      "id": "0038_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "+",
@@ -593,6 +664,7 @@
       "value": 2
     },
     {
+      "id": "0039_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "-",
@@ -611,12 +683,15 @@
       },
       "else": [
         {
+          "id": "0001_nar",
           "text": "[T58b-lo] stress_count below threshold.",
           "type": "narrator"
         }
       ],
+      "id": "0040_ctrl",
       "then": [
         {
+          "id": "0001_nar",
           "text": "[T58b-hi] stress_count crossed the 2 threshold.",
           "type": "narrator"
         }
@@ -624,6 +699,7 @@
       "type": "if"
     },
     {
+      "id": "0041_nar",
       "text": "[T60 → main:02] Stress gate has only a fallback @else — will jump to ep02.md unconditionally.",
       "type": "narrator"
     }
