@@ -215,7 +215,7 @@ type CharShowNode struct {
 	ConcurrentFlag
 	Char       string // character id, e.g. "mauricio"
 	Look       string // sprite variant, e.g. "neutral_smirk"
-	Position   string // "left" | "center" | "right" | "left_far" | "right_far"
+	Position   string // "left" | "center" | "right"
 	Transition string
 }
 

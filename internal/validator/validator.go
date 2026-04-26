@@ -66,7 +66,6 @@ var validEndingTypes = map[string]bool{
 
 var validPositions = map[string]bool{
 	"left": true, "center": true, "right": true,
-	"left_far": true, "right_far": true,
 }
 
 var validTransitions = map[string]bool{
