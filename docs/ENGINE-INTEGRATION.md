@@ -6,6 +6,10 @@
 
 MSS 编译器输出按集（episode）为单位的 JSON。引擎一次加载一集，按顺序遍历 `steps`，遇到选择/路由/结束时做状态决策。每集 JSON 是自包含的——跨集共享的状态（marks、affection、choice history、butterfly records、已解锁成就）由引擎维护在**持久存储**中。
 
+### Player cursor：用 step `id` 而不是数字索引
+
+每个 step 都带一个稳定的 `id` 字段（格式 `<seq>_<tag>`，详见 [JSON-OUTPUT.md §4.0](./JSON-OUTPUT.md)）。当后端持久化玩家进度时，**cursor 必须用完整的 ID 路径**（如 `["0005_ch", "options", "A", "steps", "0001_dlg"]`），**不要**用纯数字索引（如 `[4, "options", 0, "steps", 0]`）。原因：remix patch 可能 insert/replace 同一容器内的 step，纯数字索引会静默指错位置；ID-keyed cursor 在结构变更后仍然能 lookup 到正确节点。`id` 是冻结契约，编译器算法一旦发布即不可变更——若 backend 需要变化，必须配套写一次性 cursor migration。
+
 引擎需要维护的跨集持久状态：
 
 | 存储 | 写入来源 | 读取来源 |
