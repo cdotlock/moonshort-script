@@ -118,7 +118,7 @@ All visual directives use **object-action** order: `@<object> <action> [params]`
 @mauricio hide fade                       // Exit (fade out)
 ```
 
-**Positions:** `left` | `center` | `right` | `left_far` | `right_far`
+**Positions:** `left` | `right` | `center`（绝大多数场景只用 L/R，独白/特写才用 C）
 
 **Look names** are semantic — they map to asset files via the interpreter. Use `snake_case`: `neutral_smirk`, `arms_crossed_angry`, `vulnerable_hopeful`. You can use any descriptive snake_case name.
 

@@ -208,7 +208,7 @@ for element in steps:
 | `character` | string | 是 | 角色 ID（小写） |
 | `look` | string | 是 | 立绘名 |
 | `url` | string | 是 | 已解析的 OSS URL |
-| `position` | string | 是 | `"left"` / `"center"` / `"right"` / `"left_far"` / `"right_far"` |
+| `position` | string | 是 | `"left"` / `"center"` / `"right"` |
 | `transition` | string | 否 | 入场过渡效果 |
 
 #### `char_hide` — 角色退场

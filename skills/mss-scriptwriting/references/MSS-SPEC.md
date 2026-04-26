@@ -252,15 +252,15 @@ NARRATOR: The dust settled.
 
 - `char`：角色 ID（小写）
 - `look`：立绘名，对应素材语义名 `{char}_{look}`
-- `pos`：`left` | `center` | `right` | `left_far` | `right_far`
+- `pos`：`left` | `center` | `right`
 
 | 位置 | 屏幕位置 | 适合场景 |
 |------|---------|---------|
-| `left` | 左侧 1/4 处 | 对话一方 |
-| `center` | 正中间 | 独白、特写 |
-| `right` | 右侧 1/4 处 | 对话另一方 |
-| `left_far` | 最左边缘 | 第三角色 / 远处 |
-| `right_far` | 最右边缘 | 第三角色 / 远处 |
+| `left` | 左侧 | 对话一方（首选） |
+| `right` | 右侧 | 对话另一方（首选） |
+| `center` | 正中间 | 独白、特写、单人镜头 |
+
+> 绝大多数场景只需要 `left` / `right`；仅在独白、特写或同屏只有一人时使用 `center`。
 
 **`@<char> hide [transition]`** — 角色退场
 

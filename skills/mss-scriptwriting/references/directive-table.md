@@ -35,7 +35,7 @@
 | `@bg set <name> [trans]` | `@bg set classroom fade` |
 | `@cg show <name> [trans] { duration: ... content: "..." ... }` | See CG section below — `duration` and `content` fields are required |
 
-Positions: `left` `center` `right` `left_far` `right_far`
+Positions: `left` `right` `center`（绝大多数场景只用 L/R，独白/特写才用 C）
 Transitions: (none)=dissolve, `fade`, `cut`, `slow`
 Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ellipsis`
 
