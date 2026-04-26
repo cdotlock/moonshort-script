@@ -92,7 +92,7 @@ YOU: I hate having a best friend who actually pays attention.
 @bg school_hallway_morning fade
 
 @show malia neutral_walking at left
-@show josie neutral_walking at left_far
+@show josie neutral_walking at left
 
 NARRATOR: And then, because the universe has a truly terrible sense of humor--
 
@@ -159,7 +159,7 @@ YOU: I especially don't want to know why it made my stomach do something inconve
 @bg cafeteria_noon fade
 
 @show malia sitting_neutral at left
-@show josie sitting_neutral at left_far
+@show josie sitting_neutral at left
 
 @show mark neutral_grin at right
 
@@ -189,7 +189,7 @@ YOU: I don't know if that's because he doesn't care or because he knows exactly 
 
 YOU: With Mark, it could be either.
 
-@show easton neutral_warm at right_far
+@show easton neutral_warm at right
 
 YOU: Oh no.
 
@@ -278,7 +278,7 @@ MARK [neutral_quiet]: Want me to make a scene? I can absolutely make a scene.
 NARRATOR: Afternoon. Basketball tryouts and soccer practice share the gym on the first day because someone in administration hates us personally.
 
 @show malia sitting_watching at left
-@show josie sitting_watching at left_far
+@show josie sitting_watching at left
 
 JOSIE [neutral_pointing]: Tyler's gotten better over the summer.
 
@@ -288,7 +288,7 @@ JOSIE [neutral_knowing]: You're not looking at Tyler.
 
 MALIA [neutral_defensive]: I'm looking at the general area of athletic activity.
 
-@show elias neutral_stretching at right_far
+@show elias neutral_stretching at right
 
 YOU: Elias Hall.
 
@@ -897,7 +897,7 @@ NARRATOR: Three conversations open. Easton's unread text from this morning. Elia
 @music party_beat
 
 @show malia neutral_entering at left
-@show josie neutral_entering at left_far
+@show josie neutral_entering at left
 
 NARRATOR: Kelly Baker's back-to-school party. Seniors only. Which means every single person I'm trying to figure out is in one room.
 
@@ -1024,7 +1024,7 @@ ELIAS [neutral_calm]: Notice cracks. You just hide it better than Esther.
 
 @sfx door_open
 
-@show easton neutral_looking at right_far
+@show easton neutral_looking at right
 
 EASTON: Mal? You out here?
 

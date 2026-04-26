@@ -21,16 +21,9 @@
       {
         "character": "malia",
         "look": "flat",
-        "position": "left_far",
-        "type": "char_show",
-        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
-      },
-      {
-        "character": "josie",
-        "look": "excited",
         "position": "left",
         "type": "char_show",
-        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/josie_excited.png"
+        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
       },
       {
         "character": "mark",
@@ -40,22 +33,15 @@
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mark_grin.png"
       },
       {
-        "character": "easton",
-        "look": "hopeful",
-        "position": "right",
-        "type": "char_show",
-        "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hopeful.png"
-      },
-      {
         "character": "mauricio",
         "look": "smirk",
-        "position": "right_far",
+        "position": "right",
         "type": "char_show",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_smirk.png"
       }
     ],
     {
-      "text": "[T30] position 5 档: left_far / left / center / right / right_far 一字排开。",
+      "text": "[T30] position 3 档: left / center / right 同屏出场。",
       "type": "narrator"
     },
     {
