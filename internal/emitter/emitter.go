@@ -252,12 +252,19 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 	case *ast.ButterflyNode:
 		return map[string]interface{}{"type": "butterfly", "description": v.Description}
 	case *ast.AchievementNode:
+		// The JSON `achievement_id` field carries the semantic id from MSS
+		// source `@achievement <id> { ... }` (e.g. "RARE_COURAGE"), distinct
+		// from the new compiler-assigned `id` field (the cursor stable-step
+		// id, format `<seq>_<tag>`). This mirrors MinigameStep.game_id —
+		// keeping the semantic id under a domain-specific key avoids
+		// collision with the universal stable step id stamped by
+		// assignStepID after this map is returned.
 		return map[string]interface{}{
-			"type":        "achievement",
-			"id":          v.ID,
-			"name":        v.Name,
-			"rarity":      v.Rarity,
-			"description": v.Description,
+			"type":           "achievement",
+			"achievement_id": v.ID,
+			"name":           v.Name,
+			"rarity":         v.Rarity,
+			"description":    v.Description,
 		}
 	case *ast.IfNode:
 		return e.emitIf(v)

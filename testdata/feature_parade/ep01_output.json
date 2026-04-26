@@ -587,6 +587,7 @@
                   "type": "narrator"
                 },
                 {
+                  "achievement_id": "EYE_CONTACT",
                   "description": "Didn't look away.",
                   "id": "0011_ach",
                   "name": "Eye Contact",

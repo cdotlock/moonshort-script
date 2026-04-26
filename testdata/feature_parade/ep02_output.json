@@ -181,6 +181,7 @@
       "id": "0015_ctrl",
       "then": [
         {
+          "achievement_id": "RARE_COURAGE",
           "description": "You faced him twice.",
           "id": "0001_ach",
           "name": "Quiet Courage",
@@ -216,6 +217,7 @@
       "id": "0016_ctrl",
       "then": [
         {
+          "achievement_id": "EPIC_BOND",
           "description": "Two episodes. Still standing together.",
           "id": "0001_ach",
           "name": "Full Circle",
@@ -259,6 +261,7 @@
       "id": "0017_ctrl",
       "then": [
         {
+          "achievement_id": "LEGENDARY_PARADE",
           "description": "Every choice, every risk. You took the hard road.",
           "id": "0001_ach",
           "name": "Parade Monarch",

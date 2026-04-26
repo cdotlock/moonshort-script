@@ -29,7 +29,7 @@ func newMockResolver() *mockResolver {
 		},
 		characters: map[string]map[string]string{
 			"mauricio": {
-				"neutral_smirk":    "https://cdn.test/characters/mauricio_neutral_smirk.png",
+				"neutral_smirk":      "https://cdn.test/characters/mauricio_neutral_smirk.png",
 				"arms_crossed_angry": "https://cdn.test/characters/mauricio_arms_crossed_angry.png",
 			},
 		},
@@ -457,8 +457,8 @@ func TestEmitConditionTypes(t *testing.T) {
 		{"choice", &ast.ChoiceCondition{Option: "A", Result: "fail"}},
 		{"flag", &ast.FlagCondition{Name: "EP01"}},
 		{"comparison", &ast.ComparisonCondition{
-			Left: ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
-			Op:   ">=",
+			Left:  ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
+			Op:    ">=",
 			Right: 5,
 		}},
 		{"influence", &ast.InfluenceCondition{Description: "desc"}},
@@ -544,8 +544,8 @@ func TestEmitAllNodeTypes(t *testing.T) {
 	}
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
-		Body:      nodes,
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Body: nodes,
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -567,8 +567,8 @@ func TestEmitConcurrentGroups(t *testing.T) {
 
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
-		Body:      []ast.Node{bg, music, char, narrator},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Body: []ast.Node{bg, music, char, narrator},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
 	data, _ := em.Emit(ep)
@@ -692,13 +692,22 @@ func TestEmitAchievementStep(t *testing.T) {
 	if step["type"] != "achievement" {
 		t.Errorf("step type: got %v, want 'achievement'", step["type"])
 	}
-	for _, key := range []string{"id", "name", "rarity", "description"} {
+	for _, key := range []string{"achievement_id", "name", "rarity", "description"} {
 		if _, ok := step[key]; !ok {
 			t.Errorf("achievement step missing %q key", key)
 		}
 	}
+	if step["achievement_id"] != "HEEL_WARRIOR" {
+		t.Errorf("achievement_id: got %v, want HEEL_WARRIOR (semantic id from MSS source)", step["achievement_id"])
+	}
 	if step["rarity"] != "rare" {
 		t.Errorf("rarity: got %v", step["rarity"])
+	}
+	// And the compiler-assigned stable step id should also be present
+	// (the universal `id` field stamped by assignStepID, distinct from
+	// the semantic `achievement_id`).
+	if step["id"] != "0001_ach" {
+		t.Errorf("step.id: got %v, want 0001_ach (compiler-assigned stable step id)", step["id"])
 	}
 }
 
@@ -1024,7 +1033,7 @@ func TestStepIDChoiceContainerScoping(t *testing.T) {
 		BranchKey: "main:01",
 		Title:     "T",
 		Body: []ast.Node{
-			&ast.NarratorNode{Text: "intro"}, // 0001_nar
+			&ast.NarratorNode{Text: "intro"},  // 0001_nar
 			&ast.NarratorNode{Text: "intro2"}, // 0002_nar
 			&ast.ChoiceNode{ // 0003_ch
 				Options: []*ast.OptionNode{
@@ -1209,9 +1218,14 @@ func TestStepIDMinigameContainerScoping(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
-	data, _ := em.Emit(ep)
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
 	var result map[string]interface{}
-	json.Unmarshal(data, &result)
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
 	steps := result["steps"].([]interface{})
 	mg := steps[1].(map[string]interface{})
 	if mg["id"] != "0002_mg" {
@@ -1245,9 +1259,14 @@ func TestStepIDCgShowContainerScoping(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
-	data, _ := em.Emit(ep)
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
 	var result map[string]interface{}
-	json.Unmarshal(data, &result)
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
 	steps := result["steps"].([]interface{})
 	cg := steps[0].(map[string]interface{})
 	if cg["id"] != "0001_cg" {
@@ -1319,41 +1338,58 @@ func TestStepIDDeterminism(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	var walkAndCheck func(v interface{}, path string)
-	walkAndCheck = func(v interface{}, path string) {
-		switch x := v.(type) {
-		case map[string]interface{}:
-			// A "step" is a map that has a "type" field. (Conditions and
-			// option records also have "type" but live under known parent
-			// keys — we identify steps by checking for "type" + presence
-			// at a known step location. Easier rule: if it's a map with
-			// a "type" string AND the type is in stepTypeTag's table,
-			// it's a step and must have id.)
-			if typeVal, ok := x["type"].(string); ok && stepTypeTag(typeVal) != "unk" {
-				// Skip conditions: they have their own type vocabulary
-				// (choice/flag/comparison/influence/compound/check/rating)
-				// that doesn't overlap with step types — except "choice"
-				// is both a step type and a condition type. Disambiguate
-				// by checking parent path.
-				isCondition := strings.Contains(path, ".condition") ||
-					strings.HasPrefix(path, "root.gate") &&
-						(strings.HasSuffix(path, ".if") || strings.HasSuffix(path, ".left") || strings.HasSuffix(path, ".right"))
-				if !isCondition {
-					if _, hasID := x["id"]; !hasID {
-						t.Errorf("step at %s (type=%s) missing id field", path, typeVal)
-					}
-				}
-			}
-			for k, val := range x {
-				walkAndCheck(val, path+"."+k)
-			}
-		case []interface{}:
-			for i, val := range x {
-				walkAndCheck(val, fmt.Sprintf("%s[%d]", path, i))
+	// Walk only the step-bearing containers — top-level steps, plus any
+	// nested step lists under known step keys. This avoids descending into
+	// `condition` / `gate` / comparison `left|right` / etc., where maps
+	// also carry a "type" field but are not steps and have no id.
+	walkSteps(result["steps"], func(step map[string]interface{}, path string) {
+		typeVal, _ := step["type"].(string)
+		if _, hasID := step["id"]; !hasID {
+			t.Errorf("step at %s (type=%s) missing id field", path, typeVal)
+		}
+	})
+}
+
+// walkSteps recursively walks an emitted-steps tree (the value of a
+// container's `steps` / `messages` / `then` / `else` key), calling visit
+// on every emitted step (= map with a "type" field that is a known step
+// type). Skips non-step subtrees like `condition`, gate `if`/`else`,
+// comparison `left`/`right`, etc.
+//
+// Concurrent groups appear as []any nested directly inside a steps slice;
+// each member of the group is its own step and is visited individually.
+//
+// Option records inside `choice.options` are not steps themselves (no
+// "type" field) but they carry a `steps` body that must be descended into.
+func walkSteps(node interface{}, visit func(step map[string]interface{}, path string)) {
+	walkStepsAt(node, "steps", visit)
+}
+
+func walkStepsAt(node interface{}, path string, visit func(step map[string]interface{}, path string)) {
+	switch v := node.(type) {
+	case map[string]interface{}:
+		// Two cases for a map under a step-bearing key:
+		//   1. It's an actual step: has a "type" key in stepTypeTag's table.
+		//   2. It's an option record (under choice.options): no "type", but
+		//      may have a `steps` body — descend into known child keys
+		//      regardless.
+		if t, ok := v["type"].(string); ok && stepTypeTag(t) != "unk" {
+			visit(v, path)
+		}
+		// Recurse into known step-bearing fields. (Note: we do NOT recurse
+		// into "condition" — that's a parsed condition tree, not steps.)
+		// `options` is recursed because its members are option records that
+		// in turn contain `steps`.
+		for _, key := range []string{"steps", "messages", "then", "else", "options"} {
+			if child, ok := v[key]; ok {
+				walkStepsAt(child, path+"."+key, visit)
 			}
 		}
+	case []interface{}:
+		for i, item := range v {
+			walkStepsAt(item, fmt.Sprintf("%s[%d]", path, i), visit)
+		}
 	}
-	walkAndCheck(result, "root")
 }
 
 // TestStepIDUniqueWithinContainer verifies that within any single
@@ -1374,9 +1410,14 @@ func TestStepIDUniqueWithinContainer(t *testing.T) {
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
-	data, _ := em.Emit(ep)
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
 	var result map[string]interface{}
-	json.Unmarshal(data, &result)
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
 	steps := result["steps"].([]interface{})
 	seen := map[string]bool{}
 	for i, s := range steps {

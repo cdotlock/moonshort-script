@@ -434,6 +434,7 @@
                   }
                 ],
                 {
+                  "achievement_id": "FACED_EASTON",
                   "description": "You let him come close. Didn't look away.",
                   "id": "0006_ach",
                   "name": "Eye Contact",

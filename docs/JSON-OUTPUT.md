@@ -149,7 +149,7 @@ for element in steps:
 | `sfx_play` | 播放音效 |
 | `affection` | 好感度变更 |
 | `signal` | 事件信号（目前只认 `kind=mark` 持久布尔标记；kind 字段保留以便未来扩展） |
-| `achievement` | 成就解锁事件（自带元数据：id / name / rarity / description） |
+| `achievement` | 成就解锁事件（自带元数据：achievement_id / name / rarity / description） |
 | `butterfly` | 蝴蝶效应记录 |
 | `label` | 跳转锚点（引擎内部用） |
 | `goto` | 跳转（引擎内部用） |
@@ -696,7 +696,7 @@ minigame body 步骤在 `steps` 字段下，评级分支通过嵌套的 `@if (ra
 ```json
 {
   "type": "achievement",
-  "id": "HIGH_HEEL_DOUBLE_KILL",
+  "achievement_id": "HIGH_HEEL_DOUBLE_KILL",
   "name": "Heel Twice Over",
   "rarity": "epic",
   "description": "Once is improvisation. Twice is a signature move."
@@ -715,11 +715,13 @@ MSS 源语法 `@achievement <id> { name / rarity / description }`——块内携
 }
 ```
 
-引擎收到该 step 后走成就系统：UI 弹窗、解锁状态持久化、数据上报。同一 id 重复触发由引擎按 id 去重（首次解锁即生效）。触发事件**不**影响 flag 存储——`@if (HIGH_HEEL_DOUBLE_KILL)` 查不到。
+引擎收到该 step 后走成就系统：UI 弹窗、解锁状态持久化、数据上报。同一 `achievement_id` 重复触发由引擎按 `achievement_id` 去重（首次解锁即生效）。触发事件**不**影响 flag 存储——`@if (HIGH_HEEL_DOUBLE_KILL)` 查不到。
+
+> **注意 `id` vs `achievement_id`：** 与所有 step 一样，`achievement` 也带通用的 `id` 字段（cursor 稳定步骤 id，格式 `<seq>_ach`，见 §4.0）；`achievement_id` 才是 MSS 源里 `@achievement <id>` 写下的语义标识（如 `"RARE_COURAGE"`）。两者不可互换：执行器/UI 用 `achievement_id` 记录解锁状态，cursor 用 `id` 定位。这与 `minigame` 的 `id`/`game_id` 二分一致。
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `id` | string | 是 | 成就唯一标识 |
+| `achievement_id` | string | 是 | 成就语义标识（来自 MSS `@achievement <id>`） |
 | `name` | string | 是 | 显示名称（英文） |
 | `rarity` | string | 是 | `"uncommon"` / `"rare"` / `"epic"` / `"legendary"`（**无 `common`**） |
 | `description` | string | 是 | DM 口吻 flavor 文本（英文） |
@@ -734,7 +736,7 @@ MSS 源语法 `@achievement <id> { name / rarity / description }`——块内携
 |------|------|------|
 | `affection` | `character: string, delta: number` | 角色好感变化量 |
 | `signal` | `kind: string, event: string` | `kind` 目前只认 `"mark"` |
-| `achievement` | `id / name / rarity / description` | 成就解锁事件，step 自带完整元数据 |
+| `achievement` | `achievement_id / name / rarity / description` | 成就解锁事件，step 自带完整元数据 |
 | `butterfly` | `description: string` | 蝴蝶效应描述 |
 
 ### 4.8 流程控制类
