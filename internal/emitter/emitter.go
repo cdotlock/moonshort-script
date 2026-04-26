@@ -69,8 +69,86 @@ func isConcurrent(n ast.Node) bool {
 	return false
 }
 
+// stepTypeTag maps a step's "type" discriminator to the 2-4 letter tag
+// used in the stable step id (see assignStepID).
+//
+// CONTRACT: This function — together with assignStepID — is the SOLE
+// authority on the original-step id format emitted by the compiler.
+// Once an episode JSON has been shipped to a backend that persists
+// player-session cursors keyed by these ids, NEVER change either
+// function's algorithm without coordinating a one-shot data migration.
+// Renaming a tag, changing the seq width, or reordering grouping
+// semantics will silently invalidate every persisted cursor.
+//
+// Returns "unk" for any unrecognized type. The validator should reject
+// scripts that produce unknown types before they reach the emitter; the
+// fallback exists so we never panic if a new step type is added without
+// updating this table.
+func stepTypeTag(stepType string) string {
+	switch stepType {
+	case "dialogue":
+		return "dlg"
+	case "narrator":
+		return "nar"
+	case "you":
+		return "you"
+	case "pause":
+		return "pau"
+	case "choice":
+		return "ch"
+	case "minigame":
+		return "mg"
+	case "cg_show":
+		return "cg"
+	case "bg":
+		return "bg"
+	case "char_show", "char_hide", "char_look", "char_move", "bubble":
+		return "char"
+	case "music_play", "music_crossfade", "music_fadeout":
+		return "mus"
+	case "sfx_play":
+		return "sfx"
+	case "phone_show", "phone_hide", "text_message":
+		return "phn"
+	case "signal":
+		return "sig"
+	case "affection":
+		return "aff"
+	case "achievement":
+		return "ach"
+	case "butterfly":
+		return "btf"
+	case "if", "goto", "label":
+		return "ctrl"
+	default:
+		return "unk"
+	}
+}
+
+// assignStepID stamps a stable id onto a single emitted step map.
+//
+// Format: <seq>_<tag>, where seq is a 4-digit zero-padded 1-based counter
+// scoped to the surrounding container (top-level steps, an option's body,
+// a minigame's body, a cg_show's body, an if's then/else, a phone_show's
+// messages — each restarts at 0001), and tag is the short type code
+// returned by stepTypeTag.
+//
+// Concurrent groups are NOT containers: members of a group consume
+// sequential seqs from the parent container (e.g. 0005_dlg, 0006_char),
+// not a nested 0001 restart. This matches the runtime walker's notion
+// of concurrent siblings being flat positional slots.
+//
+// CONTRACT: This function is the SOLE authority on original-step ids.
+// See stepTypeTag for the migration warning — both functions move
+// together or not at all.
+func assignStepID(step map[string]interface{}, seq int) {
+	stepType, _ := step["type"].(string)
+	step["id"] = fmt.Sprintf("%04d_%s", seq, stepTypeTag(stepType))
+}
+
 // emitNodes converts a slice of AST nodes into a slice of steps, grouping
-// consecutive concurrent (&-prefixed) nodes into sub-arrays.
+// consecutive concurrent (&-prefixed) nodes into sub-arrays, and stamping
+// every emitted step with a container-scoped stable id.
 //
 // Grouping rule:
 //   - A non-concurrent node (@-prefixed or dialogue) starts a potential group.
@@ -78,9 +156,18 @@ func isConcurrent(n ast.Node) bool {
 //   - When the next non-concurrent node arrives, the group is flushed.
 //   - Single-item groups are emitted as plain objects.
 //   - Multi-item groups are emitted as arrays (concurrent execution).
+//
+// ID assignment: each emitted step (whether solo or inside a concurrent
+// group) consumes one seq from a counter local to this call — i.e. each
+// container restarts at 0001. Concurrent group members share the parent
+// counter and get sequential seqs (NOT a nested restart). Recursion into
+// child containers (option.steps, minigame.steps, cg_show.steps, if.then/
+// else, phone_show.messages) happens via downstream emitNodes calls,
+// each of which gets its own fresh counter.
 func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
 	steps := make([]interface{}, 0)
 	var group []interface{} // current group being accumulated
+	seq := 0                // container-scoped 1-based counter (incremented before assignment)
 
 	flush := func() {
 		if len(group) == 0 {
@@ -99,6 +186,9 @@ func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
 		if step == nil {
 			continue
 		}
+
+		seq++
+		assignStepID(step, seq)
 
 		if isConcurrent(n) {
 			// & node: join the current group

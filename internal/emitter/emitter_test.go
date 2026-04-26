@@ -790,6 +790,7 @@ func TestEmitSignalIntAssign(t *testing.T) {
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
+		"id":    "0001_sig",
 		"type":  "signal",
 		"kind":  "int",
 		"name":  "rejections",
@@ -806,6 +807,7 @@ func TestEmitSignalIntAdd(t *testing.T) {
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
+		"id":    "0001_sig",
 		"type":  "signal",
 		"kind":  "int",
 		"name":  "rejections",
@@ -822,6 +824,7 @@ func TestEmitSignalIntSub(t *testing.T) {
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
+		"id":    "0001_sig",
 		"type":  "signal",
 		"kind":  "int",
 		"name":  "rejections",
@@ -838,6 +841,7 @@ func TestEmitSignalMarkUnchanged(t *testing.T) {
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
+		"id":    "0001_sig",
 		"type":  "signal",
 		"kind":  "mark",
 		"event": "HIGH_HEEL_EP05",
@@ -869,5 +873,517 @@ func TestEmitIfReadsIntVariableAsComparison(t *testing.T) {
 	}
 	if cond["right"].(float64) != 3 {
 		t.Fatalf("unexpected right: %v", cond["right"])
+	}
+}
+
+// ---------- Step ID tests (Task 1: Stable Step ID & Content-Addressed Cursor) ----------
+
+// TestStepTypeTag verifies the type-tag mapping is exactly the documented
+// contract. Backends key persisted player cursors on these tags — changing
+// any value here is a breaking schema change requiring a data migration.
+func TestStepTypeTag(t *testing.T) {
+	tests := []struct {
+		stepType string
+		want     string
+	}{
+		{"dialogue", "dlg"},
+		{"narrator", "nar"},
+		{"you", "you"},
+		{"pause", "pau"},
+		{"choice", "ch"},
+		{"minigame", "mg"},
+		{"cg_show", "cg"},
+		{"bg", "bg"},
+		{"char_show", "char"},
+		{"char_hide", "char"},
+		{"char_look", "char"},
+		{"char_move", "char"},
+		{"bubble", "char"},
+		{"music_play", "mus"},
+		{"music_crossfade", "mus"},
+		{"music_fadeout", "mus"},
+		{"sfx_play", "sfx"},
+		{"phone_show", "phn"},
+		{"phone_hide", "phn"},
+		{"text_message", "phn"},
+		{"signal", "sig"},
+		{"affection", "aff"},
+		{"achievement", "ach"},
+		{"butterfly", "btf"},
+		{"if", "ctrl"},
+		{"goto", "ctrl"},
+		{"label", "ctrl"},
+		{"unknown_future_type", "unk"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.stepType, func(t *testing.T) {
+			if got := stepTypeTag(tt.stepType); got != tt.want {
+				t.Errorf("stepTypeTag(%q) = %q, want %q", tt.stepType, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStepIDFormatTopLevel verifies that top-level steps get sequential
+// container-scoped 4-digit ids, in declaration order.
+func TestStepIDFormatTopLevel(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.NarratorNode{Text: "1"},
+			&ast.DialogueNode{Character: "JOSIE", Text: "2"},
+			&ast.YouNode{Text: "3"},
+			&ast.PauseNode{Clicks: 1},
+			&ast.BgSetNode{Name: "x"},
+			&ast.MusicPlayNode{Track: "m"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	steps := result["steps"].([]interface{})
+
+	wantIDs := []string{"0001_nar", "0002_dlg", "0003_you", "0004_pau", "0005_bg", "0006_mus"}
+	if len(steps) != len(wantIDs) {
+		t.Fatalf("len(steps)=%d, want %d", len(steps), len(wantIDs))
+	}
+	for i, want := range wantIDs {
+		step := steps[i].(map[string]interface{})
+		if got := step["id"]; got != want {
+			t.Errorf("steps[%d].id = %v, want %q", i, got, want)
+		}
+	}
+}
+
+// TestStepIDConcurrentGroupSharesParentCounter verifies that a concurrent
+// group consumes sequential seqs from the parent container — it is NOT a
+// nested 0001 restart. The group as a JSON array does not itself carry an
+// id; only the steps inside it do.
+func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
+	bg := &ast.BgSetNode{Name: "bg1"}
+	music := &ast.MusicPlayNode{Track: "calm_morning"}
+	music.SetConcurrent(true)
+	char := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk", Position: "right"}
+	char.SetConcurrent(true)
+	narr := &ast.NarratorNode{Text: "after"}
+
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{bg, music, char, narr},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+
+	// steps[0] should be a concurrent group (array of 3) consuming seqs 1,2,3.
+	group, ok := steps[0].([]interface{})
+	if !ok {
+		t.Fatalf("steps[0] should be array, got %T", steps[0])
+	}
+	if len(group) != 3 {
+		t.Fatalf("group length = %d, want 3", len(group))
+	}
+	wantGroupIDs := []string{"0001_bg", "0002_mus", "0003_char"}
+	for i, want := range wantGroupIDs {
+		g := group[i].(map[string]interface{})
+		if g["id"] != want {
+			t.Errorf("group[%d].id = %v, want %q", i, g["id"], want)
+		}
+	}
+
+	// steps[1] is the standalone narrator; it should consume seq 4
+	// (NOT restart at 0001) because the concurrent group did not open a
+	// new container.
+	narrStep := steps[1].(map[string]interface{})
+	if narrStep["id"] != "0004_nar" {
+		t.Errorf("narrator after group should be 0004_nar, got %v", narrStep["id"])
+	}
+}
+
+// TestStepIDChoiceContainerScoping verifies that each option's body
+// restarts the seq counter at 0001 — option A's first step is 0001_*
+// even though the choice itself is somewhere later in the parent counter,
+// and option B's first step is also 0001_*.
+func TestStepIDChoiceContainerScoping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.NarratorNode{Text: "intro"}, // 0001_nar
+			&ast.NarratorNode{Text: "intro2"}, // 0002_nar
+			&ast.ChoiceNode{ // 0003_ch
+				Options: []*ast.OptionNode{
+					{
+						ID:   "A",
+						Mode: "safe",
+						Text: "A",
+						Body: []ast.Node{
+							&ast.DialogueNode{Character: "X", Text: "a1"},
+							&ast.NarratorNode{Text: "a2"},
+							&ast.DialogueNode{Character: "X", Text: "a3"},
+						},
+					},
+					{
+						ID:   "B",
+						Mode: "safe",
+						Text: "B",
+						Body: []ast.Node{
+							&ast.DialogueNode{Character: "X", Text: "b1"},
+							&ast.DialogueNode{Character: "X", Text: "b2"},
+							&ast.NarratorNode{Text: "b3"},
+						},
+					},
+				},
+			},
+			&ast.NarratorNode{Text: "outro"}, // 0004_nar (continues parent counter past choice)
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+
+	steps := result["steps"].([]interface{})
+	// Top-level: 0001_nar, 0002_nar, 0003_ch, 0004_nar
+	for i, want := range []string{"0001_nar", "0002_nar", "0003_ch", "0004_nar"} {
+		got := steps[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("top-level steps[%d].id = %v, want %q", i, got, want)
+		}
+	}
+
+	choice := steps[2].(map[string]interface{})
+	options := choice["options"].([]interface{})
+
+	// Option A body: 0001_dlg, 0002_nar, 0003_dlg
+	stepsA := options[0].(map[string]interface{})["steps"].([]interface{})
+	for i, want := range []string{"0001_dlg", "0002_nar", "0003_dlg"} {
+		got := stepsA[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("optA.steps[%d].id = %v, want %q (option container should restart at 0001)", i, got, want)
+		}
+	}
+
+	// Option B body: 0001_dlg, 0002_dlg, 0003_nar
+	stepsB := options[1].(map[string]interface{})["steps"].([]interface{})
+	for i, want := range []string{"0001_dlg", "0002_dlg", "0003_nar"} {
+		got := stepsB[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("optB.steps[%d].id = %v, want %q (option container should restart at 0001)", i, got, want)
+		}
+	}
+}
+
+// TestStepIDIfContainerScoping verifies that if.then and if.else each
+// restart at 0001 independently.
+func TestStepIDIfContainerScoping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.IfNode{
+				Condition: &ast.FlagCondition{Name: "X"},
+				Then: []ast.Node{
+					&ast.NarratorNode{Text: "t1"},
+					&ast.DialogueNode{Character: "X", Text: "t2"},
+				},
+				Else: []ast.Node{
+					&ast.DialogueNode{Character: "X", Text: "e1"},
+					&ast.NarratorNode{Text: "e2"},
+					&ast.PauseNode{Clicks: 1},
+				},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+
+	steps := result["steps"].([]interface{})
+	ifStep := steps[0].(map[string]interface{})
+	if ifStep["id"] != "0001_ctrl" {
+		t.Errorf("if step id = %v, want 0001_ctrl", ifStep["id"])
+	}
+
+	thenBranch := ifStep["then"].([]interface{})
+	for i, want := range []string{"0001_nar", "0002_dlg"} {
+		got := thenBranch[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("then[%d].id = %v, want %q", i, got, want)
+		}
+	}
+
+	elseBranch := ifStep["else"].([]interface{})
+	for i, want := range []string{"0001_dlg", "0002_nar", "0003_pau"} {
+		got := elseBranch[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("else[%d].id = %v, want %q", i, got, want)
+		}
+	}
+}
+
+// TestStepIDPhoneShowContainerScoping verifies that phone_show.messages is
+// its own container, restarting at 0001.
+func TestStepIDPhoneShowContainerScoping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.NarratorNode{Text: "before"}, // 0001_nar
+			&ast.PhoneShowNode{ // 0002_phn
+				Body: []ast.Node{
+					&ast.TextMessageNode{Direction: "from", Char: "easton", Content: "hi"},
+					&ast.TextMessageNode{Direction: "to", Char: "malia", Content: "yo"},
+				},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+
+	if steps[0].(map[string]interface{})["id"] != "0001_nar" {
+		t.Errorf("steps[0].id = %v, want 0001_nar", steps[0].(map[string]interface{})["id"])
+	}
+	phone := steps[1].(map[string]interface{})
+	if phone["id"] != "0002_phn" {
+		t.Errorf("phone_show id = %v, want 0002_phn", phone["id"])
+	}
+
+	messages := phone["messages"].([]interface{})
+	for i, want := range []string{"0001_phn", "0002_phn"} {
+		got := messages[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("messages[%d].id = %v, want %q (phone_show messages should restart at 0001)", i, got, want)
+		}
+	}
+}
+
+// TestStepIDMinigameContainerScoping verifies minigame.steps restarts at 0001.
+func TestStepIDMinigameContainerScoping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.NarratorNode{Text: "intro"}, // 0001_nar
+			&ast.MinigameNode{ // 0002_mg
+				ID:          "qte_challenge",
+				Attr:        "ATK",
+				Description: "d",
+				Body: []ast.Node{
+					&ast.NarratorNode{Text: "mg1"},
+					&ast.DialogueNode{Character: "X", Text: "mg2"},
+				},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+	mg := steps[1].(map[string]interface{})
+	if mg["id"] != "0002_mg" {
+		t.Errorf("minigame id = %v, want 0002_mg", mg["id"])
+	}
+	mgSteps := mg["steps"].([]interface{})
+	for i, want := range []string{"0001_nar", "0002_dlg"} {
+		got := mgSteps[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("minigame.steps[%d].id = %v, want %q", i, got, want)
+		}
+	}
+}
+
+// TestStepIDCgShowContainerScoping verifies cg_show.steps restarts at 0001.
+func TestStepIDCgShowContainerScoping(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.CgShowNode{
+				Name:     "window_stare",
+				Duration: "medium",
+				Content:  "x",
+				Body: []ast.Node{
+					&ast.YouNode{Text: "y1"},
+					&ast.YouNode{Text: "y2"},
+				},
+			},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+	cg := steps[0].(map[string]interface{})
+	if cg["id"] != "0001_cg" {
+		t.Errorf("cg_show id = %v, want 0001_cg", cg["id"])
+	}
+	cgSteps := cg["steps"].([]interface{})
+	for i, want := range []string{"0001_you", "0002_you"} {
+		got := cgSteps[i].(map[string]interface{})["id"]
+		if got != want {
+			t.Errorf("cg_show.steps[%d].id = %v, want %q", i, got, want)
+		}
+	}
+}
+
+// TestStepIDDeterminism verifies that compiling the same source twice
+// produces byte-identical output — the id assignment must be a pure
+// function of declaration order.
+func TestStepIDDeterminism(t *testing.T) {
+	src := `@episode main:01 "T" {
+  @bg set school_classroom fade
+  &music play calm_morning
+  NARRATOR: line one.
+  YOU: thinking.
+  @pause for 1
+  @choice {
+    @option A safe "go" {
+      NARRATOR: a1
+      X: hi
+    }
+    @option B safe "stay" {
+      X: b1
+      NARRATOR: b2
+    }
+  }
+  @if (FLAG_X) {
+    NARRATOR: t1
+    X: t2
+  } @else {
+    X: e1
+  }
+  @signal mark DONE
+  @ending complete
+}`
+
+	emit := func() string {
+		l := lexer.New(src)
+		p := parser.New(l)
+		ep, err := p.Parse()
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		em := New(newMockResolver())
+		data, err := em.Emit(ep)
+		if err != nil {
+			t.Fatalf("emit: %v", err)
+		}
+		return string(data)
+	}
+
+	first := emit()
+	second := emit()
+	if first != second {
+		t.Errorf("compile is non-deterministic; identical source produced different output")
+	}
+
+	// And every step in the output must carry an id field.
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(first), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	var walkAndCheck func(v interface{}, path string)
+	walkAndCheck = func(v interface{}, path string) {
+		switch x := v.(type) {
+		case map[string]interface{}:
+			// A "step" is a map that has a "type" field. (Conditions and
+			// option records also have "type" but live under known parent
+			// keys — we identify steps by checking for "type" + presence
+			// at a known step location. Easier rule: if it's a map with
+			// a "type" string AND the type is in stepTypeTag's table,
+			// it's a step and must have id.)
+			if typeVal, ok := x["type"].(string); ok && stepTypeTag(typeVal) != "unk" {
+				// Skip conditions: they have their own type vocabulary
+				// (choice/flag/comparison/influence/compound/check/rating)
+				// that doesn't overlap with step types — except "choice"
+				// is both a step type and a condition type. Disambiguate
+				// by checking parent path.
+				isCondition := strings.Contains(path, ".condition") ||
+					strings.HasPrefix(path, "root.gate") &&
+						(strings.HasSuffix(path, ".if") || strings.HasSuffix(path, ".left") || strings.HasSuffix(path, ".right"))
+				if !isCondition {
+					if _, hasID := x["id"]; !hasID {
+						t.Errorf("step at %s (type=%s) missing id field", path, typeVal)
+					}
+				}
+			}
+			for k, val := range x {
+				walkAndCheck(val, path+"."+k)
+			}
+		case []interface{}:
+			for i, val := range x {
+				walkAndCheck(val, fmt.Sprintf("%s[%d]", path, i))
+			}
+		}
+	}
+	walkAndCheck(result, "root")
+}
+
+// TestStepIDUniqueWithinContainer verifies that within any single
+// container, no two steps share the same id. (Across containers, ids
+// repeat — that's the whole point of container-scoped seqs — but the
+// container-escape segments in a cursor make the full path unique.)
+func TestStepIDUniqueWithinContainer(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body: []ast.Node{
+			&ast.NarratorNode{Text: "1"},
+			&ast.NarratorNode{Text: "2"},
+			&ast.NarratorNode{Text: "3"},
+			&ast.NarratorNode{Text: "4"},
+			&ast.NarratorNode{Text: "5"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+	seen := map[string]bool{}
+	for i, s := range steps {
+		id := s.(map[string]interface{})["id"].(string)
+		if seen[id] {
+			t.Errorf("duplicate id %q at index %d", id, i)
+		}
+		seen[id] = true
 	}
 }
