@@ -12,9 +12,9 @@ description: >
 
 # Writing MoonShort Scripts
 
-You are generating scripts for a mobile interactive visual novel player. Each script file is one episode — a self-contained unit of narrative that includes dialogue, visual staging, game mechanics (D20 checks, mini-games), and routing to the next episode.
+You are generating scripts for a mobile interactive visual novel player. The genre is **TRPG mechanics + Galgame presentation**: players read through dialogue-driven scenes with character sprites and backgrounds (Galgame), and at key beats make choices that resolve via D20 attribute checks against a difficulty class, sometimes mediated by a short H5 mini-game (TRPG). Each `.md` script file is one episode — a self-contained narrative unit with dialogue, visual staging, game mechanics, and routing to the next episode.
 
-The player experiences this as: tap to read dialogue → see characters enter/leave → occasionally make choices → sometimes play a mini-game → episode ends and routes to the next one.
+The player experiences this as: tap to read dialogue → see characters enter/leave at left/right/center → occasionally make choices that may roll dice → sometimes play a mini-game → episode ends and routes to the next one.
 
 Your scripts will be parsed by a Go interpreter that outputs JSON for the frontend. The interpreter is strict — syntax errors break the build. This guide teaches you to write scripts the interpreter accepts and the player renders well.
 
@@ -93,6 +93,23 @@ This is shorthand for `@character look look` followed by `CHARACTER: text`. Use 
 MAURICIO [arms_crossed_angry]: Your call, Butterfly.
 ```
 
+## Authoring Discipline — LLM Anti-Patterns
+
+Read this before writing. LLMs reliably fall into specific traps that pass the parser but bloat the episode or break narrative flow. Self-correct against these as you write — the validator can't catch most of them.
+
+1. **Don't invent character positions.** Only `left` / `right` / `center` are supported. `front`, `back`, `corner`, `top`, `behind`, `upstage` etc. don't exist — they fail asset mapping or render wrong. Most scenes use only L/R; reserve C for monologue or close-up beats.
+2. **Don't mint a sprite library.** Aim for **~3–6 distinct looks per character per episode**, and **reuse aggressively**. Every new look name has an upstream cost (semantic name → mapping JSON → OSS asset). If two beats both want "happy", reuse `gentle_smile` instead of minting `gentle_smile_morning_light_v2`. The character does not need fifty micro-expressions.
+3. **Don't carpet-bomb music and SFX.** One BGM at scene start + a `crossfade` on major mood shifts is usually enough — typically **≤3 distinct music tracks per episode**. Don't open every scene with `@music play` if the previous BGM still fits. SFX should punctuate beats (a slap, a phone notification), **not** narrate ambient sound the player can imagine.
+4. **Do change backgrounds when the location does.** The opposite failure: LLMs sometimes run two scenes off the same backdrop. If you wrote a scene-cut in your head (cafeteria → rooftop), that's two `@bg set ...` calls — backgrounds anchor the player's spatial sense.
+5. **Don't `@butterfly` every beat.** Butterfly is for **choice-outcome residue** — what *this* player did that another player wouldn't have. "Walked into the cafeteria" is not a butterfly. "Picked the brave-fail option and apologized anyway" is. For repeat-event counting, use `@signal int counter +1`. For story-flag triggers later episodes will branch on, use `@signal mark`. See "State Changes" for the full discipline.
+6. **Don't write essay-length option text.** Choice option text is the player's UI button label — keep it under **~12 words**. Long narrative belongs *inside* the option block, not in the option text. Bad: `@option A brave "Stand your ground and tell him exactly how you feel about everything that happened last summer when he lied" { ... }`. Good: `@option A brave "Stand your ground." { ... }`.
+7. **Don't compress when you should breathe.** LLMs default to terse summarization; Galgame pacing is the opposite. Let scenes land — `@pause for 1` after scene setup, an internal `YOU:` line between two pieces of dialogue, an extra silent beat after a confession. Token pressure pushes you toward "compress"; resist it. Players paid to live the moments, not skim a plot summary.
+8. **Don't write side branches with no entry, or gate routes with no destination.** Every side episode (`main/route/...`, `main/bad/...`) you imagine needs a `@gate` somewhere upstream that routes into it via `@next`. Conversely, every `@next <branch_key>` in a `@gate` must point at an episode file you actually wrote. A beautiful unreachable bad-end is dead content; a `@next main/route/001:01` with no file is a broken link.
+9. **Respect the concurrency rules.** `&` follows `@` and runs *together* with the previous step — it's for scene-setup bundles (bg + music + character entrances). `&` cannot lead a sequence, cannot be used on block structures (`choice`, `cg`, `minigame`, `phone`, `if`, `gate`), and cannot be used on dialogue (`CHARACTER:` lines are always their own sequential step). When in doubt, use `@`.
+10. **Run the fixer before compiling.** The interpreter ships `mss fix <file>` that auto-repairs the most common LLM mistakes (missing `@if` parens, `&` on blocks, `@on` migration, character-name casing in `@affection`, BOM/CRLF, unclosed blocks). **If the script was LLM-generated, run `mss fix` first, then `mss validate`, then `mss compile`.** This is the single highest-ROI habit when iterating with LLMs.
+
+The directive table (`references/directive-table.md`) is the authoritative quick reference — when unsure of syntax, check it instead of inventing.
+
 ## Visual Directives
 
 All visual directives use **object-action** order: `@<object> <action> [params]`.
@@ -118,9 +135,9 @@ All visual directives use **object-action** order: `@<object> <action> [params]`
 @mauricio hide fade                       // Exit (fade out)
 ```
 
-**Positions:** `left` | `right` | `center`（绝大多数场景只用 L/R，独白/特写才用 C）
+**Positions:** `left` | `right` | `center` — **these three only.** No other position values are supported; `front` / `back` / `corner` / `top` / `behind` etc. fail asset mapping. Most scenes use only L/R; reserve C for monologue or close-up beats.
 
-**Look names** are semantic — they map to asset files via the interpreter. Use `snake_case`: `neutral_smirk`, `arms_crossed_angry`, `vulnerable_hopeful`. You can use any descriptive snake_case name.
+**Look names** are semantic — they map to asset files via the interpreter. Use `snake_case`: `neutral_smirk`, `arms_crossed_angry`, `vulnerable_hopeful`. You can use any descriptive snake_case name, but **reuse aggressively** — target ~3–6 distinct looks per character per episode and reuse them across beats. Every new look name carries a mapping-JSON + OSS asset cost.
 
 **Bubble types:** `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ellipsis`
 
@@ -207,6 +224,8 @@ The player sees the scene load (background, music, and character all at once), t
 @sfx play door_slam               // One-shot sound effect
 ```
 
+**Restraint matters.** A typical episode uses **≤3 distinct music tracks** (one per major mood block) and SFX only on punctuating beats. Don't open every scene with `@music play` if the previous BGM still fits, and don't underline narrated ambient sound the player can imagine.
+
 ## Phone / Messages
 
 The phone overlay sits on top of everything. Keep messages short — they render in chat bubbles.
@@ -246,6 +265,8 @@ Mini-games interrupt the reading flow. The player plays an H5 game, gets a ratin
 ### Choices (D20 Checks)
 
 Every episode has one choice point. Each option has an ID (A, B, C...) and a mode (`brave` = triggers D20 check, `safe` = no check).
+
+**Option text is the player's UI button label — keep it under ~12 words.** Long narrative belongs *inside* the option block as body nodes, not in the option text string.
 
 ```
 @choice {
@@ -396,6 +417,8 @@ Guidelines for ints:
 **Where to put the `@if ... { @achievement ID }` guard** for arc achievements: put it after the *last* mark in the chain is emitted — the guard only fires if every required mark is already set. Putting it at the start of an episode works too but is redundant (you'd re-check every time). One clean guard beats multiple scattered checks.
 
 **`@butterfly` is critical.** The game engine accumulates all butterfly records across episodes and uses LLM evaluation to determine which story branches unlock. Write clear, specific descriptions of what happened and what it reveals about the player's tendencies. Bad: "Made a choice." Good: "Showed vulnerability by accepting help from a former rival."
+
+**Don't `@butterfly` narrating beats.** Butterfly is for **choice-outcome residue** — what *this* player did that another player picking the other option wouldn't have. "Player walked into the cafeteria" is not a butterfly (no counterfactual). "Player picked the brave-fail option and apologized anyway" is. For repeat-event counting (e.g., "rejected Easton three times"), reach for `@signal int rejections +1` then `@if (rejections >= 3)`, not a chain of butterflies.
 
 ### Achievements — `@achievement`
 
@@ -595,6 +618,9 @@ Example bad-path terminal:
 25. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes, declare it once in whichever one most naturally owns it.
 26. **Triggering an achievement that was never declared** — `@achievement <id>` inline without a matching `@achievement <id> { ... }` declaration is a runtime dead letter. The runtime registry must have seen the declaration first. (Cross-episode is fine; the engine loads all declarations.)
 27. **Using `check.success` outside a brave option body, or `rating.S` outside a minigame body** — both are context-local pseudo-identifiers. Outside their scope the runtime always returns false — that's a narrative bug, not a syntax error.
+28. **Inventing character positions** — only `left`, `right`, `center` are valid. `at front` / `at corner` / `at top` / `at back` etc. fail the asset pipeline or render incorrectly.
+29. **Orphan branches and dead `@next` targets** — every `@next <branch_key>` in a `@gate` must point at an episode file that exists in the repo, and every side episode (`main/route/...`, `main/bad/...`) you write needs an upstream `@gate` that routes into it. In single-file `mss compile` cross-file references aren't checked; in batch `mss compile <dir>` the validator does verify branch_key resolution.
+30. **Essay-length option text** — `@option <ID> <mode> "<text>"` text is the player's UI button label. Keep under ~12 words. Long narrative goes inside the option block as body nodes.
 
 **Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags `@on` usage with a migration hint pointing at `@if (check.success)` / `@if (rating.X)`. Always run the fixer before compiling if the script was generated by an LLM.
 
@@ -624,6 +650,7 @@ Remix scripts use the exact same format. The only differences:
 
 These aren't enforced by the interpreter, but they make for a good player experience:
 
+- **Expand, don't compress.** LLMs default to terse summarization; resist that. A scene with one dialogue exchange is too thin — the player needs the inner monologue, the silent beat, the second look at the photograph. Token pressure pushes you toward compression; the player paid for the moments, not the plot summary.
 - **Scene changes**: Use `@bg set ... fade` between locations. Don't change backgrounds mid-dialogue without a beat.
 - **Character entrances**: Show one character at a time. Let the player tap once to see who appeared before they speak.
 - **Inner monologue**: Use `YOU:` liberally — it keeps the player in the protagonist's head and builds emotional investment.
