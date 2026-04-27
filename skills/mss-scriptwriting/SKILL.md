@@ -620,28 +620,6 @@ Remix scripts use the exact same format. The only differences:
 }
 ```
 
-## Compiler-Injected Step IDs
-
-You never write or reference step IDs in MSS source — but they exist in the JSON output, and authors should know why.
-
-The compiler stamps every emitted step with a stable `id` field of the form `<seq>_<tag>`:
-
-```json
-{ "id": "0003_dlg", "type": "dialogue", "character": "easton", "text": "Can I sit?" }
-```
-
-- `<tag>` (2–4 lowercase letters) is derived from step type — `dlg` / `nar` / `you` / `ch` / `mg` / `cg` / `bg` / `char` / `mus` / `sfx` / `phn` / `sig` / `aff` / `ach` / `btf` / `ctrl` / `pau`.
-- `<seq>` (4-digit, 0-padded, 1-based) is a counter that **resets per container**: top-level, each `choice.options[i].steps`, each `minigame.steps`, each `cg_show.steps`, each `if.then` / `if.else`, each `phone_show.messages`. Concurrent groups share the parent counter (they're flat siblings, not a nested container).
-- The id is the backend's stable cursor — Remix patches that splice steps in/out can keep player progress valid because the cursor is keyed by id, not numeric index.
-
-**Authoring takeaway:**
-
-1. **Don't try to write `id:` anywhere in your MSS script.** It's compiler-only output.
-2. **The format is a frozen contract.** Once an episode ships with persistent player sessions, the type-tag table, seq width, and container rules can't change without a backend migration. This is why the language resists drive-by renames of step types.
-3. **For Remix patches that go to live players, prefer appending new steps over inserting into the front of an existing container.** Inserting at the front shifts every subsequent seq in that container, which still resolves but can land players on different content than expected.
-
-Full algorithm + tag table: `references/MSS-SPEC.md` §6.4 Step ID. Backend integration guidance: `docs/ENGINE-INTEGRATION.md`.
-
 ## Pacing Guidelines
 
 These aren't enforced by the interpreter, but they make for a good player experience:
