@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cdotlock/moonshort-script/internal/decompiler"
 	"github.com/cdotlock/moonshort-script/internal/emitter"
 	"github.com/cdotlock/moonshort-script/internal/fixer"
 	"github.com/cdotlock/moonshort-script/internal/lexer"
@@ -23,6 +24,8 @@ func main() {
 	switch os.Args[1] {
 	case "compile":
 		cmdCompile(os.Args[2:])
+	case "decompile":
+		cmdDecompile(os.Args[2:])
 	case "validate":
 		cmdValidate(os.Args[2:])
 	case "fix":
@@ -37,6 +40,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.json] [-o output.json]")
+	fmt.Fprintln(os.Stderr, "  mss decompile <output.json> [-o output-dir]  Rebuild mss.md + assests_mapping.json")
 	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.json]")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> [-o output.md]     Fix and write (in-place if no -o)")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> --check            Dry run: report issues, don't write")
@@ -69,12 +73,12 @@ func parseFlags(args []string) (target, assetsPath, outputPath string) {
 // noopResolver implements emitter.AssetResolver, returning empty strings for all assets.
 type noopResolver struct{}
 
-func (n *noopResolver) ResolveBg(name string) (string, error)                    { return "", nil }
-func (n *noopResolver) ResolveCharacter(char, look string) (string, error)       { return "", nil }
-func (n *noopResolver) ResolveMusic(name string) (string, error)                 { return "", nil }
-func (n *noopResolver) ResolveSfx(name string) (string, error)                   { return "", nil }
-func (n *noopResolver) ResolveCg(name string) (string, error)                    { return "", nil }
-func (n *noopResolver) ResolveMinigame(gameID string) (string, error)            { return "", nil }
+func (n *noopResolver) ResolveBg(name string) (string, error)              { return "", nil }
+func (n *noopResolver) ResolveCharacter(char, look string) (string, error) { return "", nil }
+func (n *noopResolver) ResolveMusic(name string) (string, error)           { return "", nil }
+func (n *noopResolver) ResolveSfx(name string) (string, error)             { return "", nil }
+func (n *noopResolver) ResolveCg(name string) (string, error)              { return "", nil }
+func (n *noopResolver) ResolveMinigame(gameID string) (string, error)      { return "", nil }
 
 func loadResolver(assetsPath string) (emitter.AssetResolver, error) {
 	if assetsPath == "" {
@@ -123,6 +127,71 @@ func cmdCompile(args []string) {
 	} else {
 		fmt.Println(string(output))
 	}
+}
+
+func cmdDecompile(args []string) {
+	target, _, outputDir := parseFlags(args)
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "error: decompile requires a JSON file argument")
+		os.Exit(1)
+	}
+	if outputDir == "" {
+		outputDir = defaultDecompileDir(target)
+	}
+
+	data, err := os.ReadFile(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	result, err := decompiler.Decompile(data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "error creating output dir: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, ep := range result.Episodes {
+		name := ep.Name
+		if len(result.Episodes) == 1 {
+			name = "mss.md"
+		}
+		path := filepath.Join(outputDir, name)
+		if err := os.WriteFile(path, ep.Source, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+	}
+
+	mappingPath := filepath.Join(outputDir, "assests_mapping.json")
+	if err := os.WriteFile(mappingPath, result.Mapping, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "error writing %s: %v\n", mappingPath, err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "wrote %s\n", mappingPath)
+
+	for _, w := range result.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w.Message)
+	}
+}
+
+func defaultDecompileDir(target string) string {
+	dir := filepath.Dir(target)
+	base := filepath.Base(target)
+	ext := filepath.Ext(base)
+	if ext != "" {
+		base = strings.TrimSuffix(base, ext)
+	}
+	if base == "" || base == "." {
+		base = "mss"
+	}
+	return filepath.Join(dir, base+"_decompiled")
 }
 
 func compileFile(path string, res emitter.AssetResolver) ([]byte, error) {

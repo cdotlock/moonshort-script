@@ -1,6 +1,7 @@
 bin/
+dist/
 *.DS_Store
-mss
+/mss
 db/
 
 # Local test-suite assets (mirrored to OSS; not versioned in git)
