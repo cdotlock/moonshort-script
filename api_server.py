@@ -328,6 +328,28 @@ async def fix_script(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+# ── / ───────────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def root():
+    """Root redirect to docs."""
+    return JSONResponse(
+        content={
+            "service": "MoonShort Script API",
+            "version": "1.2.0",
+            "endpoints": {
+                "health": "GET /health",
+                "compile": "POST /compile",
+                "compile-dir": "POST /compile-dir",
+                "decompile": "POST /decompile",
+                "validate": "POST /validate",
+                "fix": "POST /fix",
+            },
+            "docs": "/docs",
+        }
+    )
+
+
 # ── /health ─────────────────────────────────────────────────────────────
 
 @app.get("/health")
