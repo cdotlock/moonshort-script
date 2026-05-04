@@ -3,6 +3,7 @@ dist/
 *.DS_Store
 /mss
 db/
+__pycache__/
 
 # Local test-suite assets (mirrored to OSS; not versioned in git)
 testdata/feature_parade/assets/
