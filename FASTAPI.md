@@ -1,6 +1,6 @@
 # MoonShort Script — FastAPI HTTP API
 
-This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An LLM (or any HTTP client) can compile MSS `.md` scripts and decompile compiled JSON exactly as it would via the local CLI, with proper error reporting.
+This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An LLM (or any HTTP client) can compile, decompile, validate, and fix MSS scripts exactly as it would via the local CLI, with proper error reporting. **Every CLI subcommand has a matching HTTP endpoint.**
 
 ## Quickstart (for an LLM / automated agent)
 
@@ -17,6 +17,19 @@ python -m uvicorn api_server:app --host 0.0.0.0 --port 8080 &
 ```
 
 The server is now listening on `http://localhost:8080`. All endpoints return JSON.
+
+---
+
+## Endpoint ↔ CLI mapping
+
+| HTTP endpoint      | CLI equivalent                                                   |
+|--------------------|------------------------------------------------------------------|
+| `POST /compile`    | `mss compile file.md [--assets mapping.json] -o output.json`     |
+| `POST /compile-dir`| `mss compile dir/ [--assets mapping.json] -o output.json`        |
+| `POST /decompile`  | `mss decompile input.json [-o output-dir]`                        |
+| `POST /validate`   | `mss validate file.md [--assets mapping.json]`                    |
+| `POST /fix`        | `mss fix file.md [-o output.md]`                                  |
+| `GET /health`      | (server health check)                                            |
 
 ---
 
@@ -37,7 +50,7 @@ curl -s http://localhost:8080/health
 
 ### `POST /compile`
 
-Compile an MSS `.md` script into structured JSON.
+Compile a single MSS `.md` script into structured JSON.
 
 **Request:** `multipart/form-data`
 
@@ -82,13 +95,43 @@ curl -s -X POST http://localhost:8080/compile \
 | 504         | Compilation timed out (30 s)                     |
 | 500         | Internal server error — `detail` has message     |
 
-Always check the HTTP status code. On 422 the `detail.error` field contains the compiler's stderr output, which tells you exactly what went wrong (syntax error, unknown directive, etc.).
+---
+
+### `POST /compile-dir`
+
+Compile a directory of MSS `.md` files (uploaded as a zip archive) into structured JSON. Equivalent to `mss compile <dir/>`.
+
+**Request:** `multipart/form-data`
+
+| Field     | Type | Required | Description                                          |
+|-----------|------|----------|------------------------------------------------------|
+| `zipfile` | file | yes      | Zip archive containing `.md` files (flat or nested)  |
+| `assets`  | file | no       | Asset mapping JSON (same format as `/compile`)       |
+
+```bash
+# Zip up an episode directory and compile
+zip -j episodes.zip 01.md 02.md 03.md
+curl -s -X POST http://localhost:8080/compile-dir \
+  -F "zipfile=@episodes.zip" \
+  -F "assets=@mapping.json"
+```
+
+**Success (200):** Returns an array of compiled episode objects, one per `.md` file.
+
+```json
+[
+  { "branch_key":"main", "episode_id":"main:01", "seq":1, "steps":[...], "gate":{...} },
+  { "branch_key":"main", "episode_id":"main:02", "seq":2, "steps":[...], "gate":{...} }
+]
+```
+
+**Errors:** same as `/compile` (422 / 504 / 500). Timeout is 60 s for directories.
 
 ---
 
 ### `POST /decompile`
 
-Decompile compiled JSON back into MSS source text and an asset mapping.
+Decompile compiled MSS JSON back into MSS source text and an asset mapping.
 
 **Request:** `multipart/form-data`
 
@@ -130,9 +173,80 @@ curl -s -X POST http://localhost:8080/decompile \
 
 ---
 
+### `POST /validate`
+
+Validate an MSS script for syntax errors without producing compiled output. Equivalent to `mss validate`.
+
+**Request:** `multipart/form-data`
+
+| Field    | Type | Required | Description                          |
+|----------|------|----------|--------------------------------------|
+| `script` | file | yes      | MSS script file (`.md`), UTF-8 text  |
+| `assets` | file | no       | Asset mapping JSON (optional)        |
+
+```bash
+curl -s -X POST http://localhost:8080/validate \
+  -F "script=@episode.md"
+```
+
+**Success (200) — always returns 200:**
+
+```json
+// Valid script:
+{"valid":true,"errors":null,"stdout":"OK"}
+
+// Invalid script:
+{"valid":false,"errors":"error: line 1 col 10: expected IDENT, got LBRACE (\"{\")","stdout":null}
+```
+
+- `valid`: boolean — `true` means the script passes syntax validation.
+- `errors`: string — the compiler's error output when `valid=false`.
+- `stdout`: string — informational output (e.g., `"OK"`).
+
+---
+
+### `POST /fix`
+
+Auto-fix common issues in an MSS script. Equivalent to `mss fix`. Two modes:
+
+**Fix mode (default):** Returns the fixed script text.
+
+```bash
+curl -s -X POST http://localhost:8080/fix \
+  -F "script=@broken.md"
+# → {"check":false,"fixed":"@episode main:01 ...\n","changed":true,"stderr":"wrote ..."}
+```
+
+- `check`: `false`
+- `fixed`: the corrected script text (string)
+- `changed`: boolean — `true` if the script was modified
+- `stderr`: any informational output from the fixer
+
+**Check mode (`?check=true`):** Dry-run, only reports issues without modifying.
+
+```bash
+curl -s -X POST "http://localhost:8080/fix?check=true" \
+  -F "script=@broken.md"
+# → {"check":true,"issues_found":false,"report":null}
+```
+
+- `check`: `true`
+- `issues_found`: boolean — `true` if the fixer found any issues
+- `report`: string — diagnostic output
+
+**Errors:**
+
+| HTTP status | Meaning                                      |
+|-------------|----------------------------------------------|
+| 422         | Fix failed — `detail.error` has stderr       |
+| 504         | Fix timed out (30 s)                         |
+| 500         | Internal server error — `detail` has message |
+
+---
+
 ## Asset mapping format
 
-The `assets` parameter to `/compile` is a JSON file of this shape:
+The `assets` parameter is a JSON file of this shape:
 
 ```json
 {
@@ -163,6 +277,9 @@ When a mapping is provided, asset `url` fields in the compiled output are resolv
 ```bash
 BASE=http://localhost:8080
 
+# Validate first
+curl -s -X POST $BASE/validate -F "script=@my_episode.md"
+
 # Compile a script
 curl -s -X POST $BASE/compile \
   -F "script=@my_episode.md" \
@@ -177,10 +294,35 @@ curl -s -X POST $BASE/decompile \
   -F "compiled=@compiled.json" \
   -o decompiled.json
 
-# Decompiled result contains:
+# decompiled.json contains:
 #   .episodes["mss.md"]  → reconstructed MSS source
 #   .asset_mapping       → recovered asset map
 #   .warnings            → any non-fatal issues
+```
+
+---
+
+## Full workflow: validate → fix → compile → decompile
+
+```bash
+BASE=http://localhost:8080
+
+# 1. Validate
+RESULT=$(curl -s -X POST $BASE/validate -F "script=@episode.md")
+if ! echo "$RESULT" | python3 -c "import sys,json; sys.exit(0 if json.load(sys.stdin)['valid'] else 1)"; then
+  echo "Script invalid: $(echo $RESULT | python3 -c "import sys,json; print(json.load(sys.stdin)['errors'])")"
+  # 2. Try to auto-fix
+  FIXED=$(curl -s -X POST $BASE/fix -F "script=@episode.md" | python3 -c "import sys,json; print(json.load(sys.stdin)['fixed'])")
+  echo "$FIXED" > episode.md
+  # 3. Re-validate
+  curl -s -X POST $BASE/validate -F "script=@episode.md"
+fi
+
+# 4. Compile
+curl -s -X POST $BASE/compile -F "script=@episode.md" -F "assets=@mapping.json" -o compiled.json
+
+# 5. Round-trip test
+curl -s -X POST $BASE/decompile -F "compiled=@compiled.json" | python3 -m json.tool
 ```
 
 ---
@@ -189,8 +331,8 @@ curl -s -X POST $BASE/decompile \
 
 ```
 1. Call endpoint
-2. If HTTP 2xx → print success, the response body is the result
-3. If HTTP 422 → read .detail.error, report the compiler error to the user, suggest fixing the script
+2. If HTTP 2xx → success; the response body is the result
+3. If HTTP 422 → read .detail.error, report the compiler error to the user, suggest fixing the script (or call /fix first)
 4. If HTTP 504 → retry once; if it times out again, report the script may be too large
 5. If HTTP 500 → read .detail, report the internal error
 6. If connection refused → the server is not running; start it with uvicorn (see Quickstart)
