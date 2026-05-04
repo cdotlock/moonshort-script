@@ -2,7 +2,17 @@
 
 This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An LLM (or any HTTP client) can compile, decompile, validate, and fix MSS scripts exactly as it would via the local CLI, with proper error reporting. **Every CLI subcommand has a matching HTTP endpoint.**
 
-## Quickstart (for an LLM / automated agent)
+## Public hosted instance
+
+> **Base URL: `http://bore.pub:50000`**
+>
+> Swagger docs: http://bore.pub:50000/docs
+>
+> This instance is running the latest `feature/fastapi-wrapper` branch. All endpoints below are live.
+
+---
+
+## Quickstart (run your own instance)
 
 ```bash
 # 1. Build the binary (one time)
