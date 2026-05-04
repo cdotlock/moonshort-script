@@ -4,11 +4,23 @@ This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An L
 
 ## Public hosted instance
 
-> **Base URL: `http://bore.pub:50000`**
+> **Base URL: `http://8888-01h81ear7luugsgq.47.254.93.15.sslip.io:4000`**
 >
-> Swagger docs: http://bore.pub:50000/docs
+> Swagger docs: http://8888-01h81ear7luugsgq.47.254.93.15.sslip.io:4000/docs
 >
-> This instance is running the latest `feature/fastapi-wrapper` branch. All endpoints below are live.
+> This instance is running the `feature/fastapi-wrapper` branch in a mob sandbox on port 8888. It is exposed through Daytona's preview proxy and `sslip.io` DNS, not bore.pub.
+
+Smoke-tested from outside the sandbox:
+
+```bash
+BASE=http://8888-01h81ear7luugsgq.47.254.93.15.sslip.io:4000
+
+curl -s "$BASE/health"
+# {"status":"ok"}
+
+curl -s -X POST "$BASE/validate" -F "script=@testdata/minimal.md"
+# {"valid":true,"errors":null,"stdout":"OK"}
+```
 
 ---
 
