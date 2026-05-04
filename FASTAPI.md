@@ -4,16 +4,17 @@ This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An L
 
 ## Public hosted instance
 
-> **Base URL: `http://8888-ucwq9zbfmbbaqxhr.47.254.93.15.sslip.io:4000`**
+> **Base URL: `http://8888-qhkkdwvvxz4uypor.47.254.93.15.sslip.io:4000`**
 >
-> Swagger docs: http://8888-ucwq9zbfmbbaqxhr.47.254.93.15.sslip.io:4000/docs
+> Swagger docs: http://8888-qhkkdwvvxz4uypor.47.254.93.15.sslip.io:4000/docs
 >
 > This instance is running the `feature/fastapi-wrapper` branch in a mob sandbox on port 8888. It is exposed through Daytona's preview proxy and `sslip.io` DNS, not bore.pub.
+> Daytona preview URLs mint a short-lived auth cookie on first use. If this URL redirects to Daytona login, ask the deployment owner to refresh the preview URL for sandbox `ca4cfdc5-a605-40be-ac1a-dc0df4fbe9f8`, port `8888`.
 
 Smoke-tested from outside the sandbox:
 
 ```bash
-BASE=http://8888-ucwq9zbfmbbaqxhr.47.254.93.15.sslip.io:4000
+BASE=http://8888-qhkkdwvvxz4uypor.47.254.93.15.sslip.io:4000
 
 curl -s "$BASE/health"
 # {"status":"ok"}
