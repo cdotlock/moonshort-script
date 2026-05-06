@@ -212,46 +212,41 @@ for element in steps:
 | `butterfly` | `btf` |
 | `if` / `goto` / `label` | `ctrl` |
 
-#### `<seq>` 段：4 位 0-padded 计数器，**容器作用域**
+#### `<seq>` 段：4 位 0-padded 计数器，**Episode 全局作用域**
 
-`<seq>` 是 4 位零填充的 1-based 整数。计数器在每个**容器**内独立，从 `0001` 重新开始。
+`<seq>` 是 4 位零填充的 1-based 整数。整个 episode 树共享一个单调递增计数器，按 DFS 前序遍历分配——**不在任何容器边界重置**。
 
-容器列表（每个进入即重置 seq）：
+子容器（`choice.options[i].steps`、`minigame.steps`、`cg_show.steps`、`if.then`/`if.else`、`phone_show.messages`）的子步骤在父步骤被编号之后继续递增。
 
-- 顶层 `episode.steps`
-- 每个 `choice.options[i].steps`（**每个 option 各自重置**——option A 的 steps 是 `0001_dlg, 0002_nar, …`，option B 的 steps 也从 `0001_…` 开始）
-- `minigame.steps`
-- `cg_show.steps`
-- `if.then` 和 `if.else`（每个分支独立重置）
-- `phone_show.messages`（这是独立容器——内部的 text_message step 自己重置）
+**并发组**：MSS 的 `&` 跟随节点会和 `@` 领导节点合并成一个 JSON 数组（见 §2.2），组内成员在同一个计数器里**继续递增**。
 
-**并发组不是容器**：MSS 的 `&` 跟随节点会和 `@` 领导节点合并成一个 JSON 数组（见 §2.2），但组内成员在父容器的 seq 计数器里**继续递增**——不是嵌套重启 0001。例如顶层第 5 步是 `0005_dlg`，紧接的并发跟随节点是 `0006_char`，**不**是 `0001_char`。这与 runtime walker 的视图一致：并发组是平铺的兄弟槽位，不是嵌套边界。
+**嵌套 `@else @if`**：嵌套的 IfStep 本身不分配 id，只有其 `then`/`else` 子步骤使用共享计数器。
 
 #### 例子
 
 ```
 顶层 episode.steps:
-  0001_dlg, 0002_nar, [0003_char, 0004_char], 0005_ch, 0006_dlg, 0007_dlg
+  0001_dlg, 0002_nar, [0003_char, 0004_char], 0005_ch, 0014_dlg, 0015_dlg
                        ^^^^^^^^^^^^^^^^^^^^^^^^
-                       并发组 — 父计数器持续递增
+                       并发组 — 计数器持续递增
 
 steps[4] = 这个 0005_ch choice 的 options[0].steps（Brave 选项 A）:
-  0001_dlg, 0002_nar, 0003_dlg
+  0006_dlg, 0007_nar, 0008_dlg
   ^^^^^^^^
-  Option 容器 — 重新从 0001 开始
+  从 choice 的 0005 之后继续递增
 
 steps[4] = 这个 0005_ch choice 的 options[1].steps（Safe 选项 B）:
-  0001_dlg, 0002_dlg, 0003_nar
+  0009_dlg, 0010_dlg, 0011_nar
   ^^^^^^^^
-  另一 Option 容器 — 也从 0001 开始（与 A 互不干扰）
+  从 option A 之后继续递增（不重启）
 ```
 
-#### 唯一性 & cursor 形态
+#### 唯一性
 
-由于容器作用域，`0001_dlg` 在同一份 JSON 里会出现**多次**——这是设计意图。后端 player cursor 用**完整路径**（带容器跳转段如 `"options"`、`"opt_yes"`、`"steps"`、`"then"`、`"else"`、`"messages"`）来定位，全路径才唯一。例：
+由于 Episode 全局作用域，同一份 JSON 中**不会出现重复 id**——`sort(allStepIDs) == DFS 声明顺序`。后端 player cursor 既可以用 id 直接定位（全局唯一），也可以用完整路径定位。路径形式示例：
 
 ```
-["0005_ch", "options", "A", "steps", "0001_ctrl", "then", "0002_dlg"]
+["0005_ch", "options", "A", "steps", "0006_dlg"]
 ```
 
 这种 ID-keyed cursor 在 remix patch 插入/替换 step 后**仍然有效**——以前用数字索引时，任何结构变更都会让 cursor 静默指错位置。
@@ -262,7 +257,7 @@ steps[4] = 这个 0005_ch choice 的 options[1].steps（Safe 选项 B）:
 
 - **不可改 tag**（重命名 `dlg` 为 `dialog`、改 `char` 拆细等）
 - **不可改 seq 宽度**（改 4 位为其他位数）
-- **不可改容器规则**（增减容器、改并发组归属）
+- **不可改遍历顺序**（改 DFS 前序为其他顺序、改并发组归属）
 - **不可改起始值**（1-based → 0-based）
 
 任何上述变更都会让所有持久化的 cursor 指错位置。如果实在要改，必须配套写一次性 cursor migration。

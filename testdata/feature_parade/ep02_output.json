@@ -98,14 +98,14 @@
         },
         "else": [
           {
-            "id": "0001_you",
+            "id": "0014_you",
             "text": "[T32c] all comparison fell through.",
             "type": "you"
           }
         ],
         "then": [
           {
-            "id": "0001_you",
+            "id": "0013_you",
             "text": "[T32b] affection.easton != 0 fallback.",
             "type": "you"
           }
@@ -115,7 +115,7 @@
       "id": "0011_ctrl",
       "then": [
         {
-          "id": "0001_you",
+          "id": "0012_you",
           "text": "[T32a] affection.easton == 3 exactly.",
           "type": "you"
         }
@@ -123,7 +123,7 @@
       "type": "if"
     },
     {
-      "id": "0012_nar",
+      "id": "0015_nar",
       "text": "[T33] Comparison op \u003e and \u003c on engine value.",
       "type": "narrator"
     },
@@ -150,18 +150,18 @@
         "then": [
           {
             "character": "malia",
-            "id": "0001_dlg",
+            "id": "0018_dlg",
             "text": "[T33b] san \u003c 50 branch.",
             "type": "dialogue"
           }
         ],
         "type": "if"
       },
-      "id": "0013_ctrl",
+      "id": "0016_ctrl",
       "then": [
         {
           "character": "malia",
-          "id": "0001_dlg",
+          "id": "0017_dlg",
           "text": "[T33a] san \u003e 50 branch.",
           "type": "dialogue"
         }
@@ -169,7 +169,7 @@
       "type": "if"
     },
     {
-      "id": "0014_nar",
+      "id": "0019_nar",
       "text": "[T34] Three achievements below cover rarity rare / epic / legendary (uncommon was in T21).",
       "type": "narrator"
     },
@@ -178,18 +178,18 @@
         "name": "EP01_FACED_EASTON",
         "type": "flag"
       },
-      "id": "0015_ctrl",
+      "id": "0020_ctrl",
       "then": [
         {
           "achievement_id": "RARE_COURAGE",
           "description": "You faced him twice.",
-          "id": "0001_ach",
+          "id": "0021_ach",
           "name": "Quiet Courage",
           "rarity": "rare",
           "type": "achievement"
         },
         {
-          "id": "0002_nar",
+          "id": "0022_nar",
           "text": "[T34a] rarity=rare unlocked.",
           "type": "narrator"
         }
@@ -214,18 +214,18 @@
         },
         "type": "compound"
       },
-      "id": "0016_ctrl",
+      "id": "0023_ctrl",
       "then": [
         {
           "achievement_id": "EPIC_BOND",
           "description": "Two episodes. Still standing together.",
-          "id": "0001_ach",
+          "id": "0024_ach",
           "name": "Full Circle",
           "rarity": "epic",
           "type": "achievement"
         },
         {
-          "id": "0002_nar",
+          "id": "0025_nar",
           "text": "[T34b] rarity=epic unlocked.",
           "type": "narrator"
         }
@@ -258,18 +258,18 @@
         },
         "type": "compound"
       },
-      "id": "0017_ctrl",
+      "id": "0026_ctrl",
       "then": [
         {
           "achievement_id": "LEGENDARY_PARADE",
           "description": "Every choice, every risk. You took the hard road.",
-          "id": "0001_ach",
+          "id": "0027_ach",
           "name": "Parade Monarch",
           "rarity": "legendary",
           "type": "achievement"
         },
         {
-          "id": "0002_nar",
+          "id": "0028_nar",
           "text": "[T34c] rarity=legendary unlocked.",
           "type": "narrator"
         }
@@ -278,27 +278,27 @@
     },
     [
       {
-        "id": "0018_bg",
+        "id": "0029_bg",
         "name": "gym",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
       },
       {
-        "id": "0019_mus",
+        "id": "0030_mus",
         "name": "night",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
       }
     ],
     {
-      "id": "0020_you",
+      "id": "0031_you",
       "text": "[T35] Final @ending complete — story wraps, credits roll.",
       "type": "you"
     },
     {
       "event": "EP02_DONE",
-      "id": "0021_sig",
+      "id": "0032_sig",
       "kind": "mark",
       "type": "signal"
     }

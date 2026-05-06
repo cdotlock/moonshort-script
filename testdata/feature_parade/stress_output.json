@@ -49,7 +49,7 @@
       },
       "else": [
         {
-          "id": "0001_nar",
+          "id": "0016_nar",
           "text": "[T51-O] outer @else (flag false).",
           "type": "narrator"
         }
@@ -57,7 +57,7 @@
       "id": "0007_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0008_nar",
           "text": "[T51-L1] outer flag true.",
           "type": "narrator"
         },
@@ -83,24 +83,24 @@
             },
             "else": [
               {
-                "id": "0001_nar",
+                "id": "0015_nar",
                 "text": "[T51-N] mid fallback.",
                 "type": "narrator"
               }
             ],
             "then": [
               {
-                "id": "0001_nar",
+                "id": "0014_nar",
                 "text": "[T51-M] mid else-if (1 \u003c= affection \u003c 3).",
                 "type": "narrator"
               }
             ],
             "type": "if"
           },
-          "id": "0002_ctrl",
+          "id": "0009_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0010_nar",
               "text": "[T51-L2] mid comparison true.",
               "type": "narrator"
             },
@@ -116,15 +116,15 @@
               },
               "else": [
                 {
-                  "id": "0001_nar",
+                  "id": "0013_nar",
                   "text": "[T51-L3b] innermost @else (san \u003c 50).",
                   "type": "narrator"
                 }
               ],
-              "id": "0002_ctrl",
+              "id": "0011_ctrl",
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0012_nar",
                   "text": "[T51-L3a] innermost value comparison true — 3 levels deep.",
                   "type": "narrator"
                 }
@@ -138,7 +138,7 @@
       "type": "if"
     },
     {
-      "id": "0008_nar",
+      "id": "0017_nar",
       "text": "[T52] Compound with parenthesized precedence: ((x||y) \u0026\u0026 (z||w)).",
       "type": "narrator"
     },
@@ -178,10 +178,10 @@
         },
         "type": "compound"
       },
-      "id": "0009_ctrl",
+      "id": "0018_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0019_nar",
           "text": "[T52a] outer-AND of two OR groups true.",
           "type": "narrator"
         }
@@ -189,7 +189,7 @@
       "type": "if"
     },
     {
-      "id": "0010_nar",
+      "id": "0020_nar",
       "text": "[T53] Union of two AND groups: (a \u0026\u0026 b) || (c \u0026\u0026 d).",
       "type": "narrator"
     },
@@ -232,10 +232,10 @@
         },
         "type": "compound"
       },
-      "id": "0011_ctrl",
+      "id": "0021_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0022_nar",
           "text": "[T53a] either branch true.",
           "type": "narrator"
         }
@@ -243,7 +243,7 @@
       "type": "if"
     },
     {
-      "id": "0012_nar",
+      "id": "0023_nar",
       "text": "[T54] One @if chain mixing choice / flag / influence / comparison-affection / comparison-value / compound — 6 kinds.",
       "type": "narrator"
     },
@@ -304,14 +304,14 @@
                 },
                 "else": [
                   {
-                    "id": "0001_nar",
+                    "id": "0031_nar",
                     "text": "[T54g] fall-through @else.",
                     "type": "narrator"
                   }
                 ],
                 "then": [
                   {
-                    "id": "0001_nar",
+                    "id": "0030_nar",
                     "text": "[T54f] compound of choice \u0026\u0026 comparison.",
                     "type": "narrator"
                   }
@@ -320,7 +320,7 @@
               },
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0029_nar",
                   "text": "[T54e] comparison on engine value.",
                   "type": "narrator"
                 }
@@ -329,7 +329,7 @@
             },
             "then": [
               {
-                "id": "0001_nar",
+                "id": "0028_nar",
                 "text": "[T54d] comparison on affection.",
                 "type": "narrator"
               }
@@ -338,7 +338,7 @@
           },
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0027_nar",
               "text": "[T54c] influence condition branch.",
               "type": "narrator"
             }
@@ -347,17 +347,17 @@
         },
         "then": [
           {
-            "id": "0001_nar",
+            "id": "0026_nar",
             "text": "[T54b] flag condition branch.",
             "type": "narrator"
           }
         ],
         "type": "if"
       },
-      "id": "0013_ctrl",
+      "id": "0024_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0025_nar",
           "text": "[T54a] choice condition branch.",
           "type": "narrator"
         }
@@ -365,7 +365,7 @@
       "type": "if"
     },
     {
-      "id": "0014_nar",
+      "id": "0032_nar",
       "text": "[T55] minigame power_swing (attr=ATK) with SINGLE rating branch, no @else — validator must accept.",
       "type": "narrator"
     },
@@ -374,17 +374,17 @@
       "description": "a timing-based power swing — release at peak for an S",
       "game_id": "power_swing",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/power-swing/index.html",
-      "id": "0015_mg",
+      "id": "0033_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
-          "id": "0001_ctrl",
+          "id": "0034_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0035_nar",
               "text": "[T55a] Only rating.S handled — others silently pass.",
               "type": "narrator"
             }
@@ -395,7 +395,7 @@
       "type": "minigame"
     },
     {
-      "id": "0016_nar",
+      "id": "0036_nar",
       "text": "[T59] Minigame roundup — remaining 3 games each with a single-branch pass. Attrs cover CHA/INT/WIL (ATK was in T16/T55).",
       "type": "narrator"
     },
@@ -404,17 +404,17 @@
       "description": "pull the slot machine lever and read the alignment",
       "game_id": "slot_machine",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/slot-machine/index.html",
-      "id": "0017_mg",
+      "id": "0037_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
-          "id": "0001_ctrl",
+          "id": "0038_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0039_nar",
               "text": "[T59a] slot_machine (CHA) S branch ran.",
               "type": "narrator"
             }
@@ -429,17 +429,17 @@
       "description": "reel in a fish with the classic bar-balance meter",
       "game_id": "stardew_fishing",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/stardew-fishing/index.html",
-      "id": "0018_mg",
+      "id": "0040_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
-          "id": "0001_ctrl",
+          "id": "0041_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0042_nar",
               "text": "[T59b] stardew_fishing (INT) S branch ran.",
               "type": "narrator"
             }
@@ -454,17 +454,17 @@
       "description": "dodge falling hazards for 30 seconds",
       "game_id": "survive_30_seconds",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/survive-30-seconds/index.html",
-      "id": "0019_mg",
+      "id": "0043_mg",
       "steps": [
         {
           "condition": {
             "grade": "S",
             "type": "rating"
           },
-          "id": "0001_ctrl",
+          "id": "0044_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0045_nar",
               "text": "[T59c] survive_30_seconds (WIL) S branch ran.",
               "type": "narrator"
             }
@@ -476,27 +476,27 @@
     },
     [
       {
-        "id": "0020_bg",
+        "id": "0046_bg",
         "name": "hallway",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/hallway.png"
       },
       {
-        "id": "0021_mus",
+        "id": "0047_mus",
         "name": "upbeat",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/upbeat.mp3"
       },
       {
-        "id": "0022_sfx",
+        "id": "0048_sfx",
         "name": "bell",
         "type": "sfx_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/bell.mp3"
       },
       {
         "character": "malia",
-        "id": "0023_char",
+        "id": "0049_char",
         "look": "flat",
         "position": "center",
         "type": "char_show",
@@ -504,12 +504,12 @@
       }
     ],
     {
-      "id": "0024_nar",
+      "id": "0050_nar",
       "text": "[T56] Choice stress: brave omits @else; safe nests an @if.",
       "type": "narrator"
     },
     {
-      "id": "0025_ch",
+      "id": "0051_ch",
       "options": [
         {
           "check": {
@@ -524,17 +524,17 @@
                 "result": "success",
                 "type": "check"
               },
-              "id": "0001_ctrl",
+              "id": "0052_ctrl",
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0053_nar",
                   "text": "[T56a] brave check.success — no paired @else (allowed).",
                   "type": "narrator"
                 },
                 {
                   "character": "easton",
                   "delta": 1,
-                  "id": "0002_aff",
+                  "id": "0054_aff",
                   "type": "affection"
                 }
               ],
@@ -559,21 +559,21 @@
               },
               "else": [
                 {
-                  "id": "0001_you",
+                  "id": "0058_you",
                   "text": "[T56c] safe body nested @else.",
                   "type": "you"
                 }
               ],
-              "id": "0001_ctrl",
+              "id": "0055_ctrl",
               "then": [
                 {
-                  "id": "0001_you",
+                  "id": "0056_you",
                   "text": "[T56b] safe body nested @if true.",
                   "type": "you"
                 },
                 {
                   "description": "Walked away but hesitated",
-                  "id": "0002_btf",
+                  "id": "0057_btf",
                   "type": "butterfly"
                 }
               ],
@@ -586,21 +586,21 @@
       "type": "choice"
     },
     {
-      "id": "0026_nar",
+      "id": "0059_nar",
       "text": "[T57] @phone show with ZERO messages — empty block edge case.",
       "type": "narrator"
     },
     {
-      "id": "0027_phn",
+      "id": "0060_phn",
       "type": "phone_show"
     },
     {
-      "id": "0028_phn",
+      "id": "0061_phn",
       "type": "phone_hide"
     },
     [
       {
-        "id": "0029_bg",
+        "id": "0062_bg",
         "name": "gym",
         "transition": "cut",
         "type": "bg",
@@ -608,13 +608,13 @@
       },
       {
         "character": "malia",
-        "id": "0030_char",
+        "id": "0063_char",
         "position": "right",
         "type": "char_move"
       },
       {
         "character": "josie",
-        "id": "0031_char",
+        "id": "0064_char",
         "look": "excited",
         "position": "left",
         "type": "char_show",
@@ -622,33 +622,33 @@
       }
     ],
     {
-      "id": "0032_nar",
+      "id": "0065_nar",
       "text": "[T58] Concurrent-group boundary test: dialogue breaks the group above; new @ below starts a fresh group.",
       "type": "narrator"
     },
     {
       "clicks": 1,
-      "id": "0033_pau",
+      "id": "0066_pau",
       "type": "pause"
     },
     {
-      "id": "0034_nar",
+      "id": "0067_nar",
       "text": "[T58a] @pause for 1 — single click to advance.",
       "type": "narrator"
     },
     {
       "event": "STRESS_DONE",
-      "id": "0035_sig",
+      "id": "0068_sig",
       "kind": "mark",
       "type": "signal"
     },
     {
-      "id": "0036_nar",
+      "id": "0069_nar",
       "text": "[T58b] @signal int — three write forms plus a comparison read.",
       "type": "narrator"
     },
     {
-      "id": "0037_sig",
+      "id": "0070_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "=",
@@ -656,7 +656,7 @@
       "value": 0
     },
     {
-      "id": "0038_sig",
+      "id": "0071_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "+",
@@ -664,7 +664,7 @@
       "value": 2
     },
     {
-      "id": "0039_sig",
+      "id": "0072_sig",
       "kind": "int",
       "name": "stress_count",
       "op": "-",
@@ -683,15 +683,15 @@
       },
       "else": [
         {
-          "id": "0001_nar",
+          "id": "0075_nar",
           "text": "[T58b-lo] stress_count below threshold.",
           "type": "narrator"
         }
       ],
-      "id": "0040_ctrl",
+      "id": "0073_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0074_nar",
           "text": "[T58b-hi] stress_count crossed the 2 threshold.",
           "type": "narrator"
         }
@@ -699,7 +699,7 @@
       "type": "if"
     },
     {
-      "id": "0041_nar",
+      "id": "0076_nar",
       "text": "[T60 → main:02] Stress gate has only a fallback @else — will jump to ep02.md unconditionally.",
       "type": "narrator"
     }

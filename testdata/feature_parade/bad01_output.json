@@ -53,7 +53,7 @@
       },
       "else": [
         {
-          "id": "0001_you",
+          "id": "0012_you",
           "text": "[T38c] EP01_FACED_EASTON false — no goto, fall through to [T39].",
           "type": "you"
         }
@@ -61,17 +61,17 @@
       "id": "0008_ctrl",
       "then": [
         {
-          "id": "0001_you",
+          "id": "0009_you",
           "text": "[T38a] Even the ones I tried for.",
           "type": "you"
         },
         {
-          "id": "0002_nar",
+          "id": "0010_nar",
           "text": "[T38b → label END] @goto END will fire next — the following [T39] narrator line should be SKIPPED.",
           "type": "narrator"
         },
         {
-          "id": "0003_ctrl",
+          "id": "0011_ctrl",
           "target": "END",
           "type": "goto"
         }
@@ -79,38 +79,38 @@
       "type": "if"
     },
     {
-      "id": "0009_nar",
+      "id": "0013_nar",
       "text": "[T39] SKIP CHECK: this line appears ONLY when T38's goto was NOT taken.",
       "type": "narrator"
     },
     {
-      "id": "0010_ctrl",
+      "id": "0014_ctrl",
       "name": "END",
       "type": "label"
     },
     {
-      "id": "0011_nar",
+      "id": "0015_nar",
       "text": "[T40] @label END reached (either by fall-through or by goto jump).",
       "type": "narrator"
     },
     {
       "character": "malia",
-      "id": "0012_char",
+      "id": "0016_char",
       "look": "shocked",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_shocked.png"
     },
     {
-      "id": "0013_mus",
+      "id": "0017_mus",
       "type": "music_fadeout"
     },
     {
-      "id": "0014_nar",
+      "id": "0018_nar",
       "text": "[T41] Weeks later, nothing has changed.",
       "type": "narrator"
     },
     {
-      "id": "0015_nar",
+      "id": "0019_nar",
       "text": "[T42] @ending bad_ending fires now.",
       "type": "narrator"
     }

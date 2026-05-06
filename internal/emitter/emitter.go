@@ -29,6 +29,7 @@ type Warning struct {
 type Emitter struct {
 	resolver AssetResolver
 	Warnings []Warning
+	seq      int // episode-scoped monotonic step counter (reset per Emit call)
 }
 
 // New creates an Emitter with the given asset resolver.
@@ -38,6 +39,7 @@ func New(resolver AssetResolver) *Emitter {
 
 // Emit converts an Episode AST into JSON bytes.
 func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
+	e.seq = 0
 	out := map[string]interface{}{
 		"episode_id": ep.BranchKey,
 		"branch_key": extractBranchKey(ep.BranchKey),
@@ -128,15 +130,9 @@ func stepTypeTag(stepType string) string {
 // assignStepID stamps a stable id onto a single emitted step map.
 //
 // Format: <seq>_<tag>, where seq is a 4-digit zero-padded 1-based counter
-// scoped to the surrounding container (top-level steps, an option's body,
-// a minigame's body, a cg_show's body, an if's then/else, a phone_show's
-// messages — each restarts at 0001), and tag is the short type code
-// returned by stepTypeTag.
-//
-// Concurrent groups are NOT containers: members of a group consume
-// sequential seqs from the parent container (e.g. 0005_dlg, 0006_char),
-// not a nested 0001 restart. This matches the runtime walker's notion
-// of concurrent siblings being flat positional slots.
+// shared across the entire episode tree (monotonically increasing in DFS
+// pre-order), and tag is the short type code returned by stepTypeTag.
+// No two steps in the same episode can share an id.
 //
 // CONTRACT: This function is the SOLE authority on original-step ids.
 // See stepTypeTag for the migration warning — both functions move
@@ -148,7 +144,7 @@ func assignStepID(step map[string]interface{}, seq int) {
 
 // emitNodes converts a slice of AST nodes into a slice of steps, grouping
 // consecutive concurrent (&-prefixed) nodes into sub-arrays, and stamping
-// every emitted step with a container-scoped stable id.
+// every emitted step with an episode-scoped stable id.
 //
 // Grouping rule:
 //   - A non-concurrent node (@-prefixed or dialogue) starts a potential group.
@@ -158,16 +154,14 @@ func assignStepID(step map[string]interface{}, seq int) {
 //   - Multi-item groups are emitted as arrays (concurrent execution).
 //
 // ID assignment: each emitted step (whether solo or inside a concurrent
-// group) consumes one seq from a counter local to this call — i.e. each
-// container restarts at 0001. Concurrent group members share the parent
-// counter and get sequential seqs (NOT a nested restart). Recursion into
-// child containers (option.steps, minigame.steps, cg_show.steps, if.then/
-// else, phone_show.messages) happens via downstream emitNodes calls,
-// each of which gets its own fresh counter.
+// group) consumes one seq from e.seq — a single monotonic counter shared
+// across the entire episode tree. The parent step is stamped first, then
+// child containers (option.steps, minigame.steps, cg_show.steps,
+// if.then/else, phone_show.messages) are emitted via emitChildren,
+// giving children higher seqs than their parent (DFS pre-order).
 func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
 	steps := make([]interface{}, 0)
-	var group []interface{} // current group being accumulated
-	seq := 0                // container-scoped 1-based counter (incremented before assignment)
+	var group []interface{}
 
 	flush := func() {
 		if len(group) == 0 {
@@ -187,14 +181,13 @@ func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
 			continue
 		}
 
-		seq++
-		assignStepID(step, seq)
+		e.seq++
+		assignStepID(step, e.seq)
+		e.emitChildren(n, step)
 
 		if isConcurrent(n) {
-			// & node: join the current group
 			group = append(group, step)
 		} else {
-			// @ or dialogue node: flush previous group, start new
 			flush()
 			group = append(group, step)
 		}
@@ -377,9 +370,6 @@ func (e *Emitter) emitCgShow(n *ast.CgShowNode) map[string]interface{} {
 	if n.Transition != "" {
 		m["transition"] = n.Transition
 	}
-	if len(n.Body) > 0 {
-		m["steps"] = e.emitNodes(n.Body)
-	}
 	return m
 }
 
@@ -406,13 +396,9 @@ func (e *Emitter) emitYou(n *ast.YouNode) map[string]interface{} {
 }
 
 func (e *Emitter) emitPhoneShow(n *ast.PhoneShowNode) map[string]interface{} {
-	m := map[string]interface{}{
+	return map[string]interface{}{
 		"type": "phone_show",
 	}
-	if len(n.Body) > 0 {
-		m["messages"] = e.emitNodes(n.Body)
-	}
-	return m
 }
 
 func (e *Emitter) emitTextMessage(n *ast.TextMessageNode) map[string]interface{} {
@@ -479,9 +465,6 @@ func (e *Emitter) emitMinigame(n *ast.MinigameNode) map[string]interface{} {
 	} else {
 		m["game_url"] = url
 	}
-	if len(n.Body) > 0 {
-		m["steps"] = e.emitNodes(n.Body)
-	}
 	return m
 }
 
@@ -498,9 +481,6 @@ func (e *Emitter) emitChoice(n *ast.ChoiceNode) map[string]interface{} {
 				"attr": opt.Check.Attr,
 				"dc":   opt.Check.DC,
 			}
-		}
-		if len(opt.Body) > 0 {
-			o["steps"] = e.emitNodes(opt.Body)
 		}
 		options = append(options, o)
 	}
@@ -550,16 +530,61 @@ func (e *Emitter) emitSignal(n *ast.SignalNode) map[string]interface{} {
 }
 
 func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
+	return map[string]interface{}{
+		"type":      "if",
+		"condition": e.emitCondition(n.Condition),
+	}
+}
+
+// emitChildren attaches child containers to a step AFTER the parent has
+// been stamped with its id, ensuring children get higher seqs (DFS pre-order).
+func (e *Emitter) emitChildren(n ast.Node, step map[string]interface{}) {
+	switch v := n.(type) {
+	case *ast.CgShowNode:
+		if len(v.Body) > 0 {
+			step["steps"] = e.emitNodes(v.Body)
+		}
+	case *ast.PhoneShowNode:
+		if len(v.Body) > 0 {
+			step["messages"] = e.emitNodes(v.Body)
+		}
+	case *ast.MinigameNode:
+		if len(v.Body) > 0 {
+			step["steps"] = e.emitNodes(v.Body)
+		}
+	case *ast.ChoiceNode:
+		options := step["options"].([]interface{})
+		for i, opt := range v.Options {
+			if len(opt.Body) > 0 {
+				options[i].(map[string]interface{})["steps"] = e.emitNodes(opt.Body)
+			}
+		}
+	case *ast.IfNode:
+		step["then"] = e.emitNodes(v.Then)
+		if len(v.Else) > 0 {
+			if len(v.Else) == 1 {
+				if elseIf, ok := v.Else[0].(*ast.IfNode); ok {
+					step["else"] = e.emitNestedIf(elseIf)
+					return
+				}
+			}
+			step["else"] = e.emitNodes(v.Else)
+		}
+	}
+}
+
+// emitNestedIf builds a nested @else @if node. The nested IfStep does NOT
+// get an id (only its then/else children are stamped via emitNodes).
+func (e *Emitter) emitNestedIf(n *ast.IfNode) map[string]interface{} {
 	m := map[string]interface{}{
 		"type":      "if",
 		"condition": e.emitCondition(n.Condition),
 		"then":      e.emitNodes(n.Then),
 	}
 	if len(n.Else) > 0 {
-		// If else branch is a single IfNode (@else @if chain), emit as bare object
 		if len(n.Else) == 1 {
 			if elseIf, ok := n.Else[0].(*ast.IfNode); ok {
-				m["else"] = e.emitIf(elseIf)
+				m["else"] = e.emitNestedIf(elseIf)
 				return m
 			}
 		}

@@ -1024,11 +1024,10 @@ func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 	}
 }
 
-// TestStepIDChoiceContainerScoping verifies that each option's body
-// restarts the seq counter at 0001 — option A's first step is 0001_*
-// even though the choice itself is somewhere later in the parent counter,
-// and option B's first step is also 0001_*.
-func TestStepIDChoiceContainerScoping(t *testing.T) {
+// TestStepIDChoiceContinuesCounter verifies that choice option bodies
+// continue the episode-scoped counter — option A's first step follows
+// the choice's own seq, and option B continues after option A.
+func TestStepIDChoiceContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
@@ -1072,8 +1071,8 @@ func TestStepIDChoiceContainerScoping(t *testing.T) {
 	json.Unmarshal(data, &result)
 
 	steps := result["steps"].([]interface{})
-	// Top-level: 0001_nar, 0002_nar, 0003_ch, 0004_nar
-	for i, want := range []string{"0001_nar", "0002_nar", "0003_ch", "0004_nar"} {
+	// Top-level: 0001_nar, 0002_nar, 0003_ch, 0010_nar
+	for i, want := range []string{"0001_nar", "0002_nar", "0003_ch", "0010_nar"} {
 		got := steps[i].(map[string]interface{})["id"]
 		if got != want {
 			t.Errorf("top-level steps[%d].id = %v, want %q", i, got, want)
@@ -1083,28 +1082,28 @@ func TestStepIDChoiceContainerScoping(t *testing.T) {
 	choice := steps[2].(map[string]interface{})
 	options := choice["options"].([]interface{})
 
-	// Option A body: 0001_dlg, 0002_nar, 0003_dlg
+	// Option A body: 0004_dlg, 0005_nar, 0006_dlg (continues from choice's 0003)
 	stepsA := options[0].(map[string]interface{})["steps"].([]interface{})
-	for i, want := range []string{"0001_dlg", "0002_nar", "0003_dlg"} {
+	for i, want := range []string{"0004_dlg", "0005_nar", "0006_dlg"} {
 		got := stepsA[i].(map[string]interface{})["id"]
 		if got != want {
-			t.Errorf("optA.steps[%d].id = %v, want %q (option container should restart at 0001)", i, got, want)
+			t.Errorf("optA.steps[%d].id = %v, want %q", i, got, want)
 		}
 	}
 
-	// Option B body: 0001_dlg, 0002_dlg, 0003_nar
+	// Option B body: 0007_dlg, 0008_dlg, 0009_nar (continues from option A)
 	stepsB := options[1].(map[string]interface{})["steps"].([]interface{})
-	for i, want := range []string{"0001_dlg", "0002_dlg", "0003_nar"} {
+	for i, want := range []string{"0007_dlg", "0008_dlg", "0009_nar"} {
 		got := stepsB[i].(map[string]interface{})["id"]
 		if got != want {
-			t.Errorf("optB.steps[%d].id = %v, want %q (option container should restart at 0001)", i, got, want)
+			t.Errorf("optB.steps[%d].id = %v, want %q", i, got, want)
 		}
 	}
 }
 
-// TestStepIDIfContainerScoping verifies that if.then and if.else each
-// restart at 0001 independently.
-func TestStepIDIfContainerScoping(t *testing.T) {
+// TestStepIDIfContinuesCounter verifies that if.then and if.else
+// continue the episode-scoped counter after the if step itself.
+func TestStepIDIfContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
@@ -1139,7 +1138,7 @@ func TestStepIDIfContainerScoping(t *testing.T) {
 	}
 
 	thenBranch := ifStep["then"].([]interface{})
-	for i, want := range []string{"0001_nar", "0002_dlg"} {
+	for i, want := range []string{"0002_nar", "0003_dlg"} {
 		got := thenBranch[i].(map[string]interface{})["id"]
 		if got != want {
 			t.Errorf("then[%d].id = %v, want %q", i, got, want)
@@ -1147,7 +1146,7 @@ func TestStepIDIfContainerScoping(t *testing.T) {
 	}
 
 	elseBranch := ifStep["else"].([]interface{})
-	for i, want := range []string{"0001_dlg", "0002_nar", "0003_pau"} {
+	for i, want := range []string{"0004_dlg", "0005_nar", "0006_pau"} {
 		got := elseBranch[i].(map[string]interface{})["id"]
 		if got != want {
 			t.Errorf("else[%d].id = %v, want %q", i, got, want)
@@ -1155,9 +1154,9 @@ func TestStepIDIfContainerScoping(t *testing.T) {
 	}
 }
 
-// TestStepIDPhoneShowContainerScoping verifies that phone_show.messages is
-// its own container, restarting at 0001.
-func TestStepIDPhoneShowContainerScoping(t *testing.T) {
+// TestStepIDPhoneShowContinuesCounter verifies that phone_show.messages
+// continues the episode-scoped counter after the phone_show step.
+func TestStepIDPhoneShowContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
@@ -1190,16 +1189,17 @@ func TestStepIDPhoneShowContainerScoping(t *testing.T) {
 	}
 
 	messages := phone["messages"].([]interface{})
-	for i, want := range []string{"0001_phn", "0002_phn"} {
+	for i, want := range []string{"0003_phn", "0004_phn"} {
 		got := messages[i].(map[string]interface{})["id"]
 		if got != want {
-			t.Errorf("messages[%d].id = %v, want %q (phone_show messages should restart at 0001)", i, got, want)
+			t.Errorf("messages[%d].id = %v, want %q", i, got, want)
 		}
 	}
 }
 
-// TestStepIDMinigameContainerScoping verifies minigame.steps restarts at 0001.
-func TestStepIDMinigameContainerScoping(t *testing.T) {
+// TestStepIDMinigameContinuesCounter verifies minigame.steps continues
+// the episode-scoped counter after the minigame step.
+func TestStepIDMinigameContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
@@ -1232,7 +1232,7 @@ func TestStepIDMinigameContainerScoping(t *testing.T) {
 		t.Errorf("minigame id = %v, want 0002_mg", mg["id"])
 	}
 	mgSteps := mg["steps"].([]interface{})
-	for i, want := range []string{"0001_nar", "0002_dlg"} {
+	for i, want := range []string{"0003_nar", "0004_dlg"} {
 		got := mgSteps[i].(map[string]interface{})["id"]
 		if got != want {
 			t.Errorf("minigame.steps[%d].id = %v, want %q", i, got, want)
@@ -1240,8 +1240,9 @@ func TestStepIDMinigameContainerScoping(t *testing.T) {
 	}
 }
 
-// TestStepIDCgShowContainerScoping verifies cg_show.steps restarts at 0001.
-func TestStepIDCgShowContainerScoping(t *testing.T) {
+// TestStepIDCgShowContinuesCounter verifies cg_show.steps continues
+// the episode-scoped counter after the cg_show step.
+func TestStepIDCgShowContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
@@ -1273,7 +1274,7 @@ func TestStepIDCgShowContainerScoping(t *testing.T) {
 		t.Errorf("cg_show id = %v, want 0001_cg", cg["id"])
 	}
 	cgSteps := cg["steps"].([]interface{})
-	for i, want := range []string{"0001_you", "0002_you"} {
+	for i, want := range []string{"0002_you", "0003_you"} {
 		got := cgSteps[i].(map[string]interface{})["id"]
 		if got != want {
 			t.Errorf("cg_show.steps[%d].id = %v, want %q", i, got, want)
@@ -1392,39 +1393,70 @@ func walkStepsAt(node interface{}, path string, visit func(step map[string]inter
 	}
 }
 
-// TestStepIDUniqueWithinContainer verifies that within any single
-// container, no two steps share the same id. (Across containers, ids
-// repeat — that's the whole point of container-scoped seqs — but the
-// container-escape segments in a cursor make the full path unique.)
-func TestStepIDUniqueWithinContainer(t *testing.T) {
+// TestStepIDGloballyUnique verifies the episode-scoped invariant: no two
+// steps anywhere in the episode tree share the same id, regardless of
+// nesting depth.
+func TestStepIDGloballyUnique(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
 		Body: []ast.Node{
-			&ast.NarratorNode{Text: "1"},
-			&ast.NarratorNode{Text: "2"},
-			&ast.NarratorNode{Text: "3"},
-			&ast.NarratorNode{Text: "4"},
-			&ast.NarratorNode{Text: "5"},
+			&ast.NarratorNode{Text: "intro"},
+			&ast.ChoiceNode{
+				Options: []*ast.OptionNode{
+					{ID: "A", Mode: "safe", Text: "A", Body: []ast.Node{
+						&ast.DialogueNode{Character: "X", Text: "a1"},
+						&ast.NarratorNode{Text: "a2"},
+					}},
+					{ID: "B", Mode: "safe", Text: "B", Body: []ast.Node{
+						&ast.DialogueNode{Character: "X", Text: "b1"},
+					}},
+				},
+			},
+			&ast.IfNode{
+				Condition: &ast.FlagCondition{Name: "X"},
+				Then:      []ast.Node{&ast.NarratorNode{Text: "t1"}},
+				Else:      []ast.Node{&ast.DialogueNode{Character: "X", Text: "e1"}},
+			},
+			&ast.MinigameNode{
+				ID: "mg", Attr: "ATK", Description: "d",
+				Body: []ast.Node{&ast.NarratorNode{Text: "mg1"}},
+			},
+			&ast.CgShowNode{
+				Name: "x", Duration: "short", Content: "c",
+				Body: []ast.Node{&ast.YouNode{Text: "y1"}},
+			},
+			&ast.PhoneShowNode{
+				Body: []ast.Node{
+					&ast.TextMessageNode{Direction: "from", Char: "x", Content: "hi"},
+				},
+			},
 		},
 		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
 	if err != nil {
-		t.Fatalf("Emit failed: %v", err)
+		t.Fatalf("Emit: %v", err)
 	}
 	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		t.Fatalf("Unmarshal failed: %v", err)
-	}
-	steps := result["steps"].([]interface{})
+	json.Unmarshal(data, &result)
+
+	var ids []string
+	walkSteps(result["steps"], func(step map[string]interface{}, path string) {
+		if id, ok := step["id"].(string); ok {
+			ids = append(ids, id)
+		}
+	})
+
 	seen := map[string]bool{}
-	for i, s := range steps {
-		id := s.(map[string]interface{})["id"].(string)
+	for _, id := range ids {
 		if seen[id] {
-			t.Errorf("duplicate id %q at index %d", id, i)
+			t.Errorf("duplicate step id %q across entire episode tree", id)
 		}
 		seen[id] = true
+	}
+	if len(seen) != len(ids) {
+		t.Errorf("expected %d unique ids, got %d unique out of %d total", len(ids), len(seen), len(ids))
 	}
 }

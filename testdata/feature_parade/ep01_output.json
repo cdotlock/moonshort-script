@@ -110,21 +110,21 @@
         {
           "character": "easton",
           "direction": "from",
-          "id": "0001_phn",
+          "id": "0009_phn",
           "text": "[T5] phone_show → @text from (incoming, left bubble)",
           "type": "text_message"
         },
         {
           "character": "easton",
           "direction": "to",
-          "id": "0002_phn",
+          "id": "0010_phn",
           "text": "[T6] phone_show → @text to (outgoing, right bubble)",
           "type": "text_message"
         },
         {
           "character": "easton",
           "direction": "from",
-          "id": "0003_phn",
+          "id": "0011_phn",
           "text": "[T7] multiple messages inside one phone_show block",
           "type": "text_message"
         }
@@ -132,46 +132,46 @@
       "type": "phone_show"
     },
     {
-      "id": "0009_phn",
+      "id": "0012_phn",
       "type": "phone_hide"
     },
     {
       "character": "malia",
-      "id": "0010_char",
+      "id": "0013_char",
       "look": "worried",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_worried.png"
     },
     {
       "character": "malia",
-      "id": "0011_dlg",
+      "id": "0014_dlg",
       "text": "[T8] CHARACTER [look]: syntax sugar — changes look AND speaks in one line.",
       "type": "dialogue"
     },
     [
       {
-        "id": "0012_bg",
+        "id": "0015_bg",
         "name": "school",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/school.png"
       },
       {
-        "id": "0013_mus",
+        "id": "0016_mus",
         "name": "upbeat",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/upbeat.mp3"
       },
       {
         "character": "malia",
-        "id": "0014_char",
+        "id": "0017_char",
         "look": "flat",
         "type": "char_look",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
       },
       {
         "character": "josie",
-        "id": "0015_char",
+        "id": "0018_char",
         "look": "excited",
         "position": "right",
         "type": "char_show",
@@ -179,82 +179,82 @@
       }
     ],
     {
-      "id": "0016_nar",
+      "id": "0019_nar",
       "text": "[T9] bg transition=fade + music_crossfade + char_look + char_show (concurrent).",
       "type": "narrator"
     },
     {
-      "id": "0017_nar",
+      "id": "0020_nar",
       "text": "[T10] Watch 9 bubbles fire in order below (heart/anger/sweat/question/exclaim/idea/music/doom/ellipsis).",
       "type": "narrator"
     },
     {
       "bubble_type": "heart",
       "character": "josie",
-      "id": "0018_char",
+      "id": "0021_char",
       "type": "bubble"
     },
     {
       "bubble_type": "anger",
       "character": "josie",
-      "id": "0019_char",
+      "id": "0022_char",
       "type": "bubble"
     },
     {
       "bubble_type": "sweat",
       "character": "josie",
-      "id": "0020_char",
+      "id": "0023_char",
       "type": "bubble"
     },
     {
       "bubble_type": "question",
       "character": "josie",
-      "id": "0021_char",
+      "id": "0024_char",
       "type": "bubble"
     },
     {
       "bubble_type": "exclaim",
       "character": "josie",
-      "id": "0022_char",
+      "id": "0025_char",
       "type": "bubble"
     },
     {
       "bubble_type": "idea",
       "character": "josie",
-      "id": "0023_char",
+      "id": "0026_char",
       "type": "bubble"
     },
     {
       "bubble_type": "music",
       "character": "josie",
-      "id": "0024_char",
+      "id": "0027_char",
       "type": "bubble"
     },
     {
       "bubble_type": "doom",
       "character": "josie",
-      "id": "0025_char",
+      "id": "0028_char",
       "type": "bubble"
     },
     {
       "bubble_type": "ellipsis",
       "character": "josie",
-      "id": "0026_char",
+      "id": "0029_char",
       "type": "bubble"
     },
     {
-      "id": "0027_nar",
+      "id": "0030_nar",
       "text": "[T11] @pause for 2 — expect TWO clicks to advance past this line.",
       "type": "narrator"
     },
     {
       "clicks": 2,
-      "id": "0028_pau",
+      "id": "0031_pau",
       "type": "pause"
     },
     [
       {
-        "id": "0029_bg",
+        "id": "0032_bg",
         "name": "hallway",
         "transition": "cut",
         "type": "bg",
@@ -262,83 +262,83 @@
       },
       {
         "character": "josie",
-        "id": "0030_char",
+        "id": "0033_char",
         "position": "left",
         "type": "char_move"
       },
       {
         "character": "mauricio",
-        "id": "0031_char",
+        "id": "0034_char",
         "look": "smirk",
         "position": "right",
         "type": "char_show",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_smirk.png"
       },
       {
-        "id": "0032_sfx",
+        "id": "0035_sfx",
         "name": "bell",
         "type": "sfx_play",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/bell.mp3"
       }
     ],
     {
-      "id": "0033_nar",
+      "id": "0036_nar",
       "text": "[T12] bg transition=cut + char_move + new char_show + sfx_play (concurrent).",
       "type": "narrator"
     },
     {
       "character": "mauricio",
-      "id": "0034_dlg",
+      "id": "0037_dlg",
       "text": "[T13] Dialogue from right side of the stage.",
       "type": "dialogue"
     },
     {
       "character": "josie",
-      "id": "0035_char",
+      "id": "0038_char",
       "transition": "fade",
       "type": "char_hide"
     },
     {
-      "id": "0036_nar",
+      "id": "0039_nar",
       "text": "[T14] char_hide with transition=fade — Josie should fade out.",
       "type": "narrator"
     },
     [
       {
-        "id": "0037_bg",
+        "id": "0040_bg",
         "name": "classroom",
         "transition": "slow",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/classroom.png"
       },
       {
-        "id": "0038_mus",
+        "id": "0041_mus",
         "name": "tense",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/tense.mp3"
       },
       {
         "character": "malia",
-        "id": "0039_char",
+        "id": "0042_char",
         "look": "flat",
         "type": "char_look",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
       },
       {
         "character": "mauricio",
-        "id": "0040_char",
+        "id": "0043_char",
         "look": "angry",
         "type": "char_look",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_angry.png"
       }
     ],
     {
-      "id": "0041_nar",
+      "id": "0044_nar",
       "text": "[T15] bg transition=slow + music_crossfade + char_look×2 (concurrent).",
       "type": "narrator"
     },
     {
-      "id": "0042_nar",
+      "id": "0045_nar",
       "text": "[T16] @minigame parking_rush with 4 rating branches — engine picks one based on play result.",
       "type": "narrator"
     },
@@ -347,7 +347,7 @@
       "description": "Malia dashes through a cramped parking lot before the bell rings",
       "game_id": "parking_rush",
       "game_url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/minigames/parking-rush/index.html",
-      "id": "0043_mg",
+      "id": "0046_mg",
       "steps": [
         {
           "condition": {
@@ -374,14 +374,14 @@
               },
               "else": [
                 {
-                  "id": "0001_nar",
+                  "id": "0051_nar",
                   "text": "[T16d] rating fallback @else branch hit.",
                   "type": "narrator"
                 }
               ],
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0050_nar",
                   "text": "[T16c] rating.C branch hit.",
                   "type": "narrator"
                 }
@@ -390,17 +390,17 @@
             },
             "then": [
               {
-                "id": "0001_nar",
+                "id": "0049_nar",
                 "text": "[T16b] rating.A || rating.B compound branch hit.",
                 "type": "narrator"
               }
             ],
             "type": "if"
           },
-          "id": "0001_ctrl",
+          "id": "0047_ctrl",
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0048_nar",
               "text": "[T16a] rating.S branch hit (context-local condition).",
               "type": "narrator"
             }
@@ -412,21 +412,21 @@
     },
     [
       {
-        "id": "0044_bg",
+        "id": "0052_bg",
         "name": "cafeteria",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/cafeteria.png"
       },
       {
-        "id": "0045_mus",
+        "id": "0053_mus",
         "name": "lunch",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/lunch.mp3"
       },
       {
         "character": "mark",
-        "id": "0046_char",
+        "id": "0054_char",
         "look": "grin",
         "position": "right",
         "type": "char_show",
@@ -434,7 +434,7 @@
       },
       {
         "character": "malia",
-        "id": "0047_char",
+        "id": "0055_char",
         "look": "flat",
         "type": "char_look",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
@@ -442,12 +442,12 @@
     ],
     {
       "character": "mark",
-      "id": "0048_dlg",
+      "id": "0056_dlg",
       "text": "[T17] Set up: a @choice block follows with a brave + a safe option.",
       "type": "dialogue"
     },
     {
-      "id": "0049_sfx",
+      "id": "0057_sfx",
       "name": "crowd",
       "type": "sfx_play",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/sfx/crowd.mp3"
@@ -455,7 +455,7 @@
     [
       {
         "character": "easton",
-        "id": "0050_char",
+        "id": "0058_char",
         "look": "hopeful",
         "position": "right",
         "type": "char_show",
@@ -463,17 +463,17 @@
       },
       {
         "character": "mark",
-        "id": "0051_char",
+        "id": "0059_char",
         "type": "char_hide"
       }
     ],
     {
-      "id": "0052_nar",
+      "id": "0060_nar",
       "text": "[T18] Option A uses check(CHA, dc=12). Option B is safe (no check).",
       "type": "narrator"
     },
     {
-      "id": "0053_ch",
+      "id": "0061_ch",
       "options": [
         {
           "check": {
@@ -490,112 +490,112 @@
               },
               "else": [
                 {
-                  "id": "0001_nar",
+                  "id": "0075_nar",
                   "text": "[T19b] check.fail branch hit.",
                   "type": "narrator"
                 },
                 {
                   "character": "easton",
-                  "id": "0002_char",
+                  "id": "0076_char",
                   "look": "hurt",
                   "type": "char_look",
                   "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_hurt.png"
                 },
                 {
                   "character": "malia",
-                  "id": "0003_dlg",
+                  "id": "0077_dlg",
                   "text": "Not today.",
                   "type": "dialogue"
                 },
                 {
                   "character": "easton",
                   "delta": -1,
-                  "id": "0004_aff",
+                  "id": "0078_aff",
                   "type": "affection"
                 },
                 [
                   {
-                    "id": "0005_nar",
+                    "id": "0079_nar",
                     "text": "[T20d] @affection -1 (negative delta) applied.",
                     "type": "narrator"
                   },
                   {
                     "description": "Lost nerve facing Easton",
-                    "id": "0006_btf",
+                    "id": "0080_btf",
                     "type": "butterfly"
                   }
                 ]
               ],
-              "id": "0001_ctrl",
+              "id": "0062_ctrl",
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0063_nar",
                   "text": "[T19a] check.success branch hit (context-local condition).",
                   "type": "narrator"
                 },
                 {
                   "character": "easton",
-                  "id": "0002_char",
+                  "id": "0064_char",
                   "look": "relieved",
                   "type": "char_look",
                   "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/easton_relieved.png"
                 },
                 {
                   "character": "easton",
-                  "id": "0003_dlg",
+                  "id": "0065_dlg",
                   "text": "Can I sit?",
                   "type": "dialogue"
                 },
                 {
                   "character": "malia",
-                  "id": "0004_dlg",
+                  "id": "0066_dlg",
                   "text": "Two minutes.",
                   "type": "dialogue"
                 },
                 {
                   "character": "easton",
                   "delta": 2,
-                  "id": "0005_aff",
+                  "id": "0067_aff",
                   "type": "affection"
                 },
                 [
                   {
-                    "id": "0006_nar",
+                    "id": "0068_nar",
                     "text": "[T20a] @affection +2 applied.",
                     "type": "narrator"
                   },
                   {
                     "description": "Accepted Easton openly at lunch",
-                    "id": "0007_btf",
+                    "id": "0069_btf",
                     "type": "butterfly"
                   }
                 ],
                 {
-                  "id": "0008_nar",
+                  "id": "0070_nar",
                   "text": "[T20b] @butterfly recorded.",
                   "type": "narrator"
                 },
                 {
                   "event": "EP01_FACED_EASTON",
-                  "id": "0009_sig",
+                  "id": "0071_sig",
                   "kind": "mark",
                   "type": "signal"
                 },
                 {
-                  "id": "0010_nar",
+                  "id": "0072_nar",
                   "text": "[T20c] @signal mark EP01_FACED_EASTON written to flag store.",
                   "type": "narrator"
                 },
                 {
                   "achievement_id": "EYE_CONTACT",
                   "description": "Didn't look away.",
-                  "id": "0011_ach",
+                  "id": "0073_ach",
                   "name": "Eye Contact",
                   "rarity": "uncommon",
                   "type": "achievement"
                 },
                 {
-                  "id": "0012_nar",
+                  "id": "0074_nar",
                   "text": "[T21a] @achievement rarity=uncommon unlocked.",
                   "type": "narrator"
                 }
@@ -612,7 +612,7 @@
             [
               {
                 "character": "mark",
-                "id": "0001_char",
+                "id": "0081_char",
                 "look": "grin",
                 "position": "right",
                 "type": "char_show",
@@ -620,14 +620,14 @@
               },
               {
                 "character": "easton",
-                "id": "0002_char",
+                "id": "0082_char",
                 "transition": "fade",
                 "type": "char_hide"
               }
             ],
             {
               "character": "mark",
-              "id": "0003_dlg",
+              "id": "0083_dlg",
               "text": "MOVE ALONG, lover boy!",
               "type": "dialogue"
             },
@@ -635,23 +635,23 @@
               {
                 "bubble_type": "music",
                 "character": "mark",
-                "id": "0004_char",
+                "id": "0084_char",
                 "type": "bubble"
               },
               {
                 "description": "Had Mark deflect Easton",
-                "id": "0005_btf",
+                "id": "0085_btf",
                 "type": "butterfly"
               }
             ],
             {
               "event": "EP01_DEFLECTED",
-              "id": "0006_sig",
+              "id": "0086_sig",
               "kind": "mark",
               "type": "signal"
             },
             {
-              "id": "0007_nar",
+              "id": "0087_nar",
               "text": "[T22a] Safe path executed — EP01_DEFLECTED flag set.",
               "type": "narrator"
             }
@@ -663,28 +663,28 @@
     },
     [
       {
-        "id": "0054_bg",
+        "id": "0088_bg",
         "name": "gym",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/gym.png"
       },
       {
-        "id": "0055_mus",
+        "id": "0089_mus",
         "name": "ambient",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/ambient.mp3"
       },
       {
         "character": "malia",
-        "id": "0056_char",
+        "id": "0090_char",
         "look": "flat",
         "type": "char_look",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_flat.png"
       }
     ],
     {
-      "id": "0057_nar",
+      "id": "0091_nar",
       "text": "[T23] Top-level @if chain with compound(comparison \u0026\u0026 flag) / compound(comparison || flag) / @else.",
       "type": "narrator"
     },
@@ -726,66 +726,66 @@
         },
         "else": [
           {
-            "id": "0001_you",
+            "id": "0097_you",
             "text": "[T23c] fallback @else.",
             "type": "you"
           },
           {
             "bubble_type": "ellipsis",
             "character": "malia",
-            "id": "0002_char",
+            "id": "0098_char",
             "type": "bubble"
           }
         ],
         "then": [
           {
-            "id": "0001_you",
+            "id": "0095_you",
             "text": "[T23b] compound (comparison || flag) true.",
             "type": "you"
           },
           {
             "bubble_type": "doom",
             "character": "malia",
-            "id": "0002_char",
+            "id": "0096_char",
             "type": "bubble"
           }
         ],
         "type": "if"
       },
-      "id": "0058_ctrl",
+      "id": "0092_ctrl",
       "then": [
         {
-          "id": "0001_you",
+          "id": "0093_you",
           "text": "[T23a] compound (comparison \u0026\u0026 flag) true.",
           "type": "you"
         },
         {
           "bubble_type": "heart",
           "character": "malia",
-          "id": "0002_char",
+          "id": "0094_char",
           "type": "bubble"
         }
       ],
       "type": "if"
     },
     {
-      "id": "0059_nar",
+      "id": "0099_nar",
       "text": "[T24] @cg show window_stare fade with duration=medium, content, and 2 body steps.",
       "type": "narrator"
     },
     {
       "content": "Wide shot pushes in as Malia stands at the gym window, late sunlight cutting through dust.",
       "duration": "medium",
-      "id": "0060_cg",
+      "id": "0100_cg",
       "name": "window_stare",
       "steps": [
         {
-          "id": "0001_nar",
+          "id": "0101_nar",
           "text": "[T24a] NARRATOR line inside CG body.",
           "type": "narrator"
         },
         {
-          "id": "0002_you",
+          "id": "0102_you",
           "text": "[T24b] YOU line inside CG body.",
           "type": "you"
         }
@@ -796,21 +796,21 @@
     },
     [
       {
-        "id": "0061_bg",
+        "id": "0103_bg",
         "name": "bedroom",
         "transition": "fade",
         "type": "bg",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/bg/bedroom.png"
       },
       {
-        "id": "0062_mus",
+        "id": "0104_mus",
         "name": "night",
         "type": "music_crossfade",
         "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/music/night.mp3"
       },
       {
         "character": "malia",
-        "id": "0063_char",
+        "id": "0105_char",
         "look": "phone",
         "position": "left",
         "type": "char_show",
@@ -818,7 +818,7 @@
       }
     ],
     {
-      "id": "0064_nar",
+      "id": "0106_nar",
       "text": "[T25] @if with influence condition (LLM-judged at runtime).",
       "type": "narrator"
     },
@@ -827,15 +827,15 @@
         "description": "Player repeatedly chose kindness toward Easton",
         "type": "influence"
       },
-      "id": "0065_ctrl",
+      "id": "0107_ctrl",
       "then": [
         {
-          "id": "0001_phn",
+          "id": "0108_phn",
           "messages": [
             {
               "character": "easton",
               "direction": "from",
-              "id": "0001_phn",
+              "id": "0109_phn",
               "text": "[T25a] influence=true branch reached.",
               "type": "text_message"
             }
@@ -843,20 +843,20 @@
           "type": "phone_show"
         },
         {
-          "id": "0002_phn",
+          "id": "0110_phn",
           "type": "phone_hide"
         },
         {
           "character": "easton",
           "delta": 1,
-          "id": "0003_aff",
+          "id": "0111_aff",
           "type": "affection"
         }
       ],
       "type": "if"
     },
     {
-      "id": "0066_nar",
+      "id": "0112_nar",
       "text": "[T26] @if chain with comparison on ENGINE VALUE (san), not affection.",
       "type": "narrator"
     },
@@ -882,24 +882,24 @@
         },
         "else": [
           {
-            "id": "0001_you",
+            "id": "0116_you",
             "text": "[T26c] san middle branch.",
             "type": "you"
           }
         ],
         "then": [
           {
-            "id": "0001_you",
+            "id": "0115_you",
             "text": "[T26b] san \u003e= 80 branch.",
             "type": "you"
           }
         ],
         "type": "if"
       },
-      "id": "0067_ctrl",
+      "id": "0113_ctrl",
       "then": [
         {
-          "id": "0001_you",
+          "id": "0114_you",
           "text": "[T26a] san \u003c= 20 branch.",
           "type": "you"
         }
@@ -907,52 +907,52 @@
       "type": "if"
     },
     {
-      "id": "0068_nar",
+      "id": "0117_nar",
       "text": "[T27] @music fadeout — music should fade to silence.",
       "type": "narrator"
     },
     {
-      "id": "0069_mus",
+      "id": "0118_mus",
       "type": "music_fadeout"
     },
     {
       "character": "malia",
-      "id": "0070_char",
+      "id": "0119_char",
       "look": "shocked",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/malia_shocked.png"
     },
     {
       "character": "mauricio",
-      "id": "0071_char",
+      "id": "0120_char",
       "look": "eyebrow_raise",
       "type": "char_look",
       "url": "https://mobai-file.oss-cn-shanghai.aliyuncs.com/moonshort-script/testdata/feature_parade/characters/mauricio_eyebrow_raise.png"
     },
     {
       "character": "mauricio",
-      "id": "0072_dlg",
+      "id": "0121_dlg",
       "text": "[T28] CHARACTER [look]: syntax sugar, second instance (Mauricio changes look + speaks).",
       "type": "dialogue"
     },
     {
       "description": "Accepted Mauricio calling her Butterfly again",
-      "id": "0073_btf",
+      "id": "0122_btf",
       "type": "butterfly"
     },
     {
       "event": "EP01_COMPLETE",
-      "id": "0074_sig",
+      "id": "0123_sig",
       "kind": "mark",
       "type": "signal"
     },
     {
-      "id": "0075_nar",
+      "id": "0124_nar",
       "text": "[T28a] EP01_COMPLETE flag set — read by ep02's gate.",
       "type": "narrator"
     },
     {
-      "id": "0076_nar",
+      "id": "0125_nar",
       "text": "[T29] Gate routing preview — conditions evaluated top-to-bottom; the FIRST match decides @next target.",
       "type": "narrator"
     },
@@ -1002,14 +1002,14 @@
               },
               "else": [
                 {
-                  "id": "0001_nar",
+                  "id": "0132_nar",
                   "text": "[T29f → main/stress:01] no condition matched, fallback @else → will jump to stress.md (then stress's own gate will fall through to ep02.md)",
                   "type": "narrator"
                 }
               ],
               "then": [
                 {
-                  "id": "0001_nar",
+                  "id": "0131_nar",
                   "text": "[T29e → main/route/easton:01] influence matched → will jump to cont01.md",
                   "type": "narrator"
                 }
@@ -1018,7 +1018,7 @@
             },
             "then": [
               {
-                "id": "0001_nar",
+                "id": "0130_nar",
                 "text": "[T29d → main/route/easton:01] compound (flag \u0026\u0026 comparison) matched → will jump to cont01.md",
                 "type": "narrator"
               }
@@ -1027,7 +1027,7 @@
           },
           "then": [
             {
-              "id": "0001_nar",
+              "id": "0129_nar",
               "text": "[T29c → main/bad/001:01] comparison affection.easton \u003c 0 matched → will jump to bad01.md",
               "type": "narrator"
             }
@@ -1036,17 +1036,17 @@
         },
         "then": [
           {
-            "id": "0001_nar",
+            "id": "0128_nar",
             "text": "[T29b → main/bad/001:01] flag condition EP01_DEFLECTED matched → will jump to bad01.md",
             "type": "narrator"
           }
         ],
         "type": "if"
       },
-      "id": "0077_ctrl",
+      "id": "0126_ctrl",
       "then": [
         {
-          "id": "0001_nar",
+          "id": "0127_nar",
           "text": "[T29a → main/bad/001:01] choice condition A.fail matched → will jump to bad01.md",
           "type": "narrator"
         }
