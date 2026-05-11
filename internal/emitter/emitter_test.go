@@ -934,7 +934,7 @@ func TestStepTypeTag(t *testing.T) {
 }
 
 // TestStepIDFormatTopLevel verifies that top-level steps get sequential
-// container-scoped 4-digit ids, in declaration order.
+// episode-scoped 4-digit ids, in declaration order.
 func TestStepIDFormatTopLevel(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
