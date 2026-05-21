@@ -84,7 +84,7 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 
 | Directive | Example |
 |-----------|---------|
-| `@trick <type> "<prompt>"` | `@trick hold "Hold your breath until he walks past."` — mandatory body-interaction beat; leaf; `<type>` ∈ `tap` / `hold` / `swipe` / `shake` / `swing` / `hold-still` / `nod` / `turn-away` / `close-eyes` |
+| `@trick <type> "<prompt>"` | `@trick hold "Hold your breath until he walks past."` — mandatory body-interaction beat; leaf; `<type>` ∈ `tap` / `hold` / `swipe` / `shake` / `swing` / `hold-still` (touch + motion only) |
 | `@minigame <name> "<description>"` | `@minigame casino_showdown "Mauricio drags Malia into..."` — optional embedded mini-game; leaf; `description` is one prose paragraph that scenes the moment AND defines the simple gameplay; downstream vibe-coding agent generates the H5 |
 | `@choice { }` | Contains @option blocks |
 | `@option <ID> brave <text> { }` | Body must contain `check { }`; outcome branching via `@if (check.success) { } @else { }` |
@@ -93,7 +93,7 @@ Bubbles: `anger` `sweat` `heart` `question` `exclaim` `idea` `music` `doom` `ell
 
 Check-outcome branching inside a brave option uses `@if (check.success) { } @else { }`. The `check.success` / `check.fail` pseudo-identifier is valid only inside a brave option body.
 
-**D20 formula** (engine-internal): `D20(1-20) + attribute modifier ≥ DC → success`. As of 2026-05-19 there is no longer a "minigame modifier" term — `@minigame` no longer couples to D20 checks.
+**D20 formula** (engine-internal): `D20(1-20) + attribute modifier ≥ DC → success`. `@minigame` does not couple to D20 checks — it has no attribute binding.
 
 **No rating branching.** `@minigame` is a leaf — no body, no `@if (rating.X)` tree. Rewards are entirely engine-owned (anti-cheat). If you need a story branch off a minigame outcome, promote it to a `@choice`.
 
@@ -123,8 +123,6 @@ Conditions (6 types, all fully parsed into structured AST — no raw expression 
 - influence: `"description"` or `influence "description"`
 - compound: `<cond> && <cond>` / `<cond> || <cond>` (parens for grouping; `&&` binds tighter than `||`)
 - check: `check.success` / `check.fail` — context-local, only valid inside a brave option body
-
-> `rating` was removed in 2026-05-19 when `@minigame` became a leaf — the parser rejects `rating.X` with a migration hint.
 
 Operators: `>=` `<=` `>` `<` `==` `!=`
 Logic: `&&` (and), `||` (or)

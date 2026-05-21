@@ -14,7 +14,7 @@ description: >
 
 You are generating scripts for a mobile interactive visual novel player. The genre is **TRPG mechanics + Galgame presentation**: players read through dialogue-driven scenes with character sprites and backgrounds (Galgame), and at key beats make choices that resolve via D20 attribute checks against a difficulty class (TRPG). Body-interaction beats (`@trick`) and optional embedded games (`@minigame`) punctuate the reading. Each `.md` script file is one episode — a self-contained narrative unit with dialogue, visual staging, game mechanics, and routing to the next episode.
 
-The player experiences this as: tap to read dialogue → see characters enter/leave at left/right/center → occasionally complete a forced body action (tap / hold / swipe / shake / swing / hold-still / nod / turn-away / close-eyes) → occasionally skip-or-play a downstream-generated mini-game → at key beats make a choice that may roll dice → episode ends and routes to the next one.
+The player experiences this as: tap to read dialogue → see characters enter/leave at left/right/center → occasionally complete a forced body action (tap / hold / swipe / shake / swing / hold-still) → occasionally skip-or-play a downstream-generated mini-game → at key beats make a choice that may roll dice → episode ends and routes to the next one.
 
 Your scripts will be parsed by a Go interpreter that outputs JSON for the frontend. The interpreter is strict — syntax errors break the build. This guide teaches you to write scripts the interpreter accepts and the player renders well.
 
@@ -244,7 +244,7 @@ The phone overlay sits on top of everything. Keep messages short — they render
 
 ### Tricks (forced body-interaction beats)
 
-`@trick <type> "<prompt>"` is a one-liner that forces the player to complete a small body action before the story advances. It's the embodied upgrade of `@pause for N`: the player must tap / hold / swipe / shake / swing / stay still / nod / turn away / close their eyes, with a one-line on-screen prompt you author. There is no rating, no reward, no branching — the value is *presence*, not winning.
+`@trick <type> "<prompt>"` is a one-liner that forces the player to complete a small body action before the story advances. It's the embodied upgrade of `@pause for N`: the player must tap / hold / swipe / shake / swing / stay still, with a one-line on-screen prompt you author. There is no rating, no reward, no branching — the value is *presence*, not winning.
 
 ```
 @trick hold "Hold your breath until he walks past."
@@ -252,19 +252,18 @@ The phone overlay sits on top of everything. Keep messages short — they render
 @trick swipe "Wipe the steam off the mirror."
 ```
 
-**The locked 9 trick types.** Pick one — the language does not allow inventing new types.
+**The locked 6 trick types.** Pick one — the language does not allow inventing new types.
 
-| `<type>` | Modality | Permission | What it can dramatise |
-|---|---|---|---|
-| `tap` | touch | none | running, struggling, knocking, applauding, heartbeat |
-| `hold` | touch | none | holding breath, staying still, pressing on a wound |
-| `swipe` | touch | none | wiping fog, brushing tears, pushing away — direction only |
-| `shake` | motion | none at runtime | shaking awake, shaking a bottle, trembling, an earthquake |
-| `swing` | motion | none at runtime | swinging a bat, casting a line, throwing a punch, knocking |
-| `hold-still` | motion | none at runtime | steadying a hand, holding breath, freezing so you aren't seen |
-| `nod` | camera | **camera permission** | acknowledging, agreeing, greeting silently |
-| `turn-away` | camera | **camera permission** | can't watch, recoiling, embarrassment |
-| `close-eyes` | camera | **camera permission** | shutting out, praying, falling asleep |
+| `<type>` | Modality | What it can dramatise |
+|---|---|---|
+| `tap` | touch | running, struggling, knocking, applauding, heartbeat |
+| `hold` | touch | holding breath, staying still, pressing on a wound |
+| `swipe` | touch | wiping fog, brushing tears, pushing away — direction only |
+| `shake` | motion | shaking awake, shaking a bottle, trembling, an earthquake |
+| `swing` | motion | swinging a bat, casting a line, throwing a punch, knocking |
+| `hold-still` | motion | steadying a hand, holding breath, freezing so you aren't seen |
+
+All six types use touch or device-motion sensors only — no camera, no microphone, no runtime permission prompt.
 
 **Authoring rules:**
 
@@ -272,11 +271,10 @@ The phone overlay sits on top of everything. Keep messages short — they render
 - Pick a type that fits the *embodied verb* of the moment. "Holding your breath" is `hold`, not `hold-still`; "don't move so he doesn't notice you" is `hold-still`. `swipe` is direction-only, not path-tracing.
 - The prompt is the player-facing imperative. Keep it under one short sentence; write it in second person ("Hold your breath...", "Tap fast..."). It doubles as narrative glue.
 - Use sparingly — typically 1–3 per episode at moments that *feel* embodied. Every trick is a forced gate; if the player can't perform the action they can't continue. Don't gate on a trick at a beat the player must reach.
-- Camera tricks (`nod` / `turn-away` / `close-eyes`) trigger the only runtime permission prompt. Use them where the embodied verb is unmistakable, not for atmosphere.
 
 ### Mini-games (optional, downstream-generated)
 
-`@minigame <name> "<description>"` is a one-liner that embeds an optional mini-game. The player can play or skip; the engine scales the reward by the H5 result if they play. The game itself is **generated by a downstream vibe-coding agent** from your `description` — you are not picking from a pre-built library, and the language no longer carries per-rating narrative branches.
+`@minigame <name> "<description>"` is a one-liner that embeds an optional mini-game. The player can play or skip; the engine scales the reward by the H5 result if they play. The game itself is **generated by a downstream vibe-coding agent** from your `description`.
 
 ```
 @minigame casino_showdown "Mauricio drags Malia into a backroom blackjack game — green felt, a low brass lamp, cigarette smoke, his friends watching — betting on who covers tonight's tab. The player taps to draw cards and taps Stand to hold, beating the dealer's hand without going over 21; three quick rounds. Win and Malia keeps her dignity; lose and she owes him a favor."
@@ -284,7 +282,7 @@ The phone overlay sits on top of everything. Keep messages short — they render
 
 **Authoring rules:**
 
-- `@minigame` is a leaf — no body, no attribute positional, no rating branching. `@minigame <id> <ATTR> "..." { @if (rating.S) { ... } }` is the legacy form and will error.
+- `@minigame` is a leaf — no body, no attribute positional, no rating branching.
 - The description is a single connected prose paragraph that does two jobs at once:
   1. **Set the scene.** Why is this game happening, what's at stake, who's there, what's the vibe?
   2. **Define the simple gameplay.** What does the player tap / drag / time, what's the core mechanic, what counts as winning? "Simple" is the key — give the agent direction, not a design doc.
@@ -636,7 +634,7 @@ Example bad-path terminal:
 16. **Using `choice.A.fail` in gate conditions** — The `choice.` prefix is dropped. Use `A.fail`, not `choice.A.fail`. Use dot notation: `A.fail`, not `A fail`.
 17. **Invalid `@ending` type** — Only `complete`, `to_be_continued`, `bad_ending` are accepted. Any other identifier is a parse error.
 18. **`@signal` without a kind** — `@signal <kind> <event>` requires a kind token. Currently only `mark` is implemented. `@signal achievement ...` is no longer valid — use the dedicated `@achievement <id>` trigger instead.
-19. **`@minigame` written in the legacy form** — `@minigame <id> <ATTR> "<desc>" { ... }` is no longer valid. The new form is the one-liner `@minigame <name> "<description>"` — no ATTR positional, no body, no rating branches. Rewards are engine-owned. If you need per-rating narrative, you can't have it; route on a `@choice` instead.
+19. **`@minigame` with extra positional / body** — the form is `@minigame <name> "<description>"`, one line. No ATTR positional, no `{ }` body, no rating branches. Rewards are engine-owned. If you want a story branch off the minigame, promote it to a `@choice`.
 20. **`@cg show` without `duration:` / `content:` fields** — Both are required at the top of the block, before any body nodes. `duration` must be `low` / `medium` / `high`; `content` is a quoted English narrative for the video-generation pipeline.
 21. **Orphan marks** — `@signal mark X` with no reader. If no `@if (X)` and no `@if (X && ...) { @achievement ... }` references `X`, delete the mark. Marks that no one reads are noise: they dilute the flag store and mislead downstream tools. Never emit marks for "episode completed", "chose option A", "affection raised", or anything else the engine already tracks.
 22. **Using non-English names** — All `event` identifiers, `@achievement` ids, achievement `name`, and `description` strings must be English. Mixed-language ids cause grep/search failures and ambiguous meaning across the pipeline.
@@ -644,12 +642,12 @@ Example bad-path terminal:
 24. **Writing a `when:` field on `@achievement`** — `when` is not part of the grammar. Achievements carry only `name` / `rarity` / `description`; trigger logic lives in the outer `@if (...)` that wraps the `@achievement` directive.
 25. **Duplicate `@achievement` ids in one episode** — validator error. If the same achievement spans multiple episodes, declare it once in whichever one most naturally owns it.
 26. **Triggering an achievement that was never declared** — `@achievement <id>` inline without a matching `@achievement <id> { ... }` declaration is a runtime dead letter. The runtime registry must have seen the declaration first. (Cross-episode is fine; the engine loads all declarations.)
-27. **Using `check.success` outside a brave option body** — a context-local pseudo-identifier. Outside its scope the runtime always returns false — that's a narrative bug, not a syntax error. (`rating.<grade>` is no longer a condition type; the parser will reject it with a migration hint pointing at this section.)
+27. **Using `check.success` outside a brave option body** — a context-local pseudo-identifier. Outside its scope the runtime always returns false — that's a narrative bug, not a syntax error.
 28. **Inventing character positions** — only `left`, `right`, `center` are valid. `at front` / `at corner` / `at top` / `at back` etc. fail the asset pipeline or render incorrectly.
 29. **Orphan branches and dead `@next` targets** — every `@next <branch_key>` in a `@gate` must point at an episode file that exists in the repo, and every side episode (`main/route/...`, `main/bad/...`) you write needs an upstream `@gate` that routes into it. In single-file `mss compile` cross-file references aren't checked; in batch `mss compile <dir>` the validator does verify branch_key resolution.
 30. **Essay-length option text** — `@option <ID> <mode> "<text>"` text is the player's UI button label. Keep under ~12 words. Long narrative goes inside the option block as body nodes.
 
-**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags `@on` usage with a hint pointing at `@if (check.success)`, and flags the legacy `@minigame <id> <ATTR> "..." { ... }` form pointing at the new one-liner. Always run the fixer before compiling if the script was generated by an LLM.
+**Auto-repair:** The interpreter includes a fixer (`mss fix <file>`) that auto-repairs many of these mistakes: missing `@if` parentheses, `&` on block structures, `@check` → `check`, uppercase character names in `@affection`, trailing whitespace, unclosed blocks, and BOM/CRLF encoding issues. The fixer also flags `@on` usage with a hint pointing at `@if (check.success)`. Always run the fixer before compiling if the script was generated by an LLM.
 
 ## Remix Scripts
 
