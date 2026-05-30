@@ -4,17 +4,16 @@ This directory provides a FastAPI HTTP wrapper around the `mss` CLI binary. An L
 
 ## Public hosted instance
 
-> **Base URL: `http://moonshort.47.254.93.15.sslip.io:9876`**
+> **Base URL: `https://moonshort-script-production.up.railway.app`**
 >
-> Swagger docs: http://moonshort.47.254.93.15.sslip.io:9876/docs
+> Swagger docs: https://moonshort-script-production.up.railway.app/docs
 >
-> This instance is running the `feature/fastapi-wrapper` branch in a mob sandbox on port 8888. It is exposed through a permanent `mob expose` route, not Daytona's short-lived preview URL and not bore.pub.
-> The route is backed by `mob-server` in IP mode and proxies `moonshort.47.254.93.15.sslip.io:9876` to sandbox `ca4cfdc5-a605-40be-ac1a-dc0df4fbe9f8:8888`. The service guardian is configured with `/health` and restarts uvicorn if the sandbox service is down.
+> Deployed on Railway from `main`. The Dockerfile in this repo (multi-stage: Go build → Python uvicorn) is the source of truth — every push to `main` that touches `cmd/`, `internal/`, `api_server.py`, `requirements.txt`, or `Dockerfile` should be redeployed via `railway up --service moonshort-script --ci`. Railway's healthcheck hits `/health` and restarts on failure.
 
-Smoke-tested from outside the sandbox:
+Smoke-tested from outside:
 
 ```bash
-BASE=http://moonshort.47.254.93.15.sslip.io:9876
+BASE=https://moonshort-script-production.up.railway.app
 
 curl -s "$BASE/health"
 # {"status":"ok"}
