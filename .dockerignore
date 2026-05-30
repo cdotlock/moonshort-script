@@ -1,0 +1,13 @@
+.git
+.claude
+.DS_Store
+__pycache__
+bin/
+dist/
+mss
+example-video/
+minigames-example/
+testdata/feature_parade/assets/
+docs/
+*.md
+!FASTAPI.md
