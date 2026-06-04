@@ -21,7 +21,7 @@ mss compile novel_001/main/ --assets mapping.json -o novel.json
 
 # Decompile compiled JSON back to MSS + recovered asset mapping
 mss decompile output.json
-# writes output_decompiled/mss.md and output_decompiled/assests_mapping.json
+# writes output_decompiled/mss.md and output_decompiled/assets_mapping.json
 
 # Validate syntax only
 mss validate episode.md

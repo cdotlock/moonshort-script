@@ -40,7 +40,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Usage:")
 	fmt.Fprintln(os.Stderr, "  mss compile <file.md|dir/> [--assets mapping.json] [-o output.json]")
-	fmt.Fprintln(os.Stderr, "  mss decompile <output.json> [-o output-dir]  Rebuild mss.md + assests_mapping.json")
+	fmt.Fprintln(os.Stderr, "  mss decompile <output.json> [-o output-dir]  Rebuild mss.md + assets_mapping.json")
 	fmt.Fprintln(os.Stderr, "  mss validate <file.md> [--assets mapping.json]")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> [-o output.md]     Fix and write (in-place if no -o)")
 	fmt.Fprintln(os.Stderr, "  mss fix <file.md> --check            Dry run: report issues, don't write")
@@ -169,7 +169,7 @@ func cmdDecompile(args []string) {
 		fmt.Fprintf(os.Stderr, "wrote %s\n", path)
 	}
 
-	mappingPath := filepath.Join(outputDir, "assests_mapping.json")
+	mappingPath := filepath.Join(outputDir, "assets_mapping.json")
 	if err := os.WriteFile(mappingPath, result.Mapping, 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "error writing %s: %v\n", mappingPath, err)
 		os.Exit(1)
