@@ -1,0 +1,45 @@
+name: Deploy to Railway
+
+# Auto-deploys the mss FastAPI service to Railway whenever main is pushed
+# with changes that affect the runtime (Go source, Python wrapper, Docker,
+# runtime config). Docs-only commits skip the build.
+#
+# Manual trigger: GitHub Actions UI -> "Deploy to Railway" -> Run workflow.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'api_server.py'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'railway.toml'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/deploy-railway.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: railway-deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: railway up
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: |
+          curl -fsSL https://railway.com/install.sh | sh
+          echo "$HOME/.railway/bin" >> "$GITHUB_PATH"
+
+      - name: Deploy
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          railway --version
+          railway up --service moonshort-script --ci
