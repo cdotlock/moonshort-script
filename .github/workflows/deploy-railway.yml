@@ -43,4 +43,9 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           railway --version
+          railway link \
+            --project 64a837fc-1712-492f-b571-e1fec8090cd7 \
+            --environment production \
+            --service moonshort-script
           railway up --service moonshort-script --ci
+        shell: bash
