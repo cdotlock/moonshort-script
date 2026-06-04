@@ -211,13 +211,13 @@ func (d *decompiler) writeEpisode(ep map[string]interface{}) ([]byte, error) {
 		if err := d.writeGate(&w, gate, 1); err != nil {
 			return nil, err
 		}
-	}
-
-	if ending, ok := ep["ending"].(map[string]interface{}); ok && len(ending) > 0 {
+	} else if ending, ok := ep["ending"].(map[string]interface{}); ok && len(ending) > 0 {
 		kind := stringValue(ending["type"])
 		if kind != "" {
 			w.blank()
-			w.line(1, "@ending %s", kind)
+			w.line(1, "@gate {")
+			w.line(2, "@end %s", kind)
+			w.line(1, "}")
 		}
 	}
 
@@ -274,16 +274,7 @@ func (d *decompiler) writeStep(w *sourceWriter, step map[string]interface{}, ind
 		char := stringValue(step["character"])
 		look := stringValue(step["look"])
 		d.record("characters", "characters", char, look, stringValue(step["url"]))
-		w.line(indent, "%s%s show %s at %s%s", prefix, char, look, stringValue(step["position"]), suffix(" ", stringValue(step["transition"])))
-	case "char_hide":
-		w.line(indent, "%s%s hide%s", prefix, stringValue(step["character"]), suffix(" ", stringValue(step["transition"])))
-	case "char_look":
-		char := stringValue(step["character"])
-		look := stringValue(step["look"])
-		d.record("characters", "characters", char, look, stringValue(step["url"]))
-		w.line(indent, "%s%s look %s%s", prefix, char, look, suffix(" ", stringValue(step["transition"])))
-	case "char_move":
-		w.line(indent, "%s%s move to %s", prefix, stringValue(step["character"]), stringValue(step["position"]))
+		w.line(indent, "%s%s %s%s", prefix, char, look, suffix(" ", stringValue(step["transition"])))
 	case "bubble":
 		w.line(indent, "%s%s bubble %s", prefix, stringValue(step["character"]), stringValue(step["bubble_type"]))
 	case "cg_show":
@@ -295,31 +286,25 @@ func (d *decompiler) writeStep(w *sourceWriter, step map[string]interface{}, ind
 	case "you":
 		w.line(indent, "YOU: %s", stringValue(step["text"]))
 	case "phone_show":
-		w.line(indent, "%sphone show {", prefix)
+		w.line(indent, "%sphone {", prefix)
 		if messages, ok := step["messages"].([]interface{}); ok {
 			if err := d.writeSteps(w, messages, indent+1); err != nil {
 				return err
 			}
 		}
 		w.line(indent, "}")
-	case "phone_hide":
-		w.line(indent, "%sphone hide", prefix)
 	case "text_message":
 		w.line(indent, "%stext %s %s: %s", prefix, stringValue(step["direction"]), strings.ToUpper(stringValue(step["character"])), stringValue(step["text"]))
-	case "music_play":
+	case "music":
 		name := stringValue(step["name"])
 		d.record("music", "music", "", name, stringValue(step["url"]))
-		w.line(indent, "%smusic play %s", prefix, name)
-	case "music_crossfade":
-		name := stringValue(step["name"])
-		d.record("music", "music", "", name, stringValue(step["url"]))
-		w.line(indent, "%smusic crossfade %s", prefix, name)
-	case "music_fadeout":
-		w.line(indent, "%smusic fadeout", prefix)
-	case "sfx_play":
+		w.line(indent, "%smusic %s", prefix, name)
+	case "music_stop":
+		w.line(indent, "%smusic stop", prefix)
+	case "sfx":
 		name := stringValue(step["name"])
 		d.record("sfx", "sfx", "", name, stringValue(step["url"]))
-		w.line(indent, "%ssfx play %s", prefix, name)
+		w.line(indent, "%ssfx %s", prefix, name)
 	case "minigame":
 		return d.writeMinigame(w, step, indent, prefix)
 	case "trick":
@@ -337,16 +322,8 @@ func (d *decompiler) writeStep(w *sourceWriter, step map[string]interface{}, ind
 		d.writeAchievement(w, step, indent, prefix)
 	case "if":
 		return d.writeIf(w, step, indent, prefix)
-	case "label":
-		w.line(indent, "%slabel %s", prefix, stringValue(step["name"]))
-	case "goto":
-		w.line(indent, "%sgoto %s", prefix, stringValue(step["target"]))
 	case "pause":
-		clicks, ok := intValue(step["clicks"])
-		if !ok || clicks < 1 {
-			clicks = 1
-		}
-		w.line(indent, "%spause for %d", prefix, clicks)
+		w.line(indent, "%spause", prefix)
 	default:
 		d.warn("skipped unsupported step type %q", typ)
 	}
@@ -355,10 +332,8 @@ func (d *decompiler) writeStep(w *sourceWriter, step map[string]interface{}, ind
 
 func canUseConcurrentPrefix(typ string) bool {
 	switch typ {
-	case "bg", "char_show", "char_hide", "char_look", "char_move", "bubble",
-		"phone_hide", "music_play", "music_crossfade", "music_fadeout",
-		"sfx_play", "affection", "signal", "butterfly", "achievement",
-		"label", "goto", "pause", "trick":
+	case "bg", "char_show", "bubble", "music", "music_stop", "sfx",
+		"affection", "signal", "butterfly", "achievement", "pause", "trick":
 		return true
 	default:
 		return false
@@ -369,26 +344,13 @@ func (d *decompiler) writeCg(w *sourceWriter, step map[string]interface{}, inden
 	name := stringValue(step["name"])
 	d.record("cg", "cg", "", name, stringValue(step["url"]))
 
-	duration := stringValue(step["duration"])
-	if duration == "" {
-		duration = "medium"
-		d.warn("cg %q missing duration; used %q", name, duration)
-	}
 	content := stringValue(step["content"])
 	if content == "" {
 		content = fmt.Sprintf("Recovered CG content for %s.", name)
 		d.warn("cg %q missing content; used a placeholder", name)
 	}
 
-	w.line(indent, "%scg show %s%s {", prefix, name, suffix(" ", stringValue(step["transition"])))
-	w.line(indent+1, "duration: %s", duration)
-	w.line(indent+1, "content: %s", quote(content))
-	if steps, ok := step["steps"].([]interface{}); ok && len(steps) > 0 {
-		if err := d.writeSteps(w, steps, indent+1); err != nil {
-			return err
-		}
-	}
-	w.line(indent, "}")
+	w.line(indent, "%scg %s %s", prefix, name, quote(content))
 	return nil
 }
 
@@ -498,9 +460,13 @@ func (d *decompiler) signalSource(prefix string, step map[string]interface{}) st
 	}
 }
 
+// gateRoute is a flattened gate decision: a condition (or "" for unconditional
+// fallback) plus the leaf action (either a `@next <target>` jump or a terminal
+// `@end <type>`). Exactly one of nextTarget / endType is set per route.
 type gateRoute struct {
-	condition string
-	target    string
+	condition  string
+	nextTarget string
+	endType    string
 }
 
 func (d *decompiler) writeGate(w *sourceWriter, raw interface{}, indent int) error {
@@ -514,22 +480,30 @@ func (d *decompiler) writeGate(w *sourceWriter, raw interface{}, indent int) err
 
 	w.line(indent, "@gate {")
 	for i, route := range routes {
+		leaf := gateLeafSource(route)
 		switch {
 		case route.condition != "" && i == 0:
 			w.line(indent+1, "@if (%s):", route.condition)
-			w.line(indent+2, "@next %s", route.target)
+			w.line(indent+2, leaf)
 		case route.condition != "":
 			w.line(indent+1, "@else @if (%s):", route.condition)
-			w.line(indent+2, "@next %s", route.target)
+			w.line(indent+2, leaf)
 		case i == 0:
-			w.line(indent+1, "@next %s", route.target)
+			w.line(indent+1, leaf)
 		default:
 			w.line(indent+1, "@else:")
-			w.line(indent+2, "@next %s", route.target)
+			w.line(indent+2, leaf)
 		}
 	}
 	w.line(indent, "}")
 	return nil
+}
+
+func gateLeafSource(r gateRoute) string {
+	if r.endType != "" {
+		return fmt.Sprintf("@end %s", r.endType)
+	}
+	return fmt.Sprintf("@next %s", r.nextTarget)
 }
 
 func flattenGate(raw interface{}) ([]gateRoute, error) {
@@ -540,13 +514,17 @@ func flattenGate(raw interface{}) ([]gateRoute, error) {
 
 	var routes []gateRoute
 	for {
-		target := stringValue(gate["next"])
+		leaf := gateRoute{
+			nextTarget: stringValue(gate["next"]),
+			endType:    stringValue(gate["end"]),
+		}
 		if condRaw, ok := gate["if"]; ok && condRaw != nil {
 			cond, err := conditionSource(condRaw)
 			if err != nil {
 				return nil, err
 			}
-			routes = append(routes, gateRoute{condition: cond, target: target})
+			leaf.condition = cond
+			routes = append(routes, leaf)
 			elseRaw, ok := gate["else"]
 			if !ok || elseRaw == nil {
 				break
@@ -558,7 +536,7 @@ func flattenGate(raw interface{}) ([]gateRoute, error) {
 			gate = next
 			continue
 		}
-		routes = append(routes, gateRoute{target: target})
+		routes = append(routes, leaf)
 		break
 	}
 	return routes, nil
@@ -575,15 +553,16 @@ func conditionSource(raw interface{}) (string, error) {
 		return fmt.Sprintf("%s.%s", stringValue(cond["option"]), stringValue(cond["result"])), nil
 	case "flag":
 		return stringValue(cond["name"]), nil
-	case "influence":
-		return fmt.Sprintf("influence %s", quote(stringValue(cond["description"]))), nil
 	case "comparison":
 		left, ok := cond["left"].(map[string]interface{})
 		if !ok {
 			return "", fmt.Errorf("comparison condition has no left operand")
 		}
-		right, _ := intValue(cond["right"])
-		return fmt.Sprintf("%s %s %d", operandSource(left), stringValue(cond["op"]), right), nil
+		right, ok := cond["right"].(map[string]interface{})
+		if !ok {
+			return "", fmt.Errorf("comparison condition has no right operand")
+		}
+		return fmt.Sprintf("%s %s %s", operandSource(left), stringValue(cond["op"]), operandSource(right)), nil
 	case "compound":
 		left, err := conditionSource(cond["left"])
 		if err != nil {
@@ -601,13 +580,42 @@ func conditionSource(raw interface{}) (string, error) {
 	}
 }
 
-func operandSource(left map[string]interface{}) string {
-	switch stringValue(left["kind"]) {
+// operandSource renders a ComparisonOperand JSON object as MSS source text.
+// The five kinds — literal, affection, value, max, min — map to the surface
+// forms `N`, `affection.<char>`, `<name>`, `MAX(a, b, ...)`, `MIN(a, b, ...)`.
+// max / min args are rendered recursively so nested aggregates round-trip.
+func operandSource(op map[string]interface{}) string {
+	switch stringValue(op["kind"]) {
+	case "literal":
+		v, _ := intValue(op["value"])
+		return strconv.Itoa(v)
 	case "affection":
-		return "affection." + stringValue(left["char"])
+		return "affection." + stringValue(op["char"])
+	case "value":
+		return stringValue(op["name"])
+	case "max":
+		return aggregateOperand("MAX", op["args"])
+	case "min":
+		return aggregateOperand("MIN", op["args"])
 	default:
-		return stringValue(left["name"])
+		return ""
 	}
+}
+
+func aggregateOperand(name string, raw interface{}) string {
+	args, ok := raw.([]interface{})
+	if !ok {
+		return name + "()"
+	}
+	parts := make([]string, 0, len(args))
+	for _, a := range args {
+		sub, ok := a.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		parts = append(parts, operandSource(sub))
+	}
+	return fmt.Sprintf("%s(%s)", name, strings.Join(parts, ", "))
 }
 
 func (d *decompiler) record(kind, segment, char, name, url string) {

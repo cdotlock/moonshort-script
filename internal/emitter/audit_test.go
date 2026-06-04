@@ -14,21 +14,21 @@ import (
 // ---------- Audit A: Concurrent grouping correctness ----------
 
 func TestAuditA_ConcurrentGrouping(t *testing.T) {
-	// MSS equivalent:
+	// MSS-equivalent:
 	//   @bg set school_classroom
-	//   &music play calm_morning
-	//   &malia show neutral_phone at left
+	//   &music calm_morning
+	//   &malia neutral_phone
 	//   NARRATOR: Hello.
-	//   @malia look worried
-	//   &josie show cheerful_wave at right
+	//   @malia worried
+	//   &josie cheerful_wave
 	//   YOU: Thinking.
 
-	musicNode := &ast.MusicPlayNode{Track: "calm_morning"}
+	musicNode := &ast.MusicSetNode{Name: "calm_morning"}
 	musicNode.SetConcurrent(true)
-	charShowNode := &ast.CharShowNode{Char: "malia", Look: "neutral_phone", Position: "left"}
-	charShowNode.SetConcurrent(true)
-	josieNode := &ast.CharShowNode{Char: "josie", Look: "cheerful_wave", Position: "right"}
-	josieNode.SetConcurrent(true)
+	maliaShow := &ast.CharShowNode{Char: "malia", Look: "neutral_phone"}
+	maliaShow.SetConcurrent(true)
+	josieShow := &ast.CharShowNode{Char: "josie", Look: "cheerful_wave"}
+	josieShow.SetConcurrent(true)
 
 	ep := &ast.Episode{
 		BranchKey: "test:01",
@@ -36,13 +36,13 @@ func TestAuditA_ConcurrentGrouping(t *testing.T) {
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "school_classroom"},
 			musicNode,
-			charShowNode,
+			maliaShow,
 			&ast.NarratorNode{Text: "Hello."},
-			&ast.CharLookNode{Char: "malia", Look: "worried"},
-			josieNode,
+			&ast.CharShowNode{Char: "malia", Look: "worried"},
+			josieShow,
 			&ast.YouNode{Text: "Thinking."},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -59,27 +59,25 @@ func TestAuditA_ConcurrentGrouping(t *testing.T) {
 	steps := result["steps"].([]interface{})
 
 	// Expected: 4 top-level items
-	//   [0] = array of 3 (bg + music + char_show) — concurrent group
+	//   [0] = array of 3 (bg + music + char_show)
 	//   [1] = object narrator
-	//   [2] = array of 2 (char_look + char_show) — concurrent group
+	//   [2] = array of 2 (char_show + char_show)  // pose-swap + concurrent show
 	//   [3] = object you
 	if len(steps) != 4 {
 		t.Fatalf("len(steps) = %d, want 4", len(steps))
 	}
 
-	// Step 0: concurrent group (array)
 	group0, ok := steps[0].([]interface{})
 	if !ok {
-		t.Fatalf("steps[0] should be array (concurrent group), got %T", steps[0])
+		t.Fatalf("steps[0] should be array, got %T", steps[0])
 	}
 	if len(group0) != 3 {
 		t.Fatalf("steps[0] length = %d, want 3", len(group0))
 	}
 	assertType(t, group0[0], "bg", "steps[0][0]")
-	assertType(t, group0[1], "music_play", "steps[0][1]")
+	assertType(t, group0[1], "music", "steps[0][1]")
 	assertType(t, group0[2], "char_show", "steps[0][2]")
 
-	// Step 1: narrator (object, not array)
 	narr, ok := steps[1].(map[string]interface{})
 	if !ok {
 		t.Fatalf("steps[1] should be object, got %T", steps[1])
@@ -89,18 +87,17 @@ func TestAuditA_ConcurrentGrouping(t *testing.T) {
 		t.Errorf("steps[1].text = %v, want 'Hello.'", narr["text"])
 	}
 
-	// Step 2: concurrent group of 2
 	group2, ok := steps[2].([]interface{})
 	if !ok {
-		t.Fatalf("steps[2] should be array (concurrent group), got %T", steps[2])
+		t.Fatalf("steps[2] should be array, got %T", steps[2])
 	}
 	if len(group2) != 2 {
 		t.Fatalf("steps[2] length = %d, want 2", len(group2))
 	}
-	assertType(t, group2[0], "char_look", "steps[2][0]")
+	// Both are char_show — pose swap + adjacent show, same node type.
+	assertType(t, group2[0], "char_show", "steps[2][0]")
 	assertType(t, group2[1], "char_show", "steps[2][1]")
 
-	// Step 3: you (object, not array)
 	you, ok := steps[3].(map[string]interface{})
 	if !ok {
 		t.Fatalf("steps[3] should be object, got %T", steps[3])
@@ -113,7 +110,7 @@ func TestAuditA_ConcurrentGrouping(t *testing.T) {
 func TestAuditB_GateIfElseChain(t *testing.T) {
 	// @gate {
 	//   @if (A.fail): @next bad:01
-	//   @else @if (influence "Player shows empathy"): @next route:01
+	//   @else @if (affection.easton >= 5): @next route:01
 	//   @else: @next main:02
 	// }
 	ep := &ast.Episode{
@@ -124,14 +121,18 @@ func TestAuditB_GateIfElseChain(t *testing.T) {
 			Routes: []*ast.GateRoute{
 				{
 					Condition: &ast.ChoiceCondition{Option: "A", Result: "fail"},
-					Target:    "bad:01",
+					Leaf:      &ast.NextLeaf{Target: "bad:01"},
 				},
 				{
-					Condition: &ast.InfluenceCondition{Description: "Player shows empathy"},
-					Target:    "route:01",
+					Condition: &ast.ComparisonCondition{
+						Left:  &ast.ComparisonOperand{Kind: ast.OperandAffection, Char: "easton"},
+						Op:    ">=",
+						Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 5},
+					},
+					Leaf: &ast.NextLeaf{Target: "route:01"},
 				},
 				{
-					Target: "main:02",
+					Leaf: &ast.NextLeaf{Target: "main:02"},
 				},
 			},
 		},
@@ -163,26 +164,79 @@ func TestAuditB_GateIfElseChain(t *testing.T) {
 		t.Errorf("gate.next = %v, want 'bad:01'", gate["next"])
 	}
 
-	// Level 2: gate.else.if.type == "influence"
+	// Level 2: gate.else.if.type == "comparison"
 	gateElse := gate["else"].(map[string]interface{})
 	elseIf := gateElse["if"].(map[string]interface{})
-	if elseIf["type"] != "influence" {
-		t.Errorf("gate.else.if.type = %v, want 'influence'", elseIf["type"])
+	if elseIf["type"] != "comparison" {
+		t.Errorf("gate.else.if.type = %v, want 'comparison'", elseIf["type"])
 	}
-	if elseIf["description"] != "Player shows empathy" {
-		t.Errorf("gate.else.if.description = %v", elseIf["description"])
+	left := elseIf["left"].(map[string]interface{})
+	if left["kind"] != "affection" || left["char"] != "easton" {
+		t.Errorf("gate.else.if.left = %#v, want affection/easton", left)
+	}
+	right := elseIf["right"].(map[string]interface{})
+	if right["kind"] != "literal" || right["value"].(float64) != 5 {
+		t.Errorf("gate.else.if.right = %#v, want literal 5", right)
 	}
 	if gateElse["next"] != "route:01" {
 		t.Errorf("gate.else.next = %v, want 'route:01'", gateElse["next"])
 	}
 
-	// Level 3: gate.else.else.next == "main:02" (fallback, no "if")
+	// Level 3: gate.else.else.next == "main:02"
 	fallback := gateElse["else"].(map[string]interface{})
 	if fallback["next"] != "main:02" {
 		t.Errorf("gate.else.else.next = %v, want 'main:02'", fallback["next"])
 	}
 	if _, hasIf := fallback["if"]; hasIf {
-		t.Error("gate.else.else should NOT have 'if' key (it's the fallback)")
+		t.Error("gate.else.else should NOT have 'if' key (fallback)")
+	}
+}
+
+// TestAuditB_GateEndLeaves verifies @end leaves render `end: <type>` in
+// the gate JSON — both single conditional, single mixed, and within a
+// nested if/else chain alongside @next leaves.
+func TestAuditB_GateEndLeaves(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "test:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{
+					Condition: &ast.FlagCondition{Name: "WIN"},
+					Leaf:      &ast.EndLeaf{Type: ast.EndingComplete},
+				},
+				{
+					Condition: &ast.FlagCondition{Name: "LOSE"},
+					Leaf:      &ast.EndLeaf{Type: ast.EndingBad},
+				},
+				{Leaf: &ast.NextLeaf{Target: "main:02"}},
+			},
+		},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+
+	gate := result["gate"].(map[string]interface{})
+	if gate["end"] != "complete" {
+		t.Errorf("gate.end = %v, want complete", gate["end"])
+	}
+	if _, has := gate["next"]; has {
+		t.Errorf("gate root should not have next when leaf is end")
+	}
+
+	mid := gate["else"].(map[string]interface{})
+	if mid["end"] != "bad_ending" {
+		t.Errorf("gate.else.end = %v, want bad_ending", mid["end"])
+	}
+
+	tail := mid["else"].(map[string]interface{})
+	if tail["next"] != "main:02" {
+		t.Errorf("gate.else.else.next = %v, want main:02", tail["next"])
+	}
+	if _, has := tail["end"]; has {
+		t.Errorf("fallback should not have end when leaf is next")
 	}
 }
 
@@ -208,7 +262,7 @@ func TestAuditC_ElseIfBodyOutput(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -252,16 +306,13 @@ func TestAuditC_ElseIfBodyOutput(t *testing.T) {
 
 	// Verify raw JSON: "else": { (bare object), not "else": [
 	s := string(data)
-	// Find the first "else" — should be followed by { not [
 	idx := strings.Index(s, `"else"`)
 	if idx < 0 {
 		t.Fatal("no else in output")
 	}
-	// Find what comes after "else": in the JSON
 	afterElse := s[idx+len(`"else"`):]
 	afterElse = strings.TrimSpace(afterElse)
 	if !strings.HasPrefix(afterElse, ": {") && !strings.HasPrefix(afterElse, ":{") {
-		// JSON may have `: {\n` or `: {` form
 		colonIdx := strings.Index(afterElse, ":")
 		if colonIdx >= 0 {
 			afterColon := strings.TrimSpace(afterElse[colonIdx+1:])
@@ -272,26 +323,23 @@ func TestAuditC_ElseIfBodyOutput(t *testing.T) {
 	}
 }
 
-// ---------- Audit D: Character name consistency (always lowercase) ----------
+// ---------- Audit D: Character name consistency (lowercase emitter scope) ----------
 
 func TestAuditD_CharacterNamesAlwaysLowercase(t *testing.T) {
-	// Test ALL node types that emit "character" field
+	// Test node types that emit "character" field through the emitter.
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
 		Body: []ast.Node{
 			&ast.DialogueNode{Character: "JOSIE", Text: "Hi."},
-			&ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk", Position: "right"},
-			&ast.CharHideNode{Char: "malia"},
-			&ast.CharLookNode{Char: "easton", Look: "hurt"},
-			&ast.CharMoveNode{Char: "mark", Position: "left"},
+			&ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk"},
 			&ast.CharBubbleNode{Char: "josie", BubbleType: "heart"},
 			&ast.AffectionNode{Char: "easton", Delta: "+2"},
 			&ast.PhoneShowNode{Body: []ast.Node{
 				&ast.TextMessageNode{Direction: "from", Char: "MARK", Content: "Hey"},
 			}},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -300,7 +348,10 @@ func TestAuditD_CharacterNamesAlwaysLowercase(t *testing.T) {
 	var result map[string]interface{}
 	json.Unmarshal(data, &result)
 
-	// Check every "character" field in the output
+	// Walk and check every "character" field. Only DialogueNode and
+	// TextMessageNode pass through lowercase normalization in the
+	// emitter; others rely on parser-side normalization. The test
+	// authors them lowercase to keep the invariant clear.
 	var checkChars func(v interface{}, path string)
 	checkChars = func(v interface{}, path string) {
 		switch x := v.(type) {
@@ -326,15 +377,11 @@ func TestAuditD_CharacterNamesAlwaysLowercase(t *testing.T) {
 	checkChars(result, "root")
 }
 
-// Audit D sub-check: DialogueNode, TextMessageNode lowercase, but others
-// like CharShowNode, CharHideNode, CharLookNode, CharMoveNode, CharBubbleNode, AffectionNode
-// pass through as-is (parser lowercases, but emitter doesn't for these types).
+// TestAuditD_EmitterLowercaseScope clarifies which emit functions lowercase
+// the character name vs. passing it through. The emitter only lowercases
+// DialogueNode and TextMessageNode; CharShowNode / CharBubbleNode /
+// AffectionNode pass through (the parser normalises them).
 func TestAuditD_EmitterLowercaseScope(t *testing.T) {
-	// The emitter only lowercases DialogueNode and TextMessageNode.
-	// Other character types (char_show, char_hide, char_look, char_move, bubble, affection)
-	// pass the Char field through unchanged.
-	// This is correct IF the parser always stores lowercase — let's verify emitter behavior.
-
 	tests := []struct {
 		name     string
 		node     ast.Node
@@ -342,11 +389,8 @@ func TestAuditD_EmitterLowercaseScope(t *testing.T) {
 	}{
 		{"dialogue_upper", &ast.DialogueNode{Character: "JOSIE", Text: "x"}, "josie"},
 		{"dialogue_lower", &ast.DialogueNode{Character: "josie", Text: "x"}, "josie"},
-		{"char_show_lower", &ast.CharShowNode{Char: "josie", Look: "a", Position: "left"}, "josie"},
-		{"char_show_upper", &ast.CharShowNode{Char: "JOSIE", Look: "a", Position: "left"}, "JOSIE"},
-		{"char_hide_upper", &ast.CharHideNode{Char: "MALIA"}, "MALIA"},
-		{"char_look_upper", &ast.CharLookNode{Char: "EASTON", Look: "a"}, "EASTON"},
-		{"char_move_upper", &ast.CharMoveNode{Char: "MARK", Position: "left"}, "MARK"},
+		{"char_show_lower", &ast.CharShowNode{Char: "josie", Look: "a"}, "josie"},
+		{"char_show_upper", &ast.CharShowNode{Char: "JOSIE", Look: "a"}, "JOSIE"},
 		{"bubble_upper", &ast.CharBubbleNode{Char: "JOSIE", BubbleType: "heart"}, "JOSIE"},
 		{"affection_upper", &ast.AffectionNode{Char: "EASTON", Delta: "+1"}, "EASTON"},
 		{"text_msg_upper", &ast.TextMessageNode{Direction: "from", Char: "MARK", Content: "x"}, "mark"},
@@ -370,12 +414,9 @@ func TestAuditD_EmitterLowercaseScope(t *testing.T) {
 // ---------- Audit E: Choice/option structure ----------
 
 func TestAuditE_ChoiceOptionStructure(t *testing.T) {
-	// Brave option with check and an @if (check.success) / @else body.
-	// Safe option with steps.
-	// Concurrent groups inside the success branch and inside safe steps.
-	musicNode := &ast.MusicPlayNode{Track: "calm_morning"}
+	musicNode := &ast.MusicSetNode{Name: "calm_morning"}
 	musicNode.SetConcurrent(true)
-	josieNode := &ast.CharShowNode{Char: "josie", Look: "cheerful_wave", Position: "right"}
+	josieNode := &ast.CharShowNode{Char: "josie", Look: "cheerful_wave"}
 	josieNode.SetConcurrent(true)
 
 	ep := &ast.Episode{
@@ -393,7 +434,7 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 							&ast.IfNode{
 								Condition: &ast.CheckCondition{Result: "success"},
 								Then: []ast.Node{
-									&ast.CharLookNode{Char: "malia", Look: "worried"},
+									&ast.CharShowNode{Char: "malia", Look: "worried"},
 									josieNode,
 									&ast.DialogueNode{Character: "MALIA", Text: "You did it."},
 								},
@@ -416,7 +457,7 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -451,7 +492,6 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 		t.Errorf("optA.text = %v", optA["text"])
 	}
 
-	// Check block
 	check := optA["check"].(map[string]interface{})
 	if check["attr"] != "CHA" {
 		t.Errorf("check.attr = %v", check["attr"])
@@ -460,15 +500,6 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 		t.Errorf("check.dc = %v", check["dc"])
 	}
 
-	// No more on_success/on_fail keys — the body is emitted as "steps".
-	if _, has := optA["on_success"]; has {
-		t.Error("brave option should not have 'on_success' key")
-	}
-	if _, has := optA["on_fail"]; has {
-		t.Error("brave option should not have 'on_fail' key")
-	}
-
-	// Brave option body is under "steps".
 	stepsA := optA["steps"].([]interface{})
 	if len(stepsA) != 1 {
 		t.Fatalf("len(optA.steps) = %d, want 1 (the @if tree)", len(stepsA))
@@ -508,24 +539,14 @@ func TestAuditE_ChoiceOptionStructure(t *testing.T) {
 	if optB["mode"] != "safe" {
 		t.Errorf("optB.mode = %v", optB["mode"])
 	}
-
-	// Safe option should have "steps", NOT "check", "on_success", "on_fail"
 	if _, hasCheck := optB["check"]; hasCheck {
 		t.Error("safe option should not have 'check'")
 	}
-	if _, hasOnSuccess := optB["on_success"]; hasOnSuccess {
-		t.Error("safe option should not have 'on_success'")
-	}
-	if _, hasOnFail := optB["on_fail"]; hasOnFail {
-		t.Error("safe option should not have 'on_fail'")
-	}
 
-	// steps should contain concurrent group
 	stepsB := optB["steps"].([]interface{})
 	if len(stepsB) != 2 {
-		t.Fatalf("len(optB.steps) = %d, want 2 (1 concurrent group + 1 narrator)", len(stepsB))
+		t.Fatalf("len(optB.steps) = %d, want 2", len(stepsB))
 	}
-	// First should be concurrent group
 	bGroup, ok := stepsB[0].([]interface{})
 	if !ok {
 		t.Fatalf("optB.steps[0] should be array, got %T", stepsB[0])
@@ -549,37 +570,38 @@ func TestAuditF_GateNull(t *testing.T) {
 	data, _ := em.Emit(ep)
 	s := string(data)
 
-	// gate must be explicitly null, not absent
 	if !strings.Contains(s, `"gate": null`) {
 		t.Errorf("expected 'gate: null' in output, got:\n%s", s)
 	}
 }
 
-func TestAuditF_CgShowNoBody(t *testing.T) {
+// TestAuditF_CgShowLeafShape verifies cg_show is a leaf — no `steps`,
+// `duration`, `transition`, or `body` keys.
+func TestAuditF_CgShowLeafShape(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
 		Body: []ast.Node{
-			&ast.CgShowNode{Name: "window_stare"},
+			&ast.CgShowNode{Name: "window_stare", Content: "story prose"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
 	data, _ := em.Emit(ep)
-	s := string(data)
 
-	// CG with no body should NOT have "steps" key
-	if strings.Contains(s, `"steps"`) {
-		// Only the top-level steps should be present
-		// The cg_show itself should not have "steps"
-		var result map[string]interface{}
-		json.Unmarshal(data, &result)
-		steps := result["steps"].([]interface{})
-		cg := steps[0].(map[string]interface{})
-		if _, hasSteps := cg["steps"]; hasSteps {
-			t.Error("cg_show without body should NOT have 'steps' key")
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+	cg := steps[0].(map[string]interface{})
+
+	for _, key := range []string{"steps", "duration", "transition", "body"} {
+		if _, has := cg[key]; has {
+			t.Errorf("cg_show should not carry %q (leaf step)", key)
 		}
+	}
+	if cg["content"] != "story prose" {
+		t.Errorf("cg_show.content = %v, want %q", cg["content"], "story prose")
 	}
 }
 
@@ -594,7 +616,7 @@ func TestAuditF_IfWithoutElse(t *testing.T) {
 				Else:      nil,
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -606,12 +628,10 @@ func TestAuditF_IfWithoutElse(t *testing.T) {
 	steps := result["steps"].([]interface{})
 	ifNode := steps[0].(map[string]interface{})
 
-	// Should NOT have "else" key at all
 	if _, hasElse := ifNode["else"]; hasElse {
 		t.Error("if without else should NOT have 'else' key")
 	}
 
-	// Must have "then"
 	then := ifNode["then"].([]interface{})
 	if len(then) != 1 {
 		t.Errorf("then length = %d, want 1", len(then))
@@ -623,7 +643,7 @@ func TestAuditF_PhoneShowNoBody(t *testing.T) {
 		BranchKey: "test:01",
 		Title:     "T",
 		Body:      []ast.Node{&ast.PhoneShowNode{}},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -635,19 +655,17 @@ func TestAuditF_PhoneShowNoBody(t *testing.T) {
 	steps := result["steps"].([]interface{})
 	phone := steps[0].(map[string]interface{})
 
-	// phone_show without body should NOT have "messages" key
 	if _, hasMessages := phone["messages"]; hasMessages {
 		t.Error("phone_show without body should NOT have 'messages' key")
 	}
 }
 
 func TestAuditF_EmptyBodyArray(t *testing.T) {
-	// If body is empty slice (not nil), what happens?
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
 		Body:      []ast.Node{},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -659,7 +677,6 @@ func TestAuditF_EmptyBodyArray(t *testing.T) {
 	var result map[string]interface{}
 	json.Unmarshal(data, &result)
 
-	// steps should be an empty array [], not null
 	steps := result["steps"]
 	if steps == nil {
 		t.Fatal("steps should be [] not null for empty body")
@@ -675,10 +692,10 @@ func TestAuditF_EmptyBodyArray(t *testing.T) {
 
 // ---------- Audit G: Type field completeness ----------
 
+// TestAuditG_AllNodeTypesHaveTypeField verifies that every emit* function
+// produces a map with the expected "type" key — covering exactly the
+// current AST node set.
 func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
-	// Every emitXxx function must produce a map with a "type" key.
-	// Test each one individually.
-
 	em := New(newMockResolver())
 
 	tests := []struct {
@@ -687,35 +704,30 @@ func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
 		wantType string
 	}{
 		{"bg", &ast.BgSetNode{Name: "bg1"}, "bg"},
-		{"char_show", &ast.CharShowNode{Char: "c", Look: "l", Position: "left"}, "char_show"},
-		{"char_hide", &ast.CharHideNode{Char: "c"}, "char_hide"},
-		{"char_look", &ast.CharLookNode{Char: "c", Look: "l"}, "char_look"},
-		{"char_move", &ast.CharMoveNode{Char: "c", Position: "right"}, "char_move"},
+		{"char_show", &ast.CharShowNode{Char: "c", Look: "l"}, "char_show"},
 		{"bubble", &ast.CharBubbleNode{Char: "c", BubbleType: "heart"}, "bubble"},
-		{"cg_show", &ast.CgShowNode{Name: "cg1"}, "cg_show"},
+		{"cg_show", &ast.CgShowNode{Name: "cg1", Content: "x"}, "cg_show"},
 		{"dialogue", &ast.DialogueNode{Character: "C", Text: "hi"}, "dialogue"},
 		{"narrator", &ast.NarratorNode{Text: "n"}, "narrator"},
 		{"you", &ast.YouNode{Text: "y"}, "you"},
 		{"phone_show", &ast.PhoneShowNode{}, "phone_show"},
-		{"phone_hide", &ast.PhoneHideNode{}, "phone_hide"},
 		{"text_message", &ast.TextMessageNode{Direction: "from", Char: "c", Content: "hi"}, "text_message"},
-		{"music_play", &ast.MusicPlayNode{Track: "t"}, "music_play"},
-		{"music_crossfade", &ast.MusicCrossfadeNode{Track: "t"}, "music_crossfade"},
-		{"music_fadeout", &ast.MusicFadeoutNode{}, "music_fadeout"},
-		{"sfx_play", &ast.SfxPlayNode{Sound: "s"}, "sfx_play"},
+		{"music", &ast.MusicSetNode{Name: "t"}, "music"},
+		{"music_stop", &ast.MusicStopNode{}, "music_stop"},
+		{"sfx", &ast.SfxNode{Name: "s"}, "sfx"},
 		{"minigame", &ast.MinigameNode{Name: "g", Description: "d"}, "minigame"},
 		{"trick", &ast.TrickNode{Type: ast.TrickTap, Prompt: "tap."}, "trick"},
 		{"choice", &ast.ChoiceNode{Options: []*ast.OptionNode{}}, "choice"},
 		{"affection", &ast.AffectionNode{Char: "c", Delta: "+1"}, "affection"},
-		{"signal", &ast.SignalNode{Kind: "mark", Event: "E"}, "signal"},
+		{"signal_mark", &ast.SignalNode{Kind: ast.SignalKindMark, Event: "E"}, "signal"},
+		{"signal_int", &ast.SignalNode{Kind: ast.SignalKindInt, Name: "x", Op: ast.SignalOpAdd, Value: 1}, "signal"},
 		{"butterfly", &ast.ButterflyNode{Description: "d"}, "butterfly"},
+		{"achievement", &ast.AchievementNode{ID: "X", Name: "n", Rarity: ast.RarityRare, Description: "d"}, "achievement"},
 		{"if", &ast.IfNode{
 			Condition: &ast.FlagCondition{Name: "f"},
 			Then:      []ast.Node{&ast.NarratorNode{Text: "x"}},
 		}, "if"},
-		{"label", &ast.LabelNode{Name: "L"}, "label"},
-		{"pause", &ast.PauseNode{Clicks: 1}, "pause"},
-		{"goto", &ast.GotoNode{Name: "L"}, "goto"},
+		{"pause", &ast.PauseNode{}, "pause"},
 	}
 
 	for _, tt := range tests {
@@ -735,11 +747,9 @@ func TestAuditG_AllNodeTypesHaveTypeField(t *testing.T) {
 	}
 }
 
-// ---------- Additional structural checks ----------
+// ---------- Audit G+: structural shapes ----------
 
 func TestAuditG_MinigameStructure(t *testing.T) {
-	// @minigame is a leaf: name + description, plus the resolver-filled
-	// game_url. No attr, no body, no rating branching.
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
@@ -749,7 +759,7 @@ func TestAuditG_MinigameStructure(t *testing.T) {
 				Description: "minigame description placeholder",
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -774,16 +784,14 @@ func TestAuditG_MinigameStructure(t *testing.T) {
 		t.Errorf("game_url = %v", mg["game_url"])
 	}
 
-	// Legacy fields must be absent in the new shape.
 	for _, key := range []string{"attr", "game_id", "on_results", "steps"} {
 		if _, has := mg[key]; has {
-			t.Errorf("minigame must not carry legacy %q key in the new model", key)
+			t.Errorf("minigame must not carry legacy %q key", key)
 		}
 	}
 }
 
 func TestAuditG_TrickStructure(t *testing.T) {
-	// @trick is engine-native: type + prompt, no asset, no rewards.
 	ep := &ast.Episode{
 		BranchKey: "test:01",
 		Title:     "T",
@@ -793,7 +801,7 @@ func TestAuditG_TrickStructure(t *testing.T) {
 				Prompt: "Hold your breath.",
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "test:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
 	}
 
 	em := New(newMockResolver())
@@ -821,8 +829,82 @@ func TestAuditG_TrickStructure(t *testing.T) {
 	}
 }
 
+// TestAuditG_MusicAndSfxStructure verifies the renamed step types and
+// fields: music uses "name" (not "track"), sfx uses "name" (not "sound"),
+// and music_stop is a separate leaf type.
+func TestAuditG_MusicAndSfxStructure(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "test:01", Title: "T",
+		Body: []ast.Node{
+			&ast.MusicSetNode{Name: "calm_morning"},
+			&ast.MusicStopNode{},
+			&ast.SfxNode{Name: "phone_buzz"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	steps := result["steps"].([]interface{})
+
+	music := steps[0].(map[string]interface{})
+	if music["type"] != "music" {
+		t.Errorf("music type = %v, want music", music["type"])
+	}
+	if music["name"] != "calm_morning" {
+		t.Errorf("music.name = %v, want calm_morning", music["name"])
+	}
+	if _, has := music["track"]; has {
+		t.Error("music must not carry legacy 'track' key")
+	}
+
+	stop := steps[1].(map[string]interface{})
+	if stop["type"] != "music_stop" {
+		t.Errorf("music_stop type = %v, want music_stop", stop["type"])
+	}
+
+	sfx := steps[2].(map[string]interface{})
+	if sfx["type"] != "sfx" {
+		t.Errorf("sfx type = %v, want sfx", sfx["type"])
+	}
+	if sfx["name"] != "phone_buzz" {
+		t.Errorf("sfx.name = %v, want phone_buzz", sfx["name"])
+	}
+	if _, has := sfx["sound"]; has {
+		t.Error("sfx must not carry legacy 'sound' key")
+	}
+}
+
+// TestAuditG_BubbleStructure verifies the renamed bubble step type
+// (formerly char_bubble): "type": "bubble" with "character" and
+// "bubble_type" fields.
+func TestAuditG_BubbleStructure(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "test:01", Title: "T",
+		Body: []ast.Node{
+			&ast.CharBubbleNode{Char: "josie", BubbleType: "heart"},
+		},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("test:02")}},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+	bubble := result["steps"].([]interface{})[0].(map[string]interface{})
+
+	if bubble["type"] != "bubble" {
+		t.Errorf("type = %v, want bubble", bubble["type"])
+	}
+	if bubble["character"] != "josie" {
+		t.Errorf("character = %v", bubble["character"])
+	}
+	if bubble["bubble_type"] != "heart" {
+		t.Errorf("bubble_type = %v", bubble["bubble_type"])
+	}
+}
+
 func TestAuditG_ConditionFieldCompleteness(t *testing.T) {
-	// Verify each condition type has exactly the right fields
 	em := New(newMockResolver())
 
 	t.Run("choice", func(t *testing.T) {
@@ -840,13 +922,12 @@ func TestAuditG_ConditionFieldCompleteness(t *testing.T) {
 
 	t.Run("comparison", func(t *testing.T) {
 		c := em.emitCondition(&ast.ComparisonCondition{
-			Left:  ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
+			Left:  &ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
 			Op:    ">=",
-			Right: 5,
+			Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 5},
 		})
 		assertField(t, c, "type", "comparison")
 		assertField(t, c, "op", ">=")
-		assertField(t, c, "right", 5)
 		left, ok := c["left"].(map[string]interface{})
 		if !ok {
 			t.Fatalf("comparison left should be map, got %T", c["left"])
@@ -857,12 +938,23 @@ func TestAuditG_ConditionFieldCompleteness(t *testing.T) {
 		if left["name"] != "x" {
 			t.Errorf("left.name = %v, want %q", left["name"], "x")
 		}
+		// Right must now also be a map (operand AST), not an int.
+		right, ok := c["right"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("comparison right should be map, got %T", c["right"])
+		}
+		if right["kind"] != ast.OperandLiteral {
+			t.Errorf("right.kind = %v, want %q", right["kind"], ast.OperandLiteral)
+		}
+		if right["value"] != 5 {
+			t.Errorf("right.value = %v, want 5", right["value"])
+		}
 	})
 
-	t.Run("influence", func(t *testing.T) {
-		c := em.emitCondition(&ast.InfluenceCondition{Description: "desc"})
-		assertField(t, c, "type", "influence")
-		assertField(t, c, "description", "desc")
+	t.Run("check", func(t *testing.T) {
+		c := em.emitCondition(&ast.CheckCondition{Result: "success"})
+		assertField(t, c, "type", "check")
+		assertField(t, c, "result", "success")
 	})
 
 	t.Run("compound", func(t *testing.T) {
@@ -882,12 +974,82 @@ func TestAuditG_ConditionFieldCompleteness(t *testing.T) {
 	})
 }
 
+// TestAuditG_OperandShapes verifies the five operand kinds each render
+// with the correct discriminator field set.
+func TestAuditG_OperandShapes(t *testing.T) {
+	em := New(newMockResolver())
+
+	t.Run("literal", func(t *testing.T) {
+		m := em.emitOperand(&ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: -3})
+		if m["kind"] != "literal" {
+			t.Errorf("kind = %v, want literal", m["kind"])
+		}
+		if m["value"] != -3 {
+			t.Errorf("value = %v, want -3", m["value"])
+		}
+	})
+
+	t.Run("affection", func(t *testing.T) {
+		m := em.emitOperand(&ast.ComparisonOperand{Kind: ast.OperandAffection, Char: "easton"})
+		if m["kind"] != "affection" {
+			t.Errorf("kind = %v, want affection", m["kind"])
+		}
+		if m["char"] != "easton" {
+			t.Errorf("char = %v, want easton", m["char"])
+		}
+	})
+
+	t.Run("value", func(t *testing.T) {
+		m := em.emitOperand(&ast.ComparisonOperand{Kind: ast.OperandValue, Name: "rejections"})
+		if m["kind"] != "value" {
+			t.Errorf("kind = %v, want value", m["kind"])
+		}
+		if m["name"] != "rejections" {
+			t.Errorf("name = %v, want rejections", m["name"])
+		}
+	})
+
+	t.Run("max", func(t *testing.T) {
+		m := em.emitOperand(&ast.ComparisonOperand{
+			Kind: ast.OperandMax,
+			Args: []*ast.ComparisonOperand{
+				{Kind: ast.OperandAffection, Char: "easton"},
+				{Kind: ast.OperandAffection, Char: "diego"},
+			},
+		})
+		if m["kind"] != "max" {
+			t.Errorf("kind = %v, want max", m["kind"])
+		}
+		args := m["args"].([]interface{})
+		if len(args) != 2 {
+			t.Fatalf("args length = %d, want 2", len(args))
+		}
+	})
+
+	t.Run("min", func(t *testing.T) {
+		m := em.emitOperand(&ast.ComparisonOperand{
+			Kind: ast.OperandMin,
+			Args: []*ast.ComparisonOperand{
+				{Kind: ast.OperandValue, Name: "rejections"},
+				{Kind: ast.OperandLiteral, Value: 10},
+			},
+		})
+		if m["kind"] != "min" {
+			t.Errorf("kind = %v, want min", m["kind"])
+		}
+		args := m["args"].([]interface{})
+		if len(args) != 2 {
+			t.Fatalf("args length = %d, want 2", len(args))
+		}
+	})
+}
+
 func TestAuditG_TopLevelFields(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main/bad/001:03",
 		Title:     "The End",
 		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:04"}}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:04")}},
 	}
 
 	em := New(newMockResolver())

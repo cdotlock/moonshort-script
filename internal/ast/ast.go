@@ -33,27 +33,36 @@ func (c *ConcurrentFlag) SetConcurrent(v bool) { c.Concurrent = v }
 
 // Episode is the root node of every MSS script file.
 //
-// An episode must terminate with exactly one of:
-//   - Gate: routing table that picks the next episode based on conditions.
-//   - Ending: terminal marker (complete / to_be_continued / bad_ending).
+// Every episode MUST terminate with exactly one @gate block in the source.
+// The gate is then lowered by the emitter into one of two top-level shapes:
 //
-// Both nil means the episode has no terminal — the validator flags this.
-// Both set is disallowed: an ending is final, a gate is a router, they
-// cannot coexist in the same episode.
+//   - Gate: the structured routing AST (conditional or unconditional @next /
+//     mixed @next / @end leaves).
+//   - Ending: a simple terminal marker, populated by the emitter when the
+//     source gate is the degenerate form `@gate { @end TYPE }` (Scheme B).
+//     This pure-unconditional-ending shape lowers to Episode.Ending so the
+//     overlay system can keep its current simple consumer.
+//
+// Ending is therefore a product of the emitter's lowering pass, NOT a
+// separate source-level construct. At source level there is always exactly
+// one @gate block per episode.
 type Episode struct {
 	BranchKey string      // e.g. "main:01"
 	Title     string      // e.g. "Butterfly"
 	Body      []Node      // ordered list of top-level nodes
-	Gate      *GateBlock  // optional routing table at end of episode
-	Ending    *EndingNode // optional terminal marker (mutually exclusive with Gate)
+	Gate      *GateBlock  // structured routing AST (set when gate has conditions or any @next leaf)
+	Ending    *EndingNode // simple terminal marker (set only for pure `@gate { @end TYPE }` lowering)
 }
 
 // ----------------------------------------------------------------------------
 // Structure nodes
 // ----------------------------------------------------------------------------
 
-// GateBlock holds routing rules at the end of an episode.
-// Routes are evaluated top-to-bottom; the first matching condition wins.
+// GateBlock holds the routing rules at the end of an episode.
+// Every episode has exactly one gate. A gate's routes are evaluated
+// top-to-bottom; the first matching condition wins. Routes may mix
+// @next and @end leaves freely — a single gate can both route to other
+// episodes and terminate the story on different conditions.
 type GateBlock struct {
 	Routes []*GateRoute
 }
@@ -61,10 +70,11 @@ type GateBlock struct {
 func (g *GateBlock) nodeType() string { return "gate" }
 
 // Condition is the interface implemented by every condition node.
-// ConditionKind returns the "type" string used by the emitter. Concrete types:
+// ConditionKind returns the "type" string used by the emitter. Five concrete
+// implementations exist:
+//
 //   - ChoiceCondition       : option check result (e.g. A.fail) — retrospective query from outside an option
 //   - FlagCondition         : signal-flag truthiness (e.g. HIGH_HEEL_EP05)
-//   - InfluenceCondition    : LLM butterfly-effect judgment
 //   - ComparisonCondition   : structured numeric comparison
 //   - CompoundCondition     : && / || tree of sub-conditions
 //   - CheckCondition        : this-option's check result (check.success / check.fail) — context-local to brave option body
@@ -88,36 +98,49 @@ type FlagCondition struct {
 
 func (c *FlagCondition) ConditionKind() string { return "flag" }
 
-// InfluenceCondition is evaluated by an LLM over accumulated butterfly records.
-type InfluenceCondition struct {
-	Description string // natural-language judgment text
-}
-
-func (c *InfluenceCondition) ConditionKind() string { return "influence" }
-
-// ComparisonOperandKind distinguishes the shape of the left side of a
-// comparison. Affection operands address per-character affection values
-// (affection.<char>); value operands address engine-managed scalars
-// (san, CHA, etc.).
+// ComparisonOperandKind values for ComparisonOperand.Kind. Five kinds:
+//
+//   - OperandLiteral   : integer literal (uses Value)
+//   - OperandAffection : per-character affection (uses Char)
+//   - OperandValue     : engine-managed scalar or author @signal int variable, bare-name lookup (uses Name)
+//   - OperandMax       : MAX aggregate over args (uses Args, len >= 2)
+//   - OperandMin       : MIN aggregate over args (uses Args, len >= 2)
 const (
+	OperandLiteral   = "literal"
 	OperandAffection = "affection"
 	OperandValue     = "value"
+	OperandMax       = "max"
+	OperandMin       = "min"
 )
 
-// ComparisonOperand is the left-hand side of a comparison.
+// ComparisonOperand is one side of a comparison. Field usage by Kind:
+//
+//   - OperandLiteral   : Value holds the integer literal (may be negative).
+//   - OperandAffection : Char holds the character id (e.g. "easton").
+//   - OperandValue     : Name holds the bare scalar name (e.g. "san", "CHA",
+//                        or an author @signal int variable name). The engine
+//                        looks the name up in a shared namespace.
+//   - OperandMax       : Args holds the aggregate operands (len >= 2). Each
+//                        arg is itself a *ComparisonOperand and may recurse.
+//   - OperandMin       : same shape as OperandMax.
+//
+// Fields not relevant to the active Kind are left at their zero value.
 type ComparisonOperand struct {
-	Kind string // OperandAffection | OperandValue
-	Char string // when Kind == OperandAffection: character id
-	Name string // when Kind == OperandValue: scalar name (e.g. "san", "CHA")
+	Kind  string               // OperandLiteral | OperandAffection | OperandValue | OperandMax | OperandMin
+	Value int                  // when Kind == OperandLiteral
+	Char  string               // when Kind == OperandAffection: character id
+	Name  string               // when Kind == OperandValue: scalar / signal-int name
+	Args  []*ComparisonOperand // when Kind == OperandMax | OperandMin: aggregate args, len >= 2
 }
 
 // ComparisonCondition is a structured numeric comparison.
-// Right-hand side is always an integer literal.
+// Both sides are full operands — any operand kind can appear on either side
+// (literal-to-variable, variable-to-variable, aggregate-to-anything, etc.).
 // Op is one of: ">=", "<=", ">", "<", "==", "!=".
 type ComparisonCondition struct {
-	Left  ComparisonOperand
+	Left  *ComparisonOperand
 	Op    string
-	Right int
+	Right *ComparisonOperand
 }
 
 func (c *ComparisonCondition) ConditionKind() string { return "comparison" }
@@ -141,51 +164,63 @@ type CheckCondition struct {
 
 func (c *CheckCondition) ConditionKind() string { return "check" }
 
-// GateRoute is a single condition→target pair inside a @gate block.
-type GateRoute struct {
-	Condition Condition // nil = unconditional/fallback
-	Target    string    // destination episode key, e.g. "main/bad/001:01"
+// GateLeaf is the marker interface for the two terminal node shapes that
+// can appear at the end of a gate route: @next (route to another episode)
+// and @end (terminate the story with a specific ending type).
+type GateLeaf interface {
+	gateLeafKind() string
 }
 
-// Valid ending type values for EndingNode.Type.
+// NextLeaf routes to a destination episode.
+// Source syntax: `@next <branch_key>`.
+type NextLeaf struct {
+	Target string // destination episode key, e.g. "main/bad/001:01"
+}
+
+func (n *NextLeaf) gateLeafKind() string { return "next" }
+
+// EndLeaf terminates the story with the specified ending type.
+// Source syntax: `@end <type>`.
+type EndLeaf struct {
+	Type string // EndingComplete | EndingToBeContinued | EndingBad
+}
+
+func (e *EndLeaf) gateLeafKind() string { return "end" }
+
+// GateRoute is a single condition→leaf pair inside a @gate block. The leaf
+// is either a *NextLeaf (route to another episode) or an *EndLeaf
+// (terminate the story); a gate may mix both freely across its routes.
+type GateRoute struct {
+	Condition Condition // nil = unconditional/fallback
+	Leaf      GateLeaf  // *NextLeaf or *EndLeaf
+}
+
+// Valid ending type values for EndingNode.Type and EndLeaf.Type.
 const (
 	EndingComplete      = "complete"
 	EndingToBeContinued = "to_be_continued"
 	EndingBad           = "bad_ending"
 )
 
-// EndingNode marks the terminal state of an episode. Mutually exclusive
-// with GateBlock — an episode terminates by routing or by ending, not both.
+// EndingNode is the emitter-produced simple terminal marker, populated on
+// Episode.Ending when the source gate is the degenerate form
+// `@gate { @end TYPE }`. It is not a source-level construct — at source
+// level every episode has a @gate; the emitter lowers the pure-uncondional-
+// ending shape into this field for the overlay system's benefit.
 type EndingNode struct {
 	Type string // EndingComplete | EndingToBeContinued | EndingBad
 }
 
 func (e *EndingNode) nodeType() string { return "ending" }
 
-// LabelNode marks a jump target inside the episode body.
-type LabelNode struct {
-	ConcurrentFlag
-	Name string // e.g. "AFTER_FIGHT"
-}
-
-func (l *LabelNode) nodeType() string { return "label" }
-
-// GotoNode unconditionally jumps to a label within the episode.
-type GotoNode struct {
-	ConcurrentFlag
-	Name string // must match a LabelNode.Name
-}
-
-func (g *GotoNode) nodeType() string { return "goto" }
-
 // ----------------------------------------------------------------------------
 // Visual nodes
 // ----------------------------------------------------------------------------
 
-// PauseNode inserts a click-wait point. Clicks is the number of clicks to wait.
+// PauseNode inserts a single-click wait point. Source syntax: `@pause`.
+// No parameters — @pause always waits for exactly one player click.
 type PauseNode struct {
 	ConcurrentFlag
-	Clicks int
 }
 
 func (p *PauseNode) nodeType() string { return "pause" }
@@ -199,81 +234,57 @@ type BgSetNode struct {
 
 func (b *BgSetNode) nodeType() string { return "bg" }
 
-// CharShowNode brings a character sprite onto screen.
+// CharShowNode is the single node that covers both bringing a character
+// onto screen for the first time AND swapping the pose of a character
+// already on screen — the engine decides which case applies at runtime
+// based on whether Char is currently visible. There is no separate
+// hide / look / move node: the "one character on screen" rule means the
+// engine implicitly hides whoever was there, and position is derived from
+// gamestate (MC left, everyone else right) — never declared in source.
 type CharShowNode struct {
 	ConcurrentFlag
 	Char       string // character id, e.g. "mauricio"
 	Look       string // sprite variant, e.g. "neutral_smirk"
-	Position   string // "left" | "center" | "right"
-	Transition string
+	Transition string // optional, e.g. "dissolve", "fade"
 }
 
 func (c *CharShowNode) nodeType() string { return "char_show" }
 
-// CharHideNode removes a character sprite.
-type CharHideNode struct {
-	ConcurrentFlag
-	Char       string
-	Transition string
-}
-
-func (c *CharHideNode) nodeType() string { return "char_hide" }
-
-// CharLookNode changes a character's sprite (look) in-place.
-// Covers both expression and costume changes.
-type CharLookNode struct {
-	ConcurrentFlag
-	Char       string
-	Look       string
-	Transition string
-}
-
-func (c *CharLookNode) nodeType() string { return "char_look" }
-
-// CharMoveNode slides a character to a new screen position.
-type CharMoveNode struct {
-	ConcurrentFlag
-	Char     string
-	Position string
-}
-
-func (c *CharMoveNode) nodeType() string { return "char_move" }
-
-// CharBubbleNode shows an emotion bubble above a character.
-// BubbleType: "anger" | "sweat" | "heart" | "question" | "exclaim" |
+// CharBubbleNode shows a one-shot emotion bubble above a character.
+// The bubble plays once and disappears; it follows the currently visible
+// character and is removed if the character is swapped out.
 //
-//	"idea" | "music" | "doom" | "ellipsis"
+// BubbleType must be one of nine values:
+//
+//	"anger"    — 💢 anger
+//	"sweat"    — 💧 cold sweat
+//	"heart"    — ❤️ infatuation
+//	"question" — ❓ confusion
+//	"exclaim"  — ❗ surprise
+//	"idea"     — 💡 sudden insight
+//	"music"    — 🎵 cheerful / humming
+//	"doom"     — 💀 despair
+//	"ellipsis" — ... silence / speechless
+//
+// `bubble` is a reserved word: no pose may be named "bubble".
 type CharBubbleNode struct {
 	ConcurrentFlag
 	Char       string
 	BubbleType string
 }
 
-func (c *CharBubbleNode) nodeType() string { return "char_bubble" }
-
-// Valid CG duration tiers. Duration is a qualitative length tier that
-// downstream video pipelines (e.g. agent-forge) map to concrete seconds.
-const (
-	CgDurationLow    = "low"
-	CgDurationMedium = "medium"
-	CgDurationHigh   = "high"
-)
+func (c *CharBubbleNode) nodeType() string { return "bubble" }
 
 // CgShowNode overlays a CG (computer-generated) illustration, which is
-// produced downstream as a short video. MSS is flow-control + content,
-// so the script must carry the narrative content the video pipeline
-// needs: camera direction plus story beats.
-//
-// Duration and Content are required fields declared at the top of the
-// CG block. Body holds the dialogue / narration nodes that play while
-// the CG is visible (unchanged from prior behavior).
+// produced downstream by agent-forge as a short video. CG is a leaf
+// directive: no body, no per-script duration, no transition. Pacing,
+// camera motion, and emphasis are all derived by the downstream pipeline
+// from Content (a continuous English prose narrative describing the
+// camera, the beats, and the emphasis).
 type CgShowNode struct {
 	ConcurrentFlag
-	Name       string
-	Transition string
-	Duration   string // CgDurationLow | CgDurationMedium | CgDurationHigh
-	Content    string // continuous English narrative: camera + story beats
-	Body       []Node
+	Name    string // CG asset handle
+	Content string // continuous English narrative: camera + story beats
 }
 
 func (c *CgShowNode) nodeType() string { return "cg_show" }
@@ -308,19 +319,20 @@ func (y *YouNode) nodeType() string { return "you" }
 // Phone / text-message nodes
 // ----------------------------------------------------------------------------
 
-// PhoneShowNode opens the in-game phone overlay.
-// Body holds the sequence of text-message nodes shown in the overlay.
+// PhoneShowNode opens the in-game phone overlay and manages its full
+// lifecycle: when the body finishes playing the engine automatically
+// dismisses the overlay. There is no separate phone_hide node.
+//
+// Body holds the sequence of messages shown in the overlay and accepts
+// ONLY TextMessageNode children — the validator enforces a strict
+// whitelist. Narration, sfx, state changes, etc. must live outside the
+// @phone block.
 type PhoneShowNode struct {
 	ConcurrentFlag
-	Body []Node
+	Body []Node // TextMessageNode only (validator-enforced)
 }
 
 func (p *PhoneShowNode) nodeType() string { return "phone_show" }
-
-// PhoneHideNode closes the phone overlay.
-type PhoneHideNode struct{ ConcurrentFlag }
-
-func (p *PhoneHideNode) nodeType() string { return "phone_hide" }
 
 // TextMessageNode represents a single SMS message bubble.
 // Direction: "from" | "to"
@@ -336,34 +348,32 @@ func (t *TextMessageNode) nodeType() string { return "text_message" }
 // Audio nodes
 // ----------------------------------------------------------------------------
 
-// MusicPlayNode starts background music.
-type MusicPlayNode struct {
+// MusicSetNode plays a BGM track. Source syntax: `@music <name>`.
+// The engine inspects current playback state and either fades in from
+// silence or cross-fades from the currently playing track — the script
+// does not distinguish the two cases.
+type MusicSetNode struct {
 	ConcurrentFlag
-	Track string
+	Name string
 }
 
-func (m *MusicPlayNode) nodeType() string { return "music_play" }
+func (m *MusicSetNode) nodeType() string { return "music" }
 
-// MusicCrossfadeNode cross-fades to a new music track.
-type MusicCrossfadeNode struct {
+// MusicStopNode fades out the currently playing BGM.
+// Source syntax: `@music stop`.
+type MusicStopNode struct {
 	ConcurrentFlag
-	Track string
 }
 
-func (m *MusicCrossfadeNode) nodeType() string { return "music_crossfade" }
+func (m *MusicStopNode) nodeType() string { return "music_stop" }
 
-// MusicFadeoutNode fades out the current music track.
-type MusicFadeoutNode struct{ ConcurrentFlag }
-
-func (m *MusicFadeoutNode) nodeType() string { return "music_fadeout" }
-
-// SfxPlayNode plays a one-shot sound effect.
-type SfxPlayNode struct {
+// SfxNode plays a one-shot sound effect. Source syntax: `@sfx <name>`.
+type SfxNode struct {
 	ConcurrentFlag
-	Sound string
+	Name string
 }
 
-func (s *SfxPlayNode) nodeType() string { return "sfx_play" }
+func (s *SfxNode) nodeType() string { return "sfx" }
 
 // ----------------------------------------------------------------------------
 // Game-mechanic nodes
@@ -558,10 +568,19 @@ type AchievementNode struct {
 
 func (a *AchievementNode) nodeType() string { return "achievement" }
 
-// ButterflyNode records a butterfly-effect narrative branch decision.
+// ButterflyNode records a butterfly-effect narrative decision. Description
+// captures the player action plus its character implication in English
+// prose, which downstream content-generation agents — the Remix Executor
+// and Dream — consume to keep generated remix episodes and derivative
+// stories aligned with the player's behavior profile.
+//
+// Butterfly records are NOT consulted by gate routing: every runtime
+// decision (signal mark, signal int, affection, choice history) is
+// deterministic, while butterfly is fuzzy player-profile fuel for the
+// generation pipeline.
 type ButterflyNode struct {
 	ConcurrentFlag
-	Description string // human-readable description
+	Description string // English prose: action + character implication
 }
 
 func (b *ButterflyNode) nodeType() string { return "butterfly" }

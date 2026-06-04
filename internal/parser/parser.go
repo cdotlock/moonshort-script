@@ -12,15 +12,21 @@ import (
 )
 
 // knownKeywords are @-directive keywords that are NOT character names.
+// Anything not in this set, when used as @<keyword>, is parsed as a
+// character directive (e.g. @malia worried).
 var knownKeywords = map[string]bool{
 	"bg": true, "cg": true, "phone": true, "text": true,
 	"music": true, "sfx": true, "minigame": true, "trick": true,
 	"choice": true,
 	"affection": true, "signal": true,
-	"butterfly": true, "if": true, "else": true, "label": true,
-	"goto": true, "episode": true,
-	"option": true, "gate": true, "next": true, "pause": true,
-	"ending": true, "achievement": true,
+	"butterfly": true, "if": true, "else": true,
+	"episode":     true,
+	"option":      true,
+	"gate":        true,
+	"next":        true,
+	"end":         true,
+	"pause":       true,
+	"achievement": true,
 }
 
 // validTrickTypes enumerates the 6 locked trick types accepted by the
@@ -34,16 +40,8 @@ var validTrickTypes = map[string]bool{
 	ast.TrickTilt:  true,
 }
 
-// validEndingTypes enumerates the accepted values for @ending <type>.
-var validEndingTypes = map[string]bool{
-	"complete":        true,
-	"to_be_continued": true,
-	"bad_ending":      true,
-}
-
 // validSignalKinds enumerates accepted values for the kind token in
-// @signal <kind> <event>. Only "mark" is currently implemented; future
-// kinds will expand this whitelist.
+// @signal <kind> <event>.
 var validSignalKinds = map[string]bool{
 	"mark": true,
 	"int":  true,
@@ -56,6 +54,20 @@ var validRarities = map[string]bool{
 	"rare":      true,
 	"epic":      true,
 	"legendary": true,
+}
+
+// validBubbleTypes enumerates the 9 locked bubble types. Keep in sync
+// with the BubbleType field doc on CharBubbleNode in package ast.
+var validBubbleTypes = map[string]bool{
+	"anger":    true,
+	"sweat":    true,
+	"heart":    true,
+	"question": true,
+	"exclaim":  true,
+	"idea":     true,
+	"music":    true,
+	"doom":     true,
+	"ellipsis": true,
 }
 
 // Parser consumes tokens from a Lexer and produces an AST.
@@ -87,13 +99,6 @@ func (p *Parser) advance() {
 	}
 }
 
-// advanceRaw moves to the next token without skipping anything.
-// Used when the caller needs precise control (e.g. reading conditions).
-func (p *Parser) advanceRaw() {
-	p.cur = p.peek
-	p.peek = p.l.NextToken()
-}
-
 // expect checks that the current token has the given type, then advances.
 // Returns an error if the type doesn't match.
 func (p *Parser) expect(t token.Type) (token.Token, error) {
@@ -107,8 +112,13 @@ func (p *Parser) expect(t token.Type) (token.Token, error) {
 }
 
 // Parse parses an entire @episode block and returns the root Episode node.
+//
+// The source-level Episode always terminates with exactly one @gate block;
+// the emitter's lowering pass is responsible for collapsing the degenerate
+// `@gate { @end TYPE }` form into Episode.Ending. The parser never sets
+// Ending itself.
 func (p *Parser) Parse() (*ast.Episode, error) {
-	// @episode <branch_key> "<title>" { body @gates { ... } }
+	// @episode <branch_key> "<title>" { body @gate { ... } }
 	if _, err := p.expect(token.AT); err != nil {
 		return nil, err
 	}
@@ -135,13 +145,12 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 		Title:     title.Literal,
 	}
 
-	body, gates, ending, err := p.parseEpisodeBody()
+	body, gate, err := p.parseEpisodeBody()
 	if err != nil {
 		return nil, err
 	}
 	episode.Body = body
-	episode.Gate = gates
-	episode.Ending = ending
+	episode.Gate = gate
 
 	if _, err := p.expect(token.RBRACE); err != nil {
 		return nil, err
@@ -149,53 +158,43 @@ func (p *Parser) Parse() (*ast.Episode, error) {
 	return episode, nil
 }
 
-// parseEpisodeBody parses body nodes until RBRACE. @gate and @ending are
-// lifted to episode-level fields (mutually exclusive terminals); everything
-// else — including @achievement triggers — stays in the body as steps.
-func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode, error) {
+// parseEpisodeBody parses body nodes until RBRACE. The single @gate block
+// is lifted to Episode.Gate; everything else — including @achievement
+// triggers — stays in the body as steps.
+//
+// Standalone @ending is no longer a source-level construct. The emitter
+// produces Episode.Ending from a pure `@gate { @end TYPE }` lowering;
+// the parser only sees @gate.
+func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, error) {
 	var body []ast.Node
-	var gates *ast.GateBlock
-	var ending *ast.EndingNode
+	var gate *ast.GateBlock
 
 	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
 		// Drain any pending node queued by parseDialogueWithExpr before
-		// checking the @gate / @ending short-circuit paths.
+		// checking the @gate short-circuit path.
 		if p.pending != nil {
 			body = append(body, p.pending)
 			p.pending = nil
 			continue
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "gate" {
-			if gates != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
-			}
-			if ending != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: @gate cannot coexist with @ending (an ending is terminal)", p.cur.Line, p.cur.Col)
+			if gate != nil {
+				return nil, nil, fmt.Errorf("line %d col %d: duplicate @gate block", p.cur.Line, p.cur.Col)
 			}
 			g, err := p.parseGateBlock()
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
-			gates = g
+			gate = g
 			continue
 		}
 		if p.cur.Type == token.AT && p.peek.Literal == "ending" {
-			if ending != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: duplicate @ending directive", p.cur.Line, p.cur.Col)
-			}
-			if gates != nil {
-				return nil, nil, nil, fmt.Errorf("line %d col %d: @ending cannot coexist with @gate (an ending is terminal)", p.cur.Line, p.cur.Col)
-			}
-			e, err := p.parseEnding()
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			ending = e
-			continue
+			return nil, nil, fmt.Errorf("line %d col %d: standalone @ending is not allowed; use @gate { @end <type> }",
+				p.cur.Line, p.cur.Col)
 		}
 		node, err := p.parseStatement()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		if node == nil {
 			continue
@@ -207,7 +206,7 @@ func (p *Parser) parseEpisodeBody() ([]ast.Node, *ast.GateBlock, *ast.EndingNode
 		body = append(body, p.pending)
 		p.pending = nil
 	}
-	return body, gates, ending, nil
+	return body, gate, nil
 }
 
 // parseBlock parses body nodes until RBRACE (but does NOT consume the RBRACE).
@@ -271,27 +270,6 @@ func (p *Parser) parseStatement() (ast.Node, error) {
 // directive the same way as @-prefixed ones, then marks the resulting node
 // as concurrent.
 func (p *Parser) parseConcurrentDirective() (ast.Node, error) {
-	// Check if this looks like dialogue with & prefix (e.g., &NARRATOR: text)
-	// We peek ahead: if AMPERSAND is followed by an IDENT+COLON pattern, it's a dialogue mistake.
-	if p.peek.Type == token.IDENT {
-		// Check if the ident is all-caps and followed by colon (dialogue pattern)
-		name := p.peek.Literal
-		isUpper := true
-		for _, r := range name {
-			if r < 'A' || r > 'Z' {
-				if r != '_' && (r < '0' || r > '9') {
-					isUpper = false
-					break
-				}
-			}
-		}
-		if isUpper && len(name) > 0 {
-			// Save state to check for colon - we need to peek 2 ahead
-			// The lexer has already loaded peek, so we'd need the token after peek
-			// Instead, just try parsing and catch the error with a better message
-		}
-	}
-
 	node, err := p.parseDirective() // parseDirective consumes AT/AMPERSAND via advance
 	if err != nil {
 		// If the error is about expecting IDENT but got COLON, this is likely &DIALOGUE: text
@@ -347,23 +325,11 @@ func (p *Parser) parseDialogue() (ast.Node, error) {
 //
 // This is equivalent to:
 //
-//	@character expr pose_expr
+//	@character pose_expr
 //	CHARACTER: text
 //
-// It returns CharExprNode immediately, and queues the dialogue node as p.pending
-// so that the next parseStatement call drains it — preserving correct order.
-//
-// Lexer position note: each p.advance() reads one token from the lexer into
-// p.peek, advancing the lexer's internal position. By the time cur==COLON,
-// p.peek already holds whatever follows the COLON (first word of dialogue),
-// meaning the lexer has consumed past the COLON. We must NOT call p.advance()
-// again before ReadDialogueText — instead we call it directly on the position
-// the lexer is already at (after cur was loaded into peek).
-//
-// The trick: after RBRACKET is confirmed in cur, p.peek == COLON.
-// We do NOT advance again; instead we call ReadDialogueText which starts
-// reading from the lexer's current position — which is right after COLON
-// (since COLON was the token that was pulled into p.peek).
+// It returns CharShowNode immediately, and queues the dialogue node as
+// p.pending so the next parseStatement call drains it — preserving order.
 func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
 	name := p.cur.Literal
 	charID := strings.ToLower(name)
@@ -388,9 +354,8 @@ func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
 	}
 
 	// At this point: cur=RBRACKET, peek=COLON.
-	// p.peek was loaded by calling p.l.NextToken() inside the last p.advance(),
-	// so the lexer's internal pos is now right after the COLON character — exactly
-	// where ReadDialogueText expects to start. Do NOT call p.advance() here.
+	// The lexer's internal pos is now right after the COLON character —
+	// exactly where ReadDialogueText expects to start.
 	if p.peek.Type != token.COLON {
 		return nil, fmt.Errorf("line %d col %d: expected ':' after ']', got %s (%q)",
 			p.peek.Line, p.peek.Col, p.peek.Type, p.peek.Literal)
@@ -418,8 +383,9 @@ func (p *Parser) parseDialogueWithExpr() (ast.Node, error) {
 		p.pending = &ast.DialogueNode{Character: name, Text: textTok.Literal}
 	}
 
-	// Return CharLookNode first.
-	return &ast.CharLookNode{
+	// Return CharShowNode first. The "show vs. swap pose" decision is the
+	// engine's at runtime — the parser always emits CharShowNode.
+	return &ast.CharShowNode{
 		Char: charID,
 		Look: pose,
 	}, nil
@@ -436,7 +402,7 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 	case "cg":
 		return p.parseCg()
 	case "phone":
-		return p.parsePhone()
+		return p.parsePhoneBlock()
 	case "text":
 		return p.parseText()
 	case "music":
@@ -457,10 +423,6 @@ func (p *Parser) parseDirective() (ast.Node, error) {
 		return p.parseButterfly()
 	case "if":
 		return p.parseIf()
-	case "label":
-		return p.parseLabel()
-	case "goto":
-		return p.parseGoto()
 	case "pause":
 		return p.parsePause()
 	case "achievement":
@@ -492,142 +454,74 @@ func (p *Parser) parseBg() (ast.Node, error) {
 	return node, nil
 }
 
-// validCgDurations enumerates accepted @cg duration tiers.
-var validCgDurations = map[string]bool{
-	ast.CgDurationLow:    true,
-	ast.CgDurationMedium: true,
-	ast.CgDurationHigh:   true,
-}
-
-// parseCg parses:
+// parseCg parses: @cg <name> "<content>"
 //
-//	@cg show <name> [transition] {
-//	  duration: <low|medium|high>
-//	  content: "<narrative>"
-//	  <body nodes>
-//	}
-//
-// duration and content are required fields that must appear before any
-// body statement. Field order between them is free; they may not repeat.
+// CG is a leaf directive — no body, no per-script duration, no transition.
+// Pacing, camera motion, and emphasis are derived downstream from <content>.
 func (p *Parser) parseCg() (ast.Node, error) {
 	p.advance() // consume "cg"
-	if _, err := p.expect(token.IDENT); err != nil { // consume "show"
-		return nil, err
-	}
 	name, err := p.expect(token.IDENT)
 	if err != nil {
 		return nil, err
 	}
-	node := &ast.CgShowNode{Name: name.Literal}
-	// Optional transition before LBRACE.
-	if p.cur.Type == token.IDENT && p.cur.Literal != "{" {
-		node.Transition = p.cur.Literal
-		p.advance()
+	content, err := p.expect(token.STRING)
+	if err != nil {
+		return nil, fmt.Errorf("line %d col %d: @cg %s requires a quoted content string", content.Line, content.Col, name.Literal)
 	}
+	return &ast.CgShowNode{
+		Name:    name.Literal,
+		Content: content.Literal,
+	}, nil
+}
+
+// parsePhoneBlock parses: @phone { <text-message-only body> }
+//
+// Inside the @phone block ONLY `@text from/to` directives are allowed.
+// Anything else is a parse error.
+func (p *Parser) parsePhoneBlock() (ast.Node, error) {
+	p.advance() // consume "phone"
 	if _, err := p.expect(token.LBRACE); err != nil {
 		return nil, err
 	}
 
-	// Read field-value pairs (duration, content) until we see a non-field
-	// statement (@, &, dialogue pattern, or RBRACE).
-	seen := map[string]bool{}
-	for p.cur.Type == token.IDENT && p.peek.Type == token.COLON {
-		key := p.cur.Literal
-		if key != "duration" && key != "content" {
-			// Not a CG field; fall through to body parsing (this path
-			// is unusual — would mean an IDENT:COLON dialogue line whose
-			// IDENT happens to look like lowercase. Dialogue uses caps so
-			// this is rare but kept for safety).
-			break
+	node := &ast.PhoneShowNode{}
+	for p.cur.Type != token.RBRACE && p.cur.Type != token.EOF {
+		if p.cur.Type != token.AT || p.peek.Literal != "text" {
+			return nil, fmt.Errorf("line %d col %d: inside @phone block, only @text from/to is allowed",
+				p.cur.Line, p.cur.Col)
 		}
-		if seen[key] {
-			return nil, fmt.Errorf("line %d col %d: duplicate @cg field %q", p.cur.Line, p.cur.Col, key)
-		}
-		seen[key] = true
-		p.advance() // consume key
-		if _, err := p.expect(token.COLON); err != nil {
-			return nil, err
-		}
-		switch key {
-		case "duration":
-			val, err := p.expect(token.IDENT)
-			if err != nil {
-				return nil, fmt.Errorf("line %d col %d: cg duration must be an identifier (low|medium|high)", val.Line, val.Col)
-			}
-			if !validCgDurations[val.Literal] {
-				return nil, fmt.Errorf("line %d col %d: invalid cg duration %q (must be low, medium, or high)", val.Line, val.Col, val.Literal)
-			}
-			node.Duration = val.Literal
-		case "content":
-			val, err := p.expect(token.STRING)
-			if err != nil {
-				return nil, fmt.Errorf("line %d col %d: cg content must be a quoted string", val.Line, val.Col)
-			}
-			node.Content = val.Literal
-		}
-	}
-
-	body, err := p.parseBlock()
-	if err != nil {
-		return nil, err
-	}
-	node.Body = body
-	if _, err := p.expect(token.RBRACE); err != nil {
-		return nil, err
-	}
-
-	if node.Duration == "" {
-		return nil, fmt.Errorf("@cg show %q: missing required field 'duration'", node.Name)
-	}
-	if node.Content == "" {
-		return nil, fmt.Errorf("@cg show %q: missing required field 'content'", node.Name)
-	}
-	return node, nil
-}
-
-// parsePhone parses: @phone show { body } or @phone hide
-func (p *Parser) parsePhone() (ast.Node, error) {
-	p.advance() // consume "phone"
-	action, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	switch action.Literal {
-	case "show":
-		if _, err := p.expect(token.LBRACE); err != nil {
-			return nil, err
-		}
-		node := &ast.PhoneShowNode{}
-		// Parse body — can contain @text directives and other nodes.
-		body, err := p.parseBlock()
+		// Consume AT, then dispatch to parseText.
+		p.advance() // consume AT
+		// Now cur == "text" IDENT — parseText expects exactly that.
+		msg, err := p.parseText()
 		if err != nil {
 			return nil, err
 		}
-		node.Body = body
-		if _, err := p.expect(token.RBRACE); err != nil {
-			return nil, err
+		if msg != nil {
+			node.Body = append(node.Body, msg)
 		}
-		return node, nil
-	case "hide":
-		return &ast.PhoneHideNode{}, nil
-	default:
-		return nil, fmt.Errorf("line %d: unknown phone action %q", action.Line, action.Literal)
 	}
+	if _, err := p.expect(token.RBRACE); err != nil {
+		return nil, err
+	}
+	return node, nil
 }
 
 // parseText parses: @text from <char>: content  or  @text to <char>: content
 //
 // After consuming "text", we see direction then char. The char IDENT is
-// followed by COLON, which mirrors the dialogue IDENT COLON pattern.
-// We consume "text" and "direction" via advance, then find char in cur
-// with COLON in peek. At that point the lexer is right after COLON,
-// so we call ReadDialogueText directly.
+// followed by COLON, mirroring the dialogue IDENT COLON pattern. We then
+// call ReadDialogueText directly on the lexer's already-after-COLON position.
 func (p *Parser) parseText() (ast.Node, error) {
 	p.advance() // consume "text"
 	direction := p.cur
 	if direction.Type != token.IDENT {
 		return nil, fmt.Errorf("line %d: expected direction (from/to), got %s",
 			direction.Line, direction.Type)
+	}
+	if direction.Literal != "from" && direction.Literal != "to" {
+		return nil, fmt.Errorf("line %d col %d: @text direction must be 'from' or 'to', got %q",
+			direction.Line, direction.Col, direction.Literal)
 	}
 	p.advance() // consume direction
 
@@ -662,44 +556,31 @@ func (p *Parser) parseText() (ast.Node, error) {
 	}, nil
 }
 
-// parseMusic parses: @music play <name>, @music crossfade <name>, @music fadeout
+// parseMusic parses: @music <name>  or  @music stop
+//
+// The engine inspects current playback state and either fades in from
+// silence or cross-fades from the currently playing track — the script
+// does not distinguish the two cases. `@music stop` fades out.
 func (p *Parser) parseMusic() (ast.Node, error) {
 	p.advance() // consume "music"
-	action, err := p.expect(token.IDENT)
+	tok, err := p.expect(token.IDENT)
 	if err != nil {
 		return nil, err
 	}
-	switch action.Literal {
-	case "play":
-		track, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		return &ast.MusicPlayNode{Track: track.Literal}, nil
-	case "crossfade":
-		track, err := p.expect(token.IDENT)
-		if err != nil {
-			return nil, err
-		}
-		return &ast.MusicCrossfadeNode{Track: track.Literal}, nil
-	case "fadeout":
-		return &ast.MusicFadeoutNode{}, nil
-	default:
-		return nil, fmt.Errorf("line %d: unknown music action %q", action.Line, action.Literal)
+	if tok.Literal == "stop" {
+		return &ast.MusicStopNode{}, nil
 	}
+	return &ast.MusicSetNode{Name: tok.Literal}, nil
 }
 
-// parseSfx parses: @sfx play <name>
+// parseSfx parses: @sfx <name>
 func (p *Parser) parseSfx() (ast.Node, error) {
 	p.advance() // consume "sfx"
-	if _, err := p.expect(token.IDENT); err != nil { // consume "play"
-		return nil, err
-	}
-	sound, err := p.expect(token.IDENT)
+	name, err := p.expect(token.IDENT)
 	if err != nil {
 		return nil, err
 	}
-	return &ast.SfxPlayNode{Sound: sound.Literal}, nil
+	return &ast.SfxNode{Name: name.Literal}, nil
 }
 
 // parseMinigame parses: @minigame <name> "<description>"
@@ -1040,9 +921,6 @@ func (p *Parser) parseSignalInt(kindTok token.Token) (ast.Node, error) {
 // fires the achievement. Conditional triggering is expressed by wrapping
 // in @if (condition) { @achievement ... { ... } }.
 func (p *Parser) parseAchievement() (ast.Node, error) {
-	// AT and "achievement" have already been consumed by parseDirective
-	// (parseDirective calls advance() once before dispatching, then the
-	// keyword `achievement` is still in p.cur). Consume the keyword now.
 	p.advance() // consume "achievement"
 
 	idTok, err := p.expect(token.IDENT)
@@ -1121,6 +999,11 @@ func (p *Parser) parseAchievement() (ast.Node, error) {
 }
 
 // parseButterfly parses: @butterfly "<desc>"
+//
+// Butterfly records are NOT consulted by gate routing — they are fuzzy
+// player-profile fuel for downstream content-generation agents. (Gate
+// routing always uses deterministic conditions: signal mark, signal int,
+// affection, choice history.)
 func (p *Parser) parseButterfly() (ast.Node, error) {
 	p.advance() // consume "butterfly"
 	desc, err := p.expect(token.STRING)
@@ -1197,11 +1080,14 @@ func (p *Parser) parseIf() (ast.Node, error) {
 //	and_expr   = primary ( "&&" primary )*
 //	primary    = "(" expr ")"
 //	           | choice       ( IDENT "." ( "success" | "fail" | "any" ) )
-//	           | comparison   ( operand OP ( NUMBER | SIGNED_NUMBER ) )
-//	           | influence    ( "influence" STRING | STRING )
+//	           | check        ( "check" "." ( "success" | "fail" ) )
+//	           | comparison   ( operand OP operand )
 //	           | flag         ( IDENT )
-//	operand    = IDENT "." IDENT  (affection.<char>)
-//	           | IDENT             (bare engine-managed value, e.g. "san")
+//	operand    = NUMBER | SIGNED_NUMBER
+//	           | "affection" "." IDENT
+//	           | "MAX" "(" operand ( "," operand )+ ")"
+//	           | "MIN" "(" operand ( "," operand )+ ")"
+//	           | IDENT                       (bare value name)
 func (p *Parser) readCondition() (ast.Condition, error) {
 	if _, err := p.expect(token.LPAREN); err != nil {
 		return nil, err
@@ -1255,6 +1141,17 @@ func (p *Parser) parseAndExpr() (ast.Condition, error) {
 
 // parseConditionPrimary parses a single leaf condition or a parenthesized
 // sub-expression.
+//
+// Decision tree for the leading token:
+//   - LPAREN                                  → recurse into ( expr )
+//   - STRING                                  → error (no string-literal conditions)
+//   - IDENT "check" "." ...                   → CheckCondition
+//   - IDENT "affection" "." ...               → ComparisonCondition (operand-driven)
+//   - IDENT "." (success|fail|any)            → ChoiceCondition
+//   - NUMBER | SIGNED_NUMBER                  → ComparisonCondition (literal left)
+//   - IDENT "MAX"/"MIN" "(" ... ")"           → ComparisonCondition (aggregate left)
+//   - IDENT <op> ...                          → ComparisonCondition (value left)
+//   - IDENT (bare, not followed by op/./LPAREN) → FlagCondition
 func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 	// Parenthesized sub-expression.
 	if p.cur.Type == token.LPAREN {
@@ -1269,11 +1166,20 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 		return inner, nil
 	}
 
-	// Influence: bare STRING — the whole primary is a single string literal.
+	// String literals are no longer valid conditions — InfluenceCondition
+	// was removed. Surface a clear error so authors know what to use instead.
 	if p.cur.Type == token.STRING {
-		tok := p.cur
-		p.advance()
-		return &ast.InfluenceCondition{Description: tok.Literal}, nil
+		return nil, fmt.Errorf("line %d col %d: string literal not allowed as condition; supported types: choice, flag, comparison, compound, check",
+			p.cur.Line, p.cur.Col)
+	}
+
+	// Numeric-literal-left comparison: 5 < affection.easton  etc.
+	if p.cur.Type == token.NUMBER || p.cur.Type == token.SIGNED_NUMBER {
+		left, err := p.parseOperand()
+		if err != nil {
+			return nil, err
+		}
+		return p.finishComparison(left)
 	}
 
 	if p.cur.Type != token.IDENT {
@@ -1281,21 +1187,38 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
 	}
 
-	// Influence: "influence" STRING
-	if p.cur.Literal == "influence" && p.peek.Type == token.STRING {
-		p.advance() // consume "influence"
-		tok := p.cur
-		p.advance() // consume STRING
-		return &ast.InfluenceCondition{Description: tok.Literal}, nil
-	}
-
-	// Dotted forms: <first>.<second>. Four shapes recognised:
-	//   - check.success / check.fail   → CheckCondition   (context-local to brave option body)
-	//   - affection.<char> <op> <N>    → ComparisonCondition with affection operand
-	//   - <option_id>.success|fail|any → ChoiceCondition  (retrospective query from outside option)
-	//   - anything else dotted         → error
+	// IDENT-led leaves. First handle the dotted shapes (check, affection,
+	// generic choice) — they consume the IDENT differently from operands.
 	if p.peek.Type == token.DOT {
 		firstTok := p.cur
+
+		// Context-local: check.success / check.fail.
+		if firstTok.Literal == "check" {
+			p.advance() // consume "check"
+			p.advance() // consume DOT
+			if p.cur.Type != token.IDENT {
+				return nil, fmt.Errorf("line %d col %d: expected identifier after 'check.', got %s (%q)",
+					p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+			}
+			secondTok := p.cur
+			p.advance() // consume second IDENT
+			if secondTok.Literal != "success" && secondTok.Literal != "fail" {
+				return nil, fmt.Errorf("line %d col %d: check.<result> must be 'success' or 'fail', got %q",
+					secondTok.Line, secondTok.Col, secondTok.Literal)
+			}
+			return &ast.CheckCondition{Result: secondTok.Literal}, nil
+		}
+
+		// affection.<char> — operand-led comparison.
+		if firstTok.Literal == "affection" {
+			left, err := p.parseOperand()
+			if err != nil {
+				return nil, err
+			}
+			return p.finishComparison(left)
+		}
+
+		// Otherwise: ChoiceCondition — <option_id>.success|fail|any.
 		p.advance() // consume first IDENT
 		p.advance() // consume DOT
 		if p.cur.Type != token.IDENT {
@@ -1304,39 +1227,6 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 		}
 		secondTok := p.cur
 		p.advance() // consume second IDENT
-
-		// Context-local: check.success / check.fail.
-		if firstTok.Literal == "check" {
-			if secondTok.Literal != "success" && secondTok.Literal != "fail" {
-				return nil, fmt.Errorf("line %d col %d: check.<result> must be 'success' or 'fail', got %q",
-					secondTok.Line, secondTok.Col, secondTok.Literal)
-			}
-			return &ast.CheckCondition{Result: secondTok.Literal}, nil
-		}
-
-		// affection.<char> <op> <N> — comparison with affection operand.
-		if firstTok.Literal == "affection" {
-			if !isComparisonOp(p.cur.Type) {
-				return nil, fmt.Errorf("line %d col %d: affection.%s must be followed by a comparison operator",
-					secondTok.Line, secondTok.Col, secondTok.Literal)
-			}
-			op := operatorLiteral(p.cur.Type)
-			p.advance() // consume operator
-			right, err := p.readNumberLiteral()
-			if err != nil {
-				return nil, err
-			}
-			return &ast.ComparisonCondition{
-				Left: ast.ComparisonOperand{
-					Kind: ast.OperandAffection,
-					Char: secondTok.Literal,
-				},
-				Op:    op,
-				Right: right,
-			}, nil
-		}
-
-		// Otherwise: choice condition — <option_id>.success|fail|any.
 		result := secondTok.Literal
 		if result != "success" && result != "fail" && result != "any" {
 			return nil, fmt.Errorf("line %d col %d: choice condition result must be 'success', 'fail', or 'any', got %q",
@@ -1345,28 +1235,158 @@ func (p *Parser) parseConditionPrimary() (ast.Condition, error) {
 		return &ast.ChoiceCondition{Option: firstTok.Literal, Result: result}, nil
 	}
 
-	// Bare IDENT: either comparison (IDENT op N) or flag (IDENT alone).
+	// Aggregate-left comparison: MAX(...) / MIN(...) ...
+	if (p.cur.Literal == "MAX" || p.cur.Literal == "MIN") && p.peek.Type == token.LPAREN {
+		left, err := p.parseOperand()
+		if err != nil {
+			return nil, err
+		}
+		return p.finishComparison(left)
+	}
+
+	// Bare IDENT: either comparison (IDENT op operand) or flag (IDENT alone).
 	nameTok := p.cur
 	p.advance() // consume IDENT
 
 	if isComparisonOp(p.cur.Type) {
-		op := operatorLiteral(p.cur.Type)
-		p.advance() // consume operator
-		right, err := p.readNumberLiteral()
-		if err != nil {
-			return nil, err
+		// Re-construct a value operand from nameTok, then finish the comparison.
+		left := &ast.ComparisonOperand{
+			Kind: ast.OperandValue,
+			Name: nameTok.Literal,
 		}
-		return &ast.ComparisonCondition{
-			Left: ast.ComparisonOperand{
-				Kind: ast.OperandValue,
-				Name: nameTok.Literal,
-			},
-			Op:    op,
-			Right: right,
-		}, nil
+		return p.finishComparison(left)
 	}
 
 	return &ast.FlagCondition{Name: nameTok.Literal}, nil
+}
+
+// finishComparison consumes a comparison operator and the right-hand operand,
+// then returns a ComparisonCondition. Caller must have already produced the
+// left operand and left p.cur positioned at the operator token.
+func (p *Parser) finishComparison(left *ast.ComparisonOperand) (ast.Condition, error) {
+	if !isComparisonOp(p.cur.Type) {
+		return nil, fmt.Errorf("line %d col %d: expected comparison operator (>=, <=, >, <, ==, !=), got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+	op := operatorLiteral(p.cur.Type)
+	p.advance() // consume operator
+
+	right, err := p.parseOperand()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.ComparisonCondition{
+		Left:  left,
+		Op:    op,
+		Right: right,
+	}, nil
+}
+
+// parseOperand parses one side of a comparison. Five operand kinds:
+//
+//   - NUMBER / SIGNED_NUMBER             → literal
+//   - "affection" "." IDENT              → affection
+//   - "MAX" "(" operand ("," operand)+ ")" → max (aggregate)
+//   - "MIN" "(" operand ("," operand)+ ")" → min (aggregate)
+//   - bare IDENT                         → value (engine-managed or @signal int)
+//
+// `MAX` / `MIN` are reserved words — must be uppercase. Lowercase `max`/`min`
+// fall through to the value-operand path (still legal as variable names).
+func (p *Parser) parseOperand() (*ast.ComparisonOperand, error) {
+	// Integer literal.
+	if p.cur.Type == token.NUMBER || p.cur.Type == token.SIGNED_NUMBER {
+		tok := p.cur
+		p.advance()
+		n, err := strconv.Atoi(tok.Literal)
+		if err != nil {
+			return nil, fmt.Errorf("line %d col %d: invalid integer literal %q", tok.Line, tok.Col, tok.Literal)
+		}
+		return &ast.ComparisonOperand{
+			Kind:  ast.OperandLiteral,
+			Value: n,
+		}, nil
+	}
+
+	if p.cur.Type != token.IDENT {
+		return nil, fmt.Errorf("line %d col %d: expected operand (literal, affection.<char>, MAX(...), MIN(...), or bare value name), got %s (%q)",
+			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+	}
+
+	// affection.<char>
+	if p.cur.Literal == "affection" && p.peek.Type == token.DOT {
+		p.advance() // consume "affection"
+		p.advance() // consume DOT
+		if p.cur.Type != token.IDENT {
+			return nil, fmt.Errorf("line %d col %d: expected character id after 'affection.', got %s (%q)",
+				p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
+		}
+		charTok := p.cur
+		p.advance() // consume char IDENT
+		return &ast.ComparisonOperand{
+			Kind: ast.OperandAffection,
+			Char: charTok.Literal,
+		}, nil
+	}
+
+	// MAX(...) / MIN(...) — reserved keywords, uppercase only.
+	if (p.cur.Literal == "MAX" || p.cur.Literal == "MIN") && p.peek.Type == token.LPAREN {
+		kind := ast.OperandMax
+		if p.cur.Literal == "MIN" {
+			kind = ast.OperandMin
+		}
+		return p.parseAggregateOperand(kind)
+	}
+
+	// Bare IDENT → value operand (engine scalar or @signal int variable).
+	nameTok := p.cur
+	p.advance()
+	return &ast.ComparisonOperand{
+		Kind: ast.OperandValue,
+		Name: nameTok.Literal,
+	}, nil
+}
+
+// parseAggregateOperand parses MAX(...) or MIN(...). Caller has confirmed
+// p.cur is the keyword (MAX or MIN) and p.peek is LPAREN. kind must be one
+// of ast.OperandMax / ast.OperandMin.
+//
+// args must have length >= 2; a 1-arg aggregate is a parse error per spec.
+func (p *Parser) parseAggregateOperand(kind string) (*ast.ComparisonOperand, error) {
+	kwTok := p.cur
+	p.advance() // consume MAX / MIN
+	if _, err := p.expect(token.LPAREN); err != nil {
+		return nil, err
+	}
+
+	var args []*ast.ComparisonOperand
+	first, err := p.parseOperand()
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, first)
+
+	for p.cur.Type == token.COMMA {
+		p.advance() // consume ','
+		next, err := p.parseOperand()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, next)
+	}
+
+	if _, err := p.expect(token.RPAREN); err != nil {
+		return nil, err
+	}
+
+	if len(args) < 2 {
+		return nil, fmt.Errorf("line %d col %d: %s(...) requires at least 2 arguments, got %d",
+			kwTok.Line, kwTok.Col, kwTok.Literal, len(args))
+	}
+
+	return &ast.ComparisonOperand{
+		Kind: kind,
+		Args: args,
+	}, nil
 }
 
 // isComparisonOp reports whether a token type is a comparison operator.
@@ -1397,131 +1417,38 @@ func operatorLiteral(t token.Type) string {
 	return ""
 }
 
-// readNumberLiteral consumes a NUMBER or SIGNED_NUMBER token and returns
-// its integer value.
-func (p *Parser) readNumberLiteral() (int, error) {
-	if p.cur.Type != token.NUMBER && p.cur.Type != token.SIGNED_NUMBER {
-		return 0, fmt.Errorf("line %d col %d: expected integer on right side of comparison, got %s (%q)",
-			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
-	}
-	tok := p.cur
-	p.advance()
-	n, err := strconv.Atoi(tok.Literal)
-	if err != nil {
-		return 0, fmt.Errorf("line %d col %d: invalid integer literal %q", tok.Line, tok.Col, tok.Literal)
-	}
-	return n, nil
-}
-
-// parseEnding parses: @ending <type>
-// Valid types: complete | to_be_continued | bad_ending.
-func (p *Parser) parseEnding() (*ast.EndingNode, error) {
-	p.advance() // consume AT
-	p.advance() // consume "ending"
-	kind, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, fmt.Errorf("line %d col %d: expected ending type after '@ending', got %s (%q)",
-			kind.Line, kind.Col, kind.Type, kind.Literal)
-	}
-	if !validEndingTypes[kind.Literal] {
-		return nil, fmt.Errorf("line %d col %d: invalid @ending type %q (must be one of: complete, to_be_continued, bad_ending)",
-			kind.Line, kind.Col, kind.Literal)
-	}
-	return &ast.EndingNode{Type: kind.Literal}, nil
-}
-
-// parseLabel parses: @label <name>
-func (p *Parser) parseLabel() (ast.Node, error) {
-	p.advance() // consume "label"
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	return &ast.LabelNode{Name: name.Literal}, nil
-}
-
-// parseGoto parses: @goto <name>
-func (p *Parser) parseGoto() (ast.Node, error) {
-	p.advance() // consume "goto"
-	name, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	return &ast.GotoNode{Name: name.Literal}, nil
-}
-
-// parsePause parses: @pause for <N>
+// parsePause parses: @pause
+//
+// No parameters — a pause always waits for exactly one player click.
 func (p *Parser) parsePause() (ast.Node, error) {
 	p.advance() // consume "pause"
-	// Expect "for"
-	if p.cur.Type != token.IDENT || p.cur.Literal != "for" {
-		return nil, fmt.Errorf("line %d col %d: expected 'for' after 'pause', got %s (%q)",
-			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
-	}
-	p.advance() // consume "for"
-	n, err := p.expect(token.NUMBER)
-	if err != nil {
-		return nil, fmt.Errorf("line %d col %d: expected number after 'pause for', got %s (%q)",
-			p.cur.Line, p.cur.Col, p.cur.Type, p.cur.Literal)
-	}
-	clicks, err2 := strconv.Atoi(n.Literal)
-	if err2 != nil {
-		return nil, fmt.Errorf("line %d col %d: invalid pause count %q", n.Line, n.Col, n.Literal)
-	}
-	if clicks < 1 {
-		clicks = 1
-	}
-	return &ast.PauseNode{Clicks: clicks}, nil
+	return &ast.PauseNode{}, nil
 }
 
-// parseCharDirective parses character directives like:
+// parseCharDirective parses character directives:
 //
-//	@mauricio show neutral at center
-//	@mauricio hide fade
-//	@mauricio expr angry
-//	@mauricio move to left
-//	@mauricio bubble heart
+//	@<char> <pose> [transition]    → CharShowNode (show or pose-swap)
+//	@<char> bubble <type>          → CharBubbleNode
+//
+// `bubble` is reserved — no pose may be named "bubble".
 func (p *Parser) parseCharDirective(char string) (ast.Node, error) {
 	p.advance() // consume character name
-	action, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
+	if p.cur.Type != token.IDENT {
+		return nil, fmt.Errorf("line %d col %d: expected pose or 'bubble' after '@%s', got %s (%q)",
+			p.cur.Line, p.cur.Col, char, p.cur.Type, p.cur.Literal)
 	}
-	switch action.Literal {
-	case "show":
-		return p.parseCharShow(char)
-	case "hide":
-		return p.parseCharHide(char)
-	case "look":
-		return p.parseCharLook(char)
-	case "move":
-		return p.parseCharMove(char)
-	case "bubble":
+	action := p.cur
+	if action.Literal == "bubble" {
+		p.advance() // consume "bubble"
 		return p.parseCharBubble(char)
-	default:
-		return nil, fmt.Errorf("line %d: unknown character action %q for %q",
-			action.Line, action.Literal, char)
 	}
-}
+	// Treat as pose. `bubble` is reserved — no pose can be named it.
+	pose := action.Literal
+	p.advance() // consume pose
 
-// parseCharShow parses: show <pose> at <position> [transition]
-func (p *Parser) parseCharShow(char string) (ast.Node, error) {
-	pose, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	// "at" keyword
-	if _, err := p.expect(token.IDENT); err != nil { // consume "at"
-		return nil, err
-	}
-	pos, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
 	node := &ast.CharShowNode{
-		Char:     char,
-		Look:     pose.Literal,
-		Position: pos.Literal,
+		Char: char,
+		Look: pose,
 	}
 	// Optional transition.
 	if p.cur.Type == token.IDENT && !p.isDirectiveStart() {
@@ -1531,62 +1458,46 @@ func (p *Parser) parseCharShow(char string) (ast.Node, error) {
 	return node, nil
 }
 
-// parseCharHide parses: hide [transition]
-func (p *Parser) parseCharHide(char string) (ast.Node, error) {
-	node := &ast.CharHideNode{Char: char}
-	if p.cur.Type == token.IDENT && !p.isDirectiveStart() {
-		node.Transition = p.cur.Literal
-		p.advance()
-	}
-	return node, nil
-}
-
-// parseCharLook parses: look <pose> [transition]
-func (p *Parser) parseCharLook(char string) (ast.Node, error) {
-	pose, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	node := &ast.CharLookNode{
-		Char: char,
-		Look: pose.Literal,
-	}
-	if p.cur.Type == token.IDENT && !p.isDirectiveStart() {
-		node.Transition = p.cur.Literal
-		p.advance()
-	}
-	return node, nil
-}
-
-// parseCharMove parses: move to <position>
-func (p *Parser) parseCharMove(char string) (ast.Node, error) {
-	// consume "to"
-	if _, err := p.expect(token.IDENT); err != nil {
-		return nil, err
-	}
-	pos, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
-	}
-	return &ast.CharMoveNode{
-		Char:     char,
-		Position: pos.Literal,
-	}, nil
-}
-
 // parseCharBubble parses: bubble <type>
+//
+// Caller has already consumed the "bubble" keyword. <type> is required and
+// must be one of the 9 locked bubble types (see validBubbleTypes).
 func (p *Parser) parseCharBubble(char string) (ast.Node, error) {
-	bubbleType, err := p.expect(token.IDENT)
-	if err != nil {
-		return nil, err
+	if p.cur.Type != token.IDENT {
+		return nil, fmt.Errorf("line %d col %d: @%s bubble requires a type argument (one of: anger, sweat, heart, question, exclaim, idea, music, doom, ellipsis)",
+			p.cur.Line, p.cur.Col, char)
 	}
+	bubbleTok := p.cur
+	if !validBubbleTypes[bubbleTok.Literal] {
+		return nil, fmt.Errorf("line %d col %d: invalid bubble type %q for @%s (valid: anger, sweat, heart, question, exclaim, idea, music, doom, ellipsis)",
+			bubbleTok.Line, bubbleTok.Col, bubbleTok.Literal, char)
+	}
+	p.advance() // consume bubble type
 	return &ast.CharBubbleNode{
 		Char:       char,
-		BubbleType: bubbleType.Literal,
+		BubbleType: bubbleTok.Literal,
 	}, nil
 }
 
-// parseGateBlock parses: @gate { @if (cond): @next target ... @else: @next target }
+// validEndTypes enumerates the accepted values for the gate `@end <type>` leaf.
+var validEndTypes = map[string]bool{
+	ast.EndingComplete:      true,
+	ast.EndingToBeContinued: true,
+	ast.EndingBad:           true,
+}
+
+// parseGateBlock parses: @gate { route ... }
+//
+// A route is one of:
+//
+//	@if (<cond>): <leaf>
+//	@else @if (<cond>): <leaf>
+//	@else: <leaf>
+//	@next <branch_key>       (unconditional NextLeaf)
+//	@end <type>              (unconditional EndLeaf)
+//
+// Routes are evaluated top-to-bottom; the first matching condition wins.
+// A gate may freely mix @next and @end leaves.
 func (p *Parser) parseGateBlock() (*ast.GateBlock, error) {
 	p.advance() // consume AT
 	p.advance() // consume "gate"
@@ -1611,12 +1522,14 @@ func (p *Parser) parseGateBlock() (*ast.GateBlock, error) {
 					return nil, err
 				}
 				block.Routes = append(block.Routes, route)
-			case "next":
-				route, err := p.parseGateNext()
+			case "next", "end":
+				// Unconditional leaf — most common is `@gate { @next ... }`
+				// or `@gate { @end <type> }` (terminal episode).
+				leaf, err := p.parseGateLeaf()
 				if err != nil {
 					return nil, err
 				}
-				block.Routes = append(block.Routes, route)
+				block.Routes = append(block.Routes, &ast.GateRoute{Leaf: leaf})
 			default:
 				p.advance()
 			}
@@ -1635,7 +1548,7 @@ func (p *Parser) parseGateBlock() (*ast.GateBlock, error) {
 	return block, nil
 }
 
-// parseGateIf parses: @if (<condition>): @next <target>
+// parseGateIf parses: @if (<condition>): <leaf>
 func (p *Parser) parseGateIf() (*ast.GateRoute, error) {
 	p.advance() // consume AT
 	p.advance() // consume "if"
@@ -1649,15 +1562,15 @@ func (p *Parser) parseGateIf() (*ast.GateRoute, error) {
 		return nil, err
 	}
 
-	target, err := p.parseGateNextTarget()
+	leaf, err := p.parseGateLeaf()
 	if err != nil {
 		return nil, err
 	}
 
-	return &ast.GateRoute{Condition: cond, Target: target}, nil
+	return &ast.GateRoute{Condition: cond, Leaf: leaf}, nil
 }
 
-// parseGateElse parses: @else @if (...): @next ... OR @else: @next ...
+// parseGateElse parses: @else @if (...): <leaf> OR @else: <leaf>
 func (p *Parser) parseGateElse() (*ast.GateRoute, error) {
 	p.advance() // consume AT
 	p.advance() // consume "else"
@@ -1667,45 +1580,52 @@ func (p *Parser) parseGateElse() (*ast.GateRoute, error) {
 		return p.parseGateIf()
 	}
 
-	// Plain @else: @next <target>
+	// Plain @else: <leaf>
 	if _, err := p.expect(token.COLON); err != nil {
 		return nil, err
 	}
 
-	target, err := p.parseGateNextTarget()
+	leaf, err := p.parseGateLeaf()
 	if err != nil {
 		return nil, err
 	}
 
-	return &ast.GateRoute{Condition: nil, Target: target}, nil
+	return &ast.GateRoute{Condition: nil, Leaf: leaf}, nil
 }
 
-// parseGateNext parses a bare: @next <target> (unconditional jump)
-func (p *Parser) parseGateNext() (*ast.GateRoute, error) {
-	target, err := p.parseGateNextTarget()
-	if err != nil {
-		return nil, err
-	}
-	return &ast.GateRoute{Condition: nil, Target: target}, nil
-}
-
-// parseGateNextTarget consumes @next <target> and returns the target string.
-func (p *Parser) parseGateNextTarget() (string, error) {
+// parseGateLeaf consumes one of `@next <branch_key>` or `@end <type>` and
+// returns the corresponding GateLeaf node. The leaf type is validated:
+// `@end` types must be in validEndTypes.
+func (p *Parser) parseGateLeaf() (ast.GateLeaf, error) {
 	if _, err := p.expect(token.AT); err != nil {
-		return "", err
+		return nil, err
 	}
 	kw, err := p.expect(token.IDENT)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if kw.Literal != "next" {
-		return "", fmt.Errorf("line %d col %d: expected 'next', got %q", kw.Line, kw.Col, kw.Literal)
+	switch kw.Literal {
+	case "next":
+		target, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, err
+		}
+		return &ast.NextLeaf{Target: target.Literal}, nil
+	case "end":
+		endType, err := p.expect(token.IDENT)
+		if err != nil {
+			return nil, fmt.Errorf("line %d col %d: expected ending type after '@end', got %s (%q)",
+				endType.Line, endType.Col, endType.Type, endType.Literal)
+		}
+		if !validEndTypes[endType.Literal] {
+			return nil, fmt.Errorf("line %d col %d: invalid @end type %q (must be one of: complete, to_be_continued, bad_ending)",
+				endType.Line, endType.Col, endType.Literal)
+		}
+		return &ast.EndLeaf{Type: endType.Literal}, nil
+	default:
+		return nil, fmt.Errorf("line %d col %d: expected 'next' or 'end' inside @gate, got %q",
+			kw.Line, kw.Col, kw.Literal)
 	}
-	target, err := p.expect(token.IDENT)
-	if err != nil {
-		return "", err
-	}
-	return target.Literal, nil
 }
 
 // isDirectiveStart returns true if cur looks like the start of a new directive

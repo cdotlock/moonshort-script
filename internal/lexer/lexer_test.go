@@ -342,3 +342,152 @@ func TestLexDoubleEqualsStillEQ(t *testing.T) {
 		t.Fatalf("expected EQ, got %s (%q)", tok.Type, tok.Literal)
 	}
 }
+
+// TestLexComma: a bare comma should produce a COMMA token with literal ",".
+func TestLexComma(t *testing.T) {
+	got := toks(",")
+	if len(got) != 1 {
+		t.Fatalf("expected 1 token, got %d", len(got))
+	}
+	if got[0].Type != token.COMMA {
+		t.Errorf("token[0]: got %s, want COMMA", got[0].Type)
+	}
+	if got[0].Literal != "," {
+		t.Errorf("token[0] literal: got %q, want %q", got[0].Literal, ",")
+	}
+}
+
+// TestLexCommaInGateRoute: the route header `route 1, "First option"` should
+// tokenize as IDENT NUMBER COMMA STRING. This is the form gate routes use in
+// the new MSS spec (numeric route key followed by a quoted label).
+func TestLexCommaInGateRoute(t *testing.T) {
+	src := `route 1, "First option"`
+	got := toks(src)
+	assertTypes(t, got,
+		token.IDENT,  // route
+		token.NUMBER, // 1
+		token.COMMA,  // ,
+		token.STRING, // First option
+	)
+	if got[0].Literal != "route" {
+		t.Errorf("token[0] literal: got %q, want %q", got[0].Literal, "route")
+	}
+	if got[1].Literal != "1" {
+		t.Errorf("token[1] literal: got %q, want %q", got[1].Literal, "1")
+	}
+	if got[2].Literal != "," {
+		t.Errorf("token[2] literal: got %q, want %q", got[2].Literal, ",")
+	}
+	if got[3].Literal != "First option" {
+		t.Errorf("token[3] literal: got %q, want %q", got[3].Literal, "First option")
+	}
+}
+
+// TestLexCommaArgsList: `min(affection.easton, 5)` should lex as IDENT LPAREN
+// IDENT DOT IDENT COMMA NUMBER RPAREN. This is the shape min()/max() calls
+// take inside conditions in the new comparison-operand grammar.
+func TestLexCommaArgsList(t *testing.T) {
+	src := `min(affection.easton, 5)`
+	got := toks(src)
+	assertTypes(t, got,
+		token.IDENT,  // min
+		token.LPAREN, // (
+		token.IDENT,  // affection
+		token.DOT,    // .
+		token.IDENT,  // easton
+		token.COMMA,  // ,
+		token.NUMBER, // 5
+		token.RPAREN, // )
+	)
+	if got[0].Literal != "min" {
+		t.Errorf("token[0] literal: got %q, want %q", got[0].Literal, "min")
+	}
+}
+
+// TestLexAtEnd: `@end` should lex as AT followed by IDENT("end"). The lexer
+// itself does not reserve `end` — parser-level handling decides meaning.
+func TestLexAtEnd(t *testing.T) {
+	got := toks(`@end`)
+	assertTypes(t, got,
+		token.AT,
+		token.IDENT, // end
+	)
+	if got[1].Literal != "end" {
+		t.Errorf("ident literal: got %q, want %q", got[1].Literal, "end")
+	}
+}
+
+// TestLexAtEndWithType: `@end bad` (an end leaf with a typed flavor like
+// "good" or "bad") should lex as AT IDENT IDENT.
+func TestLexAtEndWithType(t *testing.T) {
+	got := toks(`@end bad`)
+	assertTypes(t, got,
+		token.AT,
+		token.IDENT, // end
+		token.IDENT, // bad
+	)
+	if got[1].Literal != "end" {
+		t.Errorf("token[1] literal: got %q, want %q", got[1].Literal, "end")
+	}
+	if got[2].Literal != "bad" {
+		t.Errorf("token[2] literal: got %q, want %q", got[2].Literal, "bad")
+	}
+}
+
+// TestLexAtCg: `@cg show ending_kiss "Their first kiss."` should lex as AT
+// IDENT IDENT IDENT STRING. The directive name `cg` is just an identifier
+// at the lexer level.
+func TestLexAtCg(t *testing.T) {
+	got := toks(`@cg show ending_kiss "Their first kiss."`)
+	assertTypes(t, got,
+		token.AT,
+		token.IDENT,  // cg
+		token.IDENT,  // show
+		token.IDENT,  // ending_kiss
+		token.STRING, // Their first kiss.
+	)
+	if got[1].Literal != "cg" {
+		t.Errorf("token[1] literal: got %q, want %q", got[1].Literal, "cg")
+	}
+	if got[3].Literal != "ending_kiss" {
+		t.Errorf("token[3] literal: got %q, want %q", got[3].Literal, "ending_kiss")
+	}
+	if got[4].Literal != "Their first kiss." {
+		t.Errorf("token[4] literal: got %q, want %q", got[4].Literal, "Their first kiss.")
+	}
+}
+
+// TestLexAtNext: `@next chapter:02` should lex as AT IDENT IDENT, where the
+// "chapter:02" identifier preserves its embedded colon (same rule as
+// "main:01" in episode headers).
+func TestLexAtNext(t *testing.T) {
+	got := toks(`@next chapter:02`)
+	assertTypes(t, got,
+		token.AT,
+		token.IDENT, // next
+		token.IDENT, // chapter:02
+	)
+	if got[1].Literal != "next" {
+		t.Errorf("token[1] literal: got %q, want %q", got[1].Literal, "next")
+	}
+	if got[2].Literal != "chapter:02" {
+		t.Errorf("token[2] literal: got %q, want %q", got[2].Literal, "chapter:02")
+	}
+}
+
+// TestLexAtMusicStop: `@music stop` should lex as AT IDENT IDENT. (MusicStop
+// is a new AST node; verify the lexer surface it depends on is unchanged.)
+func TestLexAtMusicStop(t *testing.T) {
+	got := toks(`@music stop`)
+	assertTypes(t, got,
+		token.AT,
+		token.IDENT, // music
+		token.IDENT, // stop
+	)
+	if got[1].Literal != "music" {
+		t.Errorf("token[1] literal: got %q, want %q", got[1].Literal, "music")
+	}
+	if got[2].Literal != "stop" {
+		t.Errorf("token[2] literal: got %q, want %q", got[2].Literal, "stop")
+	}
+}

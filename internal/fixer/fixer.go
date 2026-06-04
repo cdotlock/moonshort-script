@@ -37,14 +37,12 @@ var knownKeywords = map[string]bool{
 	"butterfly":   true,
 	"if":          true,
 	"else":        true,
-	"label":       true,
-	"goto":        true,
 	"gate":        true,
 	"next":        true,
+	"end":         true,
 	"episode":     true,
 	"check":       true,
 	"pause":       true,
-	"ending":      true,
 	"achievement": true,
 }
 
@@ -312,7 +310,6 @@ func checkErrors(r *FixResult) {
 
 	checkMissingGate(lines, r)
 	checkBraveOptions(lines, r)
-	checkGotoLabels(lines, r)
 	checkDuplicateOptionIDs(lines, r)
 	checkOldFormatSyntax(lines, r)
 }
@@ -324,7 +321,7 @@ func checkMissingGate(lines []string, r *FixResult) {
 			return
 		}
 	}
-	r.Errors = append(r.Errors, "missing @gate block \u2014 every episode must declare routing")
+	r.Errors = append(r.Errors, "missing @gate block — every episode must declare routing")
 }
 
 func checkBraveOptions(lines []string, r *FixResult) {
@@ -373,35 +370,7 @@ func checkBraveOptions(lines []string, r *FixResult) {
 		}
 
 		if !hasCheck {
-			r.Errors = append(r.Errors, fmt.Sprintf("option %s is brave but has no check block \u2014 D20 check parameters required (line %d)", optionID, lineNum))
-		}
-	}
-}
-
-func checkGotoLabels(lines []string, r *FixResult) {
-	// Collect all labels
-	labels := make(map[string]bool)
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "@label ") {
-			parts := strings.Fields(trimmed)
-			if len(parts) >= 2 {
-				labels[parts[1]] = true
-			}
-		}
-	}
-
-	// Check all gotos
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "@goto ") {
-			parts := strings.Fields(trimmed)
-			if len(parts) >= 2 {
-				target := parts[1]
-				if !labels[target] {
-					r.Errors = append(r.Errors, fmt.Sprintf("goto %s has no matching label (line %d)", target, i+1))
-				}
-			}
+			r.Errors = append(r.Errors, fmt.Sprintf("option %s is brave but has no check block — D20 check parameters required (line %d)", optionID, lineNum))
 		}
 	}
 }
@@ -454,8 +423,9 @@ func checkDuplicateOptionIDs(lines []string, r *FixResult) {
 }
 
 // blockDirectives are directives that start blocks and must use @ not &.
+// CG is a leaf directive (no body), so it is not included here.
 var blockDirectives = map[string]bool{
-	"choice": true, "if": true, "gate": true, "cg": true,
+	"choice": true, "if": true, "gate": true,
 	"phone": true, "minigame": true, "episode": true,
 }
 
@@ -547,11 +517,24 @@ func fixAffectionCharCase(line string, lineNum int, r *FixResult) string {
 // pointing at the correct MSS syntax. These catch common LLM mistakes
 // where the generator produces a directive name drawn from an adjacent
 // dialect rather than MSS itself.
+//
+// Char visual directives (@show / @hide / @expr / @look / @move / @at) are
+// rejected here because the new AST collapses character visuals into a
+// single `@<char> <pose>` form and hides are implicit. Block-form @cg with
+// duration/content is rejected because CG is now a leaf. @label / @goto
+// are gone because in-episode branching uses @if / @else and routing uses
+// @gate { @next … }. Standalone @ending is gone because endings are gate
+// leaves (@gate { @end <type> }).
 var oldFormatKeywords = map[string]string{
-	"@show":      "use @<character> show",
-	"@hide":      "use @<character> hide",
-	"@expr":      "use @<character> look",
-	"@move":      "use @<character> move",
+	"@show":      "use @<char> <pose> (e.g. @malia worried)",
+	"@hide":      "remove — character auto-hides when another speaks or NARRATOR/YOU appears (§3.3)",
+	"@expr":      "use @<char> <pose>",
+	"@look":      "use @<char> <pose>",
+	"@move":      "removed — positions are fixed (MC left, others right)",
+	"@at":        "removed — positions are fixed",
+	"@label":     "removed — use @if/@else for in-episode branching",
+	"@goto":      "removed — use @if/@else for in-episode branching",
+	"@ending":    "use @gate { @end <type> }",
 	"@endep":     "use closing } for @episode block",
 	"@endbranch": "use closing } for option blocks",
 	"@endchoice": "use closing } for @choice block",
@@ -564,14 +547,112 @@ var oldFormatKeywords = map[string]string{
 	"@on":        "not part of MSS syntax — use @if (check.success) / @else inside brave options",
 }
 
+// charLegacySuffixRe matches `@<char> show|hide|look|move ...` and `@<char> at ...`.
+// The new AST uses `@<char> <pose>` directly; legacy verbs as the pose word
+// are a strong signal the author / LLM is reaching for the old dialect.
+var charLegacySuffixRe = regexp.MustCompile(`^\s*@[a-z][a-z0-9_]*\s+(show|hide|look|move|at)(\s|$)`)
+
+// phoneLegacyRe matches `@phone show` / `@phone hide` — the new AST uses
+// a single `@phone { ... }` block with implicit lifecycle.
+var phoneLegacyRe = regexp.MustCompile(`^\s*@phone\s+(show|hide)(\s|$|\{)`)
+
+// musicLegacyPlayRe matches `@music play <name>` and `@music crossfade <name>`.
+var musicLegacyPlayRe = regexp.MustCompile(`^\s*@music\s+(play|crossfade)(\s|$)`)
+
+// musicLegacyFadeoutRe matches bare `@music fadeout`.
+var musicLegacyFadeoutRe = regexp.MustCompile(`^\s*@music\s+fadeout(\s|$)`)
+
+// sfxLegacyPlayRe matches `@sfx play <name>`.
+var sfxLegacyPlayRe = regexp.MustCompile(`^\s*@sfx\s+play(\s|$)`)
+
+// pauseLegacyForRe matches `@pause for <N>` — pause is now a leaf with
+// no duration argument; longer waits are expressed by repeating @pause.
+var pauseLegacyForRe = regexp.MustCompile(`^\s*@pause\s+for(\s|$)`)
+
+// ifStringLiteralRe matches `@if ("...")` where the condition is a bare
+// double-quoted string literal — the new condition grammar does not
+// accept string-literal conditions.
+var ifStringLiteralRe = regexp.MustCompile(`^\s*@if\s*\(\s*"`)
+
+// ifInfluenceRe matches `@if (influence ...)`. The influence condition
+// was removed when the comparison grammar was generalized.
+var ifInfluenceRe = regexp.MustCompile(`^\s*@if\s*\(\s*influence(\s|\)|>|<|=|!)`)
+
+// cgBlockFormRe matches the legacy CG block form, where @cg show opens a
+// block with `duration` / `content` children. CG is now a leaf:
+// `@cg <name> "<content>"`.
+var cgBlockFormRe = regexp.MustCompile(`^\s*@cg\s+show\b`)
+
 func checkOldFormatSyntax(lines []string, r *FixResult) {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		lineNum := i + 1
+
+		// Keyword-prefix matches (whole-directive replacements).
+		matched := false
 		for keyword, hint := range oldFormatKeywords {
 			if strings.HasPrefix(trimmed, keyword+" ") || strings.HasPrefix(trimmed, keyword+"\t") || trimmed == keyword {
-				r.Errors = append(r.Errors, fmt.Sprintf("line %d: old-format syntax %q detected — %s", i+1, keyword, hint))
+				r.Errors = append(r.Errors, fmt.Sprintf("line %d: old-format syntax %q detected — %s", lineNum, keyword, hint))
+				matched = true
 				break
 			}
+		}
+		if matched {
+			continue
+		}
+
+		// Legacy `@<char> show|hide|look|move|at ...` form.
+		if charLegacySuffixRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: legacy char directive — use @<char> <pose>; hides are implicit (§3.3)", lineNum))
+			continue
+		}
+
+		// Legacy `@phone show` / `@phone hide`.
+		if phoneLegacyRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: phone now uses @phone { ... } block — open/close lifecycle is implicit", lineNum))
+			continue
+		}
+
+		// Legacy `@music play <name>` / `@music crossfade <name>`.
+		if musicLegacyPlayRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: use @music <name> — the engine decides whether to fade in or cross-fade", lineNum))
+			continue
+		}
+
+		// Legacy `@music fadeout`.
+		if musicLegacyFadeoutRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: use @music stop", lineNum))
+			continue
+		}
+
+		// Legacy `@sfx play <name>`.
+		if sfxLegacyPlayRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: use @sfx <name>", lineNum))
+			continue
+		}
+
+		// Legacy `@pause for <N>`.
+		if pauseLegacyForRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: @pause is single-click only — repeat the directive for longer pauses", lineNum))
+			continue
+		}
+
+		// String-literal `@if (\"…\")`.
+		if ifStringLiteralRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: string literal not allowed as @if condition", lineNum))
+			continue
+		}
+
+		// Removed `influence` condition.
+		if ifInfluenceRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: influence condition removed — use affection comparisons or flag/value conditions", lineNum))
+			continue
+		}
+
+		// Legacy block-form `@cg show ...`.
+		if cgBlockFormRe.MatchString(line) {
+			r.Errors = append(r.Errors, fmt.Sprintf("line %d: @cg is a leaf directive — use @cg <name> \"<content>\"", lineNum))
+			continue
 		}
 	}
 }

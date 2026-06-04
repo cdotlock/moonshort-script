@@ -7,6 +7,15 @@ import (
 	"github.com/cdotlock/moonshort-script/internal/ast"
 )
 
+// unconditionalGate returns a minimal valid @gate with a single @next leaf.
+func unconditionalGate(target string) *ast.GateBlock {
+	return &ast.GateBlock{
+		Routes: []*ast.GateRoute{
+			{Leaf: &ast.NextLeaf{Target: target}},
+		},
+	}
+}
+
 func TestValidGateBlock(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -14,11 +23,7 @@ func TestValidGateBlock(t *testing.T) {
 		Body: []ast.Node{
 			&ast.NarratorNode{Text: "Hello."},
 		},
-		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
-		},
+		Gate: unconditionalGate("main:02"),
 	}
 
 	errs := Validate(ep)
@@ -46,55 +51,6 @@ func TestMissingGate(t *testing.T) {
 	}
 }
 
-func TestGotoWithoutLabel(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01",
-		Title:     "Test",
-		Body: []ast.Node{
-			&ast.GotoNode{Name: "MISSING_LABEL"},
-		},
-		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
-		},
-	}
-
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == GotoNoLabel {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected GOTO_NO_LABEL error, got %v", errs)
-	}
-}
-
-func TestGotoWithLabel(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01",
-		Title:     "Test",
-		Body: []ast.Node{
-			&ast.LabelNode{Name: "AFTER_FIGHT"},
-			&ast.NarratorNode{Text: "Middle."},
-			&ast.GotoNode{Name: "AFTER_FIGHT"},
-		},
-		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
-		},
-	}
-
-	errs := Validate(ep)
-	if len(errs) != 0 {
-		t.Errorf("expected no errors, got %v", errs)
-	}
-}
-
 func TestBraveOptionWithoutCheck(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -111,11 +67,7 @@ func TestBraveOptionWithoutCheck(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
-		},
+		Gate: unconditionalGate("main:02"),
 	}
 
 	errs := Validate(ep)
@@ -150,7 +102,7 @@ func TestValidBraveOptionPass(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -169,7 +121,7 @@ func TestDuplicateOptionID(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -196,7 +148,7 @@ func TestSafeOptionWithCheck(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -210,33 +162,13 @@ func TestSafeOptionWithCheck(t *testing.T) {
 	}
 }
 
-func TestInvalidPosition(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharShowNode{Char: "c", Look: "l", Position: "centre"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_POSITION error for 'centre'")
-	}
-}
-
 func TestInvalidBubbleType(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.CharBubbleNode{Char: "c", BubbleType: "sparkle"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -260,7 +192,7 @@ func TestInvalidOptionMode(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -271,56 +203,6 @@ func TestInvalidOptionMode(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected INVALID_OPTION_MODE error")
-	}
-}
-
-func TestGotoInsideIfNode(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.LabelNode{Name: "L1"},
-			&ast.IfNode{
-				Condition: &ast.FlagCondition{Name: "A"},
-				Then:      []ast.Node{&ast.GotoNode{Name: "L1"}},
-				Else:      []ast.Node{&ast.GotoNode{Name: "MISSING"}},
-			},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == GotoNoLabel && strings.Contains(e.Message, "MISSING") {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected GOTO_NO_LABEL for goto inside else branch")
-	}
-}
-
-func TestGotoInsideCgShow(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:     "cg1",
-				Duration: ast.CgDurationMedium,
-				Content:  "cg content placeholder",
-				Body:     []ast.Node{&ast.GotoNode{Name: "MISSING"}},
-			},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == GotoNoLabel {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected GOTO_NO_LABEL for goto inside CgShowNode")
 	}
 }
 
@@ -336,53 +218,11 @@ func TestMinigameLeafNoBodyValidates(t *testing.T) {
 				Description: "minigame description placeholder",
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
 		t.Errorf("leaf minigame should validate cleanly, got %v", errs)
-	}
-}
-
-func TestGotoInsidePhoneShow(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.PhoneShowNode{
-				Body: []ast.Node{&ast.GotoNode{Name: "MISSING"}},
-			},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == GotoNoLabel {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected GOTO_NO_LABEL for goto inside PhoneShowNode")
-	}
-}
-
-func TestLabelInsideCgShow(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:     "cg1",
-				Duration: ast.CgDurationMedium,
-				Content:  "cg content placeholder",
-				Body:     []ast.Node{&ast.LabelNode{Name: "INNER"}},
-			},
-			&ast.GotoNode{Name: "INNER"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	if len(errs) != 0 {
-		t.Errorf("expected no errors (label inside cg should be collected), got %v", errs)
 	}
 }
 
@@ -394,7 +234,7 @@ func TestMinigameMissingDescription(t *testing.T) {
 		Body: []ast.Node{
 			&ast.MinigameNode{Name: "mg1"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -415,7 +255,7 @@ func TestMinigameMissingName(t *testing.T) {
 		Body: []ast.Node{
 			&ast.MinigameNode{Description: "d"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -442,7 +282,7 @@ func TestTrickValidationWhitelist(t *testing.T) {
 			Body: []ast.Node{
 				&ast.TrickNode{Type: ty, Prompt: "do it."},
 			},
-			Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+			Gate: unconditionalGate("main:02"),
 		}
 		if errs := Validate(ep); len(errs) != 0 {
 			t.Errorf("trick type %q should validate cleanly, got %v", ty, errs)
@@ -459,7 +299,7 @@ func TestTrickValidationWhitelist(t *testing.T) {
 				Body: []ast.Node{
 					&ast.TrickNode{Type: ty, Prompt: "go."},
 				},
-				Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+				Gate: unconditionalGate("main:02"),
 			}
 			errs := Validate(ep)
 			found := false
@@ -482,7 +322,7 @@ func TestTrickMissingPrompt(t *testing.T) {
 		Body: []ast.Node{
 			&ast.TrickNode{Type: ast.TrickTap, Prompt: ""},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -496,119 +336,13 @@ func TestTrickMissingPrompt(t *testing.T) {
 	}
 }
 
-func TestLabelInsidePhoneShow(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.PhoneShowNode{
-				Body: []ast.Node{&ast.LabelNode{Name: "PHONE_LABEL"}},
-			},
-			&ast.GotoNode{Name: "PHONE_LABEL"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	if len(errs) != 0 {
-		t.Errorf("expected no errors, got %v", errs)
-	}
-}
-
-func TestLabelInsideIfNode(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.IfNode{
-				Condition: &ast.FlagCondition{Name: "A"},
-				Then:      []ast.Node{&ast.LabelNode{Name: "IF_LABEL"}},
-				Else:      []ast.Node{&ast.LabelNode{Name: "ELSE_LABEL"}},
-			},
-			&ast.GotoNode{Name: "IF_LABEL"},
-			&ast.GotoNode{Name: "ELSE_LABEL"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	if len(errs) != 0 {
-		t.Errorf("expected no errors, got %v", errs)
-	}
-}
-
-func TestLabelInsideChoiceOption(t *testing.T) {
-	// Labels inside a brave option body (including inside the @if
-	// check.success tree) must be collected so external gotos resolve.
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.ChoiceNode{
-				Options: []*ast.OptionNode{
-					{
-						ID: "A", Mode: "brave", Text: "Fight",
-						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
-						Body: []ast.Node{
-							&ast.IfNode{
-								Condition: &ast.CheckCondition{Result: "success"},
-								Then:      []ast.Node{&ast.LabelNode{Name: "SUCC_LABEL"}},
-								Else:      []ast.Node{&ast.LabelNode{Name: "FAIL_LABEL"}},
-							},
-							&ast.LabelNode{Name: "BODY_LABEL"},
-						},
-					},
-				},
-			},
-			&ast.GotoNode{Name: "SUCC_LABEL"},
-			&ast.GotoNode{Name: "FAIL_LABEL"},
-			&ast.GotoNode{Name: "BODY_LABEL"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	if len(errs) != 0 {
-		t.Errorf("expected no errors, got %v", errs)
-	}
-}
-
-func TestGotoInsideChoiceOption(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.ChoiceNode{
-				Options: []*ast.OptionNode{
-					{
-						ID: "A", Mode: "brave", Text: "Fight",
-						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
-						Body: []ast.Node{
-							&ast.IfNode{
-								Condition: &ast.CheckCondition{Result: "success"},
-								Then:      []ast.Node{&ast.GotoNode{Name: "MISSING1"}},
-								Else:      []ast.Node{&ast.GotoNode{Name: "MISSING2"}},
-							},
-							&ast.GotoNode{Name: "MISSING3"},
-						},
-					},
-				},
-			},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	gotoCount := 0
-	for _, e := range errs {
-		if e.Code == GotoNoLabel {
-			gotoCount++
-		}
-	}
-	if gotoCount != 3 {
-		t.Errorf("expected 3 GOTO_NO_LABEL errors, got %d", gotoCount)
-	}
-}
-
 func TestInvalidTransition(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "bg1", Transition: "wipe"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -627,11 +361,9 @@ func TestValidTransitions(t *testing.T) {
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "bg1", Transition: "fade"},
-			&ast.CharShowNode{Char: "c", Look: "l", Position: "center", Transition: "cut"},
-			&ast.CharHideNode{Char: "c", Transition: "slow"},
-			&ast.CharLookNode{Char: "c", Look: "l", Transition: "dissolve"},
+			&ast.CharShowNode{Char: "c", Look: "l", Transition: "cut"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -639,104 +371,13 @@ func TestValidTransitions(t *testing.T) {
 	}
 }
 
-func TestInvalidTransitionOnCharHide(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharHideNode{Char: "c", Transition: "wipe"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidTransition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_TRANSITION for char hide")
-	}
-}
-
-func TestInvalidTransitionOnCharLook(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharLookNode{Char: "c", Look: "l", Transition: "wipe"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidTransition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_TRANSITION for char look")
-	}
-}
-
-func TestInvalidTransitionOnCgShow(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:       "cg1",
-				Transition: "wipe",
-				Duration:   ast.CgDurationMedium,
-				Content:    "cg content placeholder",
-			},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidTransition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_TRANSITION for cg show")
-	}
-}
-
-func TestInvalidPositionOnCharMove(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharMoveNode{Char: "c", Position: "middle"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_POSITION for char move")
-	}
-}
-
 func TestValuesInsideNestedNodes(t *testing.T) {
-	// Test checkValues recurses into CgShow, Choice, IfNode, Minigame, PhoneShow.
+	// Test checkValues recurses into Choice, IfNode, PhoneShow.
 	// Brave-option success/fail branches are now inside the Body as an
 	// @if (check.success) tree; we nest the bad bubble types in both branches.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:     "cg1",
-				Duration: ast.CgDurationMedium,
-				Content:  "cg content placeholder",
-				Body:     []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops"}},
-			},
 			&ast.ChoiceNode{
 				Options: []*ast.OptionNode{
 					{
@@ -748,62 +389,38 @@ func TestValuesInsideNestedNodes(t *testing.T) {
 								Then:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid1"}},
 								Else:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid2"}},
 							},
-							&ast.CharShowNode{Char: "c", Look: "l", Position: "oops2"},
+							&ast.CharBubbleNode{Char: "c", BubbleType: "invalid3"},
 						},
 					},
 				},
 			},
 			&ast.IfNode{
 				Condition: &ast.FlagCondition{Name: "A"},
-				Then:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops3"}},
-				Else:      []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops4"}},
-			},
-			&ast.PhoneShowNode{
-				Body: []ast.Node{&ast.CharShowNode{Char: "c", Look: "l", Position: "oops5"}},
+				Then:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid4"}},
+				Else:      []ast.Node{&ast.CharBubbleNode{Char: "c", BubbleType: "invalid5"}},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
-	positionErrors := 0
 	bubbleErrors := 0
 	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			positionErrors++
-		}
 		if e.Code == InvalidBubbleType {
 			bubbleErrors++
 		}
 	}
-	// 5 invalid positions: cg body, brave then, brave else, brave body
-	// trailer (oops2), if then (oops3), if else (oops4), phone body (oops5).
-	if positionErrors < 5 {
-		t.Errorf("expected at least 5 INVALID_POSITION errors from nested nodes, got %d", positionErrors)
-	}
-	if bubbleErrors < 2 {
-		t.Errorf("expected at least 2 INVALID_BUBBLE_TYPE errors from nested nodes, got %d", bubbleErrors)
+	if bubbleErrors < 5 {
+		t.Errorf("expected at least 5 INVALID_BUBBLE_TYPE errors from nested nodes, got %d", bubbleErrors)
 	}
 }
 
 func TestBraveOptionsInsideNestedNodes(t *testing.T) {
-	// Test checkBraveOptions recurses into CgShow, IfNode, Minigame, PhoneShow.
-	// Each of the 5 brave options below is missing its check block, so
-	// we expect BRAVE_NO_CHECK to fire 5 times.
+	// Test checkBraveOptions recurses into IfNode and PhoneShow.
+	// Each of the brave options below is missing its check block, so
+	// we expect BRAVE_NO_CHECK to fire for each.
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:     "cg1",
-				Duration: ast.CgDurationMedium,
-				Content:  "cg content placeholder",
-				Body: []ast.Node{
-					&ast.ChoiceNode{
-						Options: []*ast.OptionNode{
-							{ID: "A", Mode: "brave", Text: "a"},
-						},
-					},
-				},
-			},
 			&ast.IfNode{
 				Condition: &ast.FlagCondition{Name: "A"},
 				Then: []ast.Node{
@@ -821,6 +438,9 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 					},
 				},
 			},
+			// PhoneShowNode body is whitelisted to text-message only, so
+			// putting a choice there exercises checkBraveOptions recursion
+			// even though it also generates an InvalidPhoneContent error.
 			&ast.PhoneShowNode{
 				Body: []ast.Node{
 					&ast.ChoiceNode{
@@ -831,7 +451,7 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	braveErrors := 0
@@ -840,10 +460,8 @@ func TestBraveOptionsInsideNestedNodes(t *testing.T) {
 			braveErrors++
 		}
 	}
-	// 4 brave options without check → 4 BRAVE_NO_CHECK errors
-	// (cg body, if then, if else, phone body).
-	if braveErrors < 4 {
-		t.Errorf("expected at least 4 BRAVE_NO_CHECK errors from nested nodes, got %d", braveErrors)
+	if braveErrors < 3 {
+		t.Errorf("expected at least 3 BRAVE_NO_CHECK errors from nested nodes, got %d", braveErrors)
 	}
 }
 
@@ -871,7 +489,7 @@ func TestSafeOptionWithCheckBlock(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -902,7 +520,7 @@ func TestBraveOptionWithCheckPasses(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -910,13 +528,17 @@ func TestBraveOptionWithCheckPasses(t *testing.T) {
 	}
 }
 
-// TestValidEndingSatisfiesTerminal — an @ending replaces the need for @gate.
-func TestValidEndingSatisfiesTerminal(t *testing.T) {
+// TestGateEndLeafValid — a single unconditional @end leaf is a valid gate shape.
+func TestGateEndLeafValid(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:15",
 		Title:     "Finale",
 		Body:      []ast.Node{&ast.NarratorNode{Text: "End."}},
-		Ending:    &ast.EndingNode{Type: ast.EndingComplete},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.EndLeaf{Type: ast.EndingComplete}},
+			},
+		},
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -939,22 +561,81 @@ func TestMissingTerminalErrors(t *testing.T) {
 	}
 }
 
-func TestInvalidEndingType(t *testing.T) {
+// TestInvalidEndType pins rejection of unknown @end type values.
+func TestInvalidEndType(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
 		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
-		Ending:    &ast.EndingNode{Type: "nope"},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.EndLeaf{Type: "nope"}},
+			},
+		},
 	}
 	errs := Validate(ep)
 	var found bool
 	for _, e := range errs {
-		if e.Code == InvalidEndingType {
+		if e.Code == InvalidEndType {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected INVALID_ENDING_TYPE in %v", errs)
+		t.Errorf("expected INVALID_END_TYPE in %v", errs)
+	}
+}
+
+// TestIncompleteGate verifies a gate whose last route is conditional
+// triggers INCOMPLETE_GATE.
+func TestIncompleteGate(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{
+					Condition: &ast.FlagCondition{Name: "A"},
+					Leaf:      &ast.EndLeaf{Type: ast.EndingComplete},
+				},
+				// No unconditional fallback — incomplete.
+			},
+		},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == IncompleteGate {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INCOMPLETE_GATE, got %v", errs)
+	}
+}
+
+// TestGateNextMissingTarget verifies a @next with empty target triggers
+// GATE_NEXT_MISSING_TARGET.
+func TestGateNextMissingTarget(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01",
+		Title:     "T",
+		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.NextLeaf{Target: ""}},
+			},
+		},
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == GateNextMissingTarget {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected GATE_NEXT_MISSING_TARGET, got %v", errs)
 	}
 }
 
@@ -972,7 +653,7 @@ func TestInvalidCompoundConditionOp(t *testing.T) {
 				Then: []ast.Node{&ast.NarratorNode{Text: "x"}},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	var found bool
@@ -998,7 +679,7 @@ func TestAchievementIdDuplicationAllowed(t *testing.T) {
 			&ast.AchievementNode{ID: "A", Name: "x", Rarity: ast.RarityRare, Description: "d"},
 			&ast.AchievementNode{ID: "A", Name: "x", Rarity: ast.RarityRare, Description: "d"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -1012,7 +693,7 @@ func TestInvalidRarityValidation(t *testing.T) {
 		Body: []ast.Node{
 			&ast.AchievementNode{ID: "A", Name: "n", Rarity: "common", Description: "d"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -1030,7 +711,7 @@ func TestInvalidSignalKindValidation(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{&ast.SignalNode{Kind: "garbage", Event: "X"}},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -1052,42 +733,50 @@ func TestValidateSignalIntReservedName(t *testing.T) {
 		Body: []ast.Node{
 			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "san", Op: ast.SignalOpAssign, Value: 0},
 		},
-		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.EndLeaf{Type: ast.EndingComplete}},
+			},
+		},
 	}
 	errs := Validate(ep)
 	found := false
 	for _, e := range errs {
-		if e.Code == ReservedIntName {
+		if e.Code == ReservedKeyword {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected ReservedIntName error, got: %v", errs)
+		t.Fatalf("expected ReservedKeyword error, got: %v", errs)
 	}
 }
 
 func TestValidateSignalIntReservedNameIsItself(t *testing.T) {
 	// @signal int int = 0 — 'int' is both the kind word and in the
-	// reserved-names list. Must be rejected by the ReservedIntName check.
+	// reserved-keywords list. Must be rejected by the ReservedKeyword check.
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "t",
 		Body: []ast.Node{
 			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "int", Op: ast.SignalOpAssign, Value: 0},
 		},
-		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.EndLeaf{Type: ast.EndingComplete}},
+			},
+		},
 	}
 	errs := Validate(ep)
 	found := false
 	for _, e := range errs {
-		if e.Code == ReservedIntName {
+		if e.Code == ReservedKeyword {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected ReservedIntName error for '@signal int int', got: %v", errs)
+		t.Fatalf("expected ReservedKeyword error for '@signal int int', got: %v", errs)
 	}
 }
 
@@ -1099,12 +788,146 @@ func TestValidateSignalIntOK(t *testing.T) {
 			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "rejections", Op: ast.SignalOpAssign, Value: 0},
 			&ast.SignalNode{Kind: ast.SignalKindInt, Name: "rejections", Op: ast.SignalOpAdd, Value: 1},
 		},
-		Ending: &ast.EndingNode{Type: ast.EndingComplete},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{Leaf: &ast.EndLeaf{Type: ast.EndingComplete}},
+			},
+		},
 	}
 	errs := Validate(ep)
 	for _, e := range errs {
-		if e.Code == ReservedIntName || e.Code == InvalidSignalKind {
+		if e.Code == ReservedKeyword || e.Code == InvalidSignalKind {
 			t.Fatalf("unexpected error: %v", e)
 		}
+	}
+}
+
+// TestAggregateTooFewArgs pins the MAX/MIN aggregate args>=2 rule.
+func TestAggregateTooFewArgs(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.IfNode{
+				Condition: &ast.ComparisonCondition{
+					Left: &ast.ComparisonOperand{
+						Kind: ast.OperandMax,
+						Args: []*ast.ComparisonOperand{
+							{Kind: ast.OperandAffection, Char: "easton"},
+						},
+					},
+					Op:    ">=",
+					Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 5},
+				},
+				Then: []ast.Node{&ast.NarratorNode{Text: "x"}},
+			},
+		},
+		Gate: unconditionalGate("main:02"),
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == AggregateTooFewArgs {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected AGGREGATE_TOO_FEW_ARGS, got %v", errs)
+	}
+}
+
+// TestAggregateValid pins a well-formed MAX comparison validates cleanly.
+func TestAggregateValid(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.IfNode{
+				Condition: &ast.ComparisonCondition{
+					Left: &ast.ComparisonOperand{
+						Kind: ast.OperandMax,
+						Args: []*ast.ComparisonOperand{
+							{Kind: ast.OperandAffection, Char: "easton"},
+							{Kind: ast.OperandAffection, Char: "diego"},
+						},
+					},
+					Op:    ">=",
+					Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 5},
+				},
+				Then: []ast.Node{&ast.NarratorNode{Text: "x"}},
+			},
+		},
+		Gate: unconditionalGate("main:02"),
+	}
+	errs := Validate(ep)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+// TestPhoneBodyRejectsNonTextMessage pins that @phone only accepts
+// TextMessageNode children.
+func TestPhoneBodyRejectsNonTextMessage(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.PhoneShowNode{
+				Body: []ast.Node{
+					&ast.NarratorNode{Text: "no narration inside phone"},
+				},
+			},
+		},
+		Gate: unconditionalGate("main:02"),
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == InvalidPhoneContent {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected INVALID_PHONE_CONTENT, got %v", errs)
+	}
+}
+
+// TestPhoneBodyAcceptsTextMessage pins that text messages inside @phone
+// validate cleanly.
+func TestPhoneBodyAcceptsTextMessage(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.PhoneShowNode{
+				Body: []ast.Node{
+					&ast.TextMessageNode{Direction: "from", Char: "josie", Content: "hi"},
+					&ast.TextMessageNode{Direction: "to", Char: "josie", Content: "hi back"},
+				},
+			},
+		},
+		Gate: unconditionalGate("main:02"),
+	}
+	errs := Validate(ep)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors, got %v", errs)
+	}
+}
+
+// TestReservedPoseName pins that `bubble` is rejected as a pose name on
+// CharShowNode.
+func TestReservedPoseName(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{
+			&ast.CharShowNode{Char: "josie", Look: "bubble"},
+		},
+		Gate: unconditionalGate("main:02"),
+	}
+	errs := Validate(ep)
+	found := false
+	for _, e := range errs {
+		if e.Code == ReservedKeyword {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected RESERVED_KEYWORD for pose 'bubble', got %v", errs)
 	}
 }

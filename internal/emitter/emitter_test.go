@@ -40,7 +40,7 @@ func newMockResolver() *mockResolver {
 			"phone_buzz": "https://cdn.test/sfx/phone_buzz.mp3",
 		},
 		cg: map[string]string{
-			"window_stare": "https://cdn.test/cg/window_stare.png",
+			"window_stare": "https://cdn.test/cg/window_stare.mp4",
 		},
 		minigames: map[string]string{
 			"qte_challenge": "https://cdn.test/minigames/qte_challenge/index.html",
@@ -93,6 +93,16 @@ func (m *mockResolver) ResolveMinigame(gameID string) (string, error) {
 	return "", fmt.Errorf("unknown minigame %q", gameID)
 }
 
+// nextLeaf returns an unconditional NextLeaf-terminated gate route.
+func nextLeaf(target string) *ast.GateRoute {
+	return &ast.GateRoute{Leaf: &ast.NextLeaf{Target: target}}
+}
+
+// endLeaf returns an unconditional EndLeaf-terminated gate route.
+func endLeaf(typ string) *ast.GateRoute {
+	return &ast.GateRoute{Leaf: &ast.EndLeaf{Type: typ}}
+}
+
 func TestEmitMinimal(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -102,9 +112,7 @@ func TestEmitMinimal(t *testing.T) {
 			&ast.NarratorNode{Text: "The hallway is empty."},
 		},
 		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
+			Routes: []*ast.GateRoute{nextLeaf("main:02")},
 		},
 	}
 
@@ -182,7 +190,7 @@ func TestEmitMinimal(t *testing.T) {
 }
 
 func TestEmitChoice(t *testing.T) {
-	// Brave option body now uses @if (check.success) { ... } @else { ... }.
+	// Brave option body uses @if (check.success) { ... } @else { ... }.
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "The Choice",
@@ -221,9 +229,7 @@ func TestEmitChoice(t *testing.T) {
 			},
 		},
 		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{
-				{Target: "main:02"},
-			},
+			Routes: []*ast.GateRoute{nextLeaf("main:02")},
 		},
 	}
 
@@ -273,14 +279,6 @@ func TestEmitChoice(t *testing.T) {
 		t.Errorf("check.dc = %v", check["dc"])
 	}
 
-	// on_success/on_fail are gone — the body is emitted as "steps".
-	if _, has := optA["on_success"]; has {
-		t.Error("brave option should not have 'on_success' key (body is in 'steps' now)")
-	}
-	if _, has := optA["on_fail"]; has {
-		t.Error("brave option should not have 'on_fail' key (body is in 'steps' now)")
-	}
-
 	stepsA := optA["steps"].([]interface{})
 	if len(stepsA) != 1 {
 		t.Fatalf("len(optA.steps) = %d, want 1 (the @if tree)", len(stepsA))
@@ -319,29 +317,26 @@ func TestEmitChoice(t *testing.T) {
 }
 
 func TestEmitConcurrentGrouping(t *testing.T) {
+	musicNode := &ast.MusicSetNode{Name: "calm_morning"}
+	musicNode.SetConcurrent(true)
+	charNode := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk"}
+	charNode.SetConcurrent(true)
+
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "Concurrent",
 		Body: []ast.Node{
 			// Group: bg (leader) + music (concurrent) + char_show (concurrent)
 			&ast.BgSetNode{Name: "school_classroom", Transition: "fade"},
-			func() ast.Node {
-				n := &ast.MusicPlayNode{Track: "calm_morning"}
-				n.SetConcurrent(true)
-				return n
-			}(),
-			func() ast.Node {
-				n := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk", Position: "right"}
-				n.SetConcurrent(true)
-				return n
-			}(),
-			// Standalone dialogue
+			musicNode,
+			charNode,
+			// Standalone narrator
 			&ast.NarratorNode{Text: "Hello."},
 			// Pause
-			&ast.PauseNode{Clicks: 1},
+			&ast.PauseNode{},
 		},
 		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{{Target: "main:02"}},
+			Routes: []*ast.GateRoute{nextLeaf("main:02")},
 		},
 	}
 
@@ -374,12 +369,19 @@ func TestEmitConcurrentGrouping(t *testing.T) {
 		t.Errorf("group[0].type = %v, want bg", bgStep["type"])
 	}
 	musicStep := group[1].(map[string]interface{})
-	if musicStep["type"] != "music_play" {
-		t.Errorf("group[1].type = %v, want music_play", musicStep["type"])
+	if musicStep["type"] != "music" {
+		t.Errorf("group[1].type = %v, want music", musicStep["type"])
+	}
+	if musicStep["name"] != "calm_morning" {
+		t.Errorf("group[1].name = %v, want calm_morning", musicStep["name"])
 	}
 	charStep := group[2].(map[string]interface{})
 	if charStep["type"] != "char_show" {
 		t.Errorf("group[2].type = %v, want char_show", charStep["type"])
+	}
+	// New AST: char_show has no `position`.
+	if _, has := charStep["position"]; has {
+		t.Error("char_show must not emit a 'position' field in the new model")
 	}
 
 	// Step 1: narrator (standalone object)
@@ -388,13 +390,13 @@ func TestEmitConcurrentGrouping(t *testing.T) {
 		t.Errorf("steps[1].type = %v, want narrator", narr["type"])
 	}
 
-	// Step 2: pause
+	// Step 2: pause — no `clicks` field in the new model.
 	pauseStep := steps[2].(map[string]interface{})
 	if pauseStep["type"] != "pause" {
 		t.Errorf("steps[2].type = %v, want pause", pauseStep["type"])
 	}
-	if pauseStep["clicks"] != float64(1) {
-		t.Errorf("steps[2].clicks = %v, want 1", pauseStep["clicks"])
+	if _, has := pauseStep["clicks"]; has {
+		t.Error("pause must not emit a 'clicks' field in the new model")
 	}
 }
 
@@ -404,7 +406,7 @@ func TestEmitDialogueLowercase(t *testing.T) {
 		Body: []ast.Node{
 			&ast.DialogueNode{Character: "JOSIE", Text: "Hi."},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, _ := em.Emit(ep)
@@ -431,16 +433,15 @@ func TestEmitGateConditional(t *testing.T) {
 		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
 		Gate: &ast.GateBlock{
 			Routes: []*ast.GateRoute{
-				{Condition: &ast.ChoiceCondition{Option: "A", Result: "fail"}, Target: "bad:01"},
-				{Condition: &ast.FlagCondition{Name: "EP01_DONE"}, Target: "mid:01"},
-				{Target: "main:02"},
+				{Condition: &ast.ChoiceCondition{Option: "A", Result: "fail"}, Leaf: &ast.NextLeaf{Target: "bad:01"}},
+				{Condition: &ast.FlagCondition{Name: "EP01_DONE"}, Leaf: &ast.NextLeaf{Target: "mid:01"}},
+				{Leaf: &ast.NextLeaf{Target: "main:02"}},
 			},
 		},
 	}
 	em := New(newMockResolver())
 	data, _ := em.Emit(ep)
 	s := string(data)
-	// Should have nested if/else
 	if !strings.Contains(s, `"if"`) {
 		t.Error("expected nested if in gate")
 	}
@@ -449,6 +450,7 @@ func TestEmitGateConditional(t *testing.T) {
 	}
 }
 
+// TestEmitConditionTypes covers all five condition kinds.
 func TestEmitConditionTypes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -457,11 +459,11 @@ func TestEmitConditionTypes(t *testing.T) {
 		{"choice", &ast.ChoiceCondition{Option: "A", Result: "fail"}},
 		{"flag", &ast.FlagCondition{Name: "EP01"}},
 		{"comparison", &ast.ComparisonCondition{
-			Left:  ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
+			Left:  &ast.ComparisonOperand{Kind: ast.OperandValue, Name: "x"},
 			Op:    ">=",
-			Right: 5,
+			Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 5},
 		}},
-		{"influence", &ast.InfluenceCondition{Description: "desc"}},
+		{"check", &ast.CheckCondition{Result: "success"}},
 		{"compound", &ast.CompoundCondition{
 			Op:    "&&",
 			Left:  &ast.FlagCondition{Name: "a"},
@@ -475,7 +477,7 @@ func TestEmitConditionTypes(t *testing.T) {
 				Body: []ast.Node{
 					&ast.IfNode{Condition: tt.cond, Then: []ast.Node{&ast.NarratorNode{Text: "Hi."}}},
 				},
-				Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+				Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 			}
 			em := New(newMockResolver())
 			data, _ := em.Emit(ep)
@@ -502,50 +504,45 @@ func TestEmitElseIfUnwrap(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, _ := em.Emit(ep)
 	s := string(data)
-	// The else should be a bare object (not wrapped in array)
-	// Check that "else": { appears, not "else": [
+	// The else should be a bare object (not wrapped in array).
 	if strings.Contains(s, `"else": [`) {
 		t.Error("@else @if should produce bare object, not array")
 	}
 }
 
+// TestEmitAllNodeTypes ensures every current AST node type emits without panic.
 func TestEmitAllNodeTypes(t *testing.T) {
-	// Ensure every node type emits without panic
 	nodes := []ast.Node{
 		&ast.BgSetNode{Name: "bg1", Transition: "fade"},
-		&ast.CharShowNode{Char: "c", Look: "l", Position: "left"},
-		&ast.CharHideNode{Char: "c", Transition: "fade"},
-		&ast.CharLookNode{Char: "c", Look: "l"},
-		&ast.CharMoveNode{Char: "c", Position: "right"},
+		&ast.CharShowNode{Char: "c", Look: "l"},
 		&ast.CharBubbleNode{Char: "c", BubbleType: "heart"},
-		&ast.CgShowNode{Name: "cg1"},
+		&ast.CgShowNode{Name: "cg1", Content: "story"},
 		&ast.DialogueNode{Character: "CHAR", Text: "hi"},
 		&ast.NarratorNode{Text: "n"},
 		&ast.YouNode{Text: "y"},
 		&ast.PhoneShowNode{Body: []ast.Node{
 			&ast.TextMessageNode{Direction: "from", Char: "C", Content: "hi"},
 		}},
-		&ast.PhoneHideNode{},
-		&ast.MusicPlayNode{Track: "t"},
-		&ast.MusicCrossfadeNode{Track: "t"},
-		&ast.MusicFadeoutNode{},
-		&ast.SfxPlayNode{Sound: "s"},
+		&ast.MusicSetNode{Name: "t"},
+		&ast.MusicStopNode{},
+		&ast.SfxNode{Name: "s"},
+		&ast.MinigameNode{Name: "g", Description: "d"},
+		&ast.TrickNode{Type: ast.TrickTap, Prompt: "tap."},
 		&ast.AffectionNode{Char: "c", Delta: "+1"},
-		&ast.SignalNode{Kind: "mark", Event: "E"},
+		&ast.SignalNode{Kind: ast.SignalKindMark, Event: "E"},
 		&ast.ButterflyNode{Description: "d"},
-		&ast.LabelNode{Name: "L"},
-		&ast.GotoNode{Name: "L"},
-		&ast.PauseNode{Clicks: 1},
+		&ast.AchievementNode{ID: "X", Name: "n", Rarity: ast.RarityRare, Description: "d"},
+		&ast.PauseNode{},
 	}
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: nodes,
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -557,35 +554,13 @@ func TestEmitAllNodeTypes(t *testing.T) {
 	}
 }
 
-func TestEmitConcurrentGroups(t *testing.T) {
-	bg := &ast.BgSetNode{Name: "bg1"}
-	music := &ast.MusicPlayNode{Track: "t"}
-	music.SetConcurrent(true)
-	char := &ast.CharShowNode{Char: "c", Look: "l", Position: "left"}
-	char.SetConcurrent(true)
-	narrator := &ast.NarratorNode{Text: "hi"}
-
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{bg, music, char, narrator},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	em := New(newMockResolver())
-	data, _ := em.Emit(ep)
-	s := string(data)
-	// The first 3 should be grouped as array, narrator separate
-	if !strings.Contains(s, `"steps": [`) {
-		t.Error("expected steps array")
-	}
-}
-
 func TestEmitAssetWarning(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "nonexistent"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	em.Emit(ep)
@@ -594,8 +569,8 @@ func TestEmitAssetWarning(t *testing.T) {
 	}
 }
 
-// TestEmitEndingKey verifies that @ending produces a structured "ending" key
-// and that its absence produces a null "ending" key (always present for consumers).
+// TestEmitEndingKey verifies that Episode.Ending (Scheme B lowering target)
+// produces a structured "ending" key and absence produces null.
 func TestEmitEndingKey(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
@@ -635,7 +610,7 @@ func TestEmitEndingAbsent(t *testing.T) {
 		Title:     "Normal",
 		Body:      []ast.Node{&ast.NarratorNode{Text: "Hi."}},
 		Gate: &ast.GateBlock{
-			Routes: []*ast.GateRoute{{Target: "main:02"}},
+			Routes: []*ast.GateRoute{nextLeaf("main:02")},
 		},
 	}
 	out, err := e.Emit(ep)
@@ -654,8 +629,121 @@ func TestEmitEndingAbsent(t *testing.T) {
 	}
 }
 
-// TestEmitAchievementStep verifies that @achievement emits an inline step
-// carrying id, name, rarity, and description.
+// TestEmitSchemeBLowering verifies that the degenerate
+// `@gate { @end TYPE }` shape is lowered to Episode.Ending with `gate: null`.
+func TestEmitSchemeBLowering(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{endLeaf(ast.EndingBad)},
+		},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["gate"] != nil {
+		t.Errorf("gate should be null after Scheme B lowering, got %v", result["gate"])
+	}
+	ending, ok := result["ending"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("ending should be a map after Scheme B lowering, got %T", result["ending"])
+	}
+	if ending["type"] != "bad_ending" {
+		t.Errorf("ending.type = %v, want bad_ending", ending["type"])
+	}
+}
+
+// TestEmitGateConditionalEndDoesNotLower verifies that conditional `@end`
+// leaves are NOT collapsed into Episode.Ending — only the unconditional
+// single-route shape is lowered.
+func TestEmitGateConditionalEndDoesNotLower(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{
+					Condition: &ast.FlagCondition{Name: "WIN"},
+					Leaf:      &ast.EndLeaf{Type: ast.EndingComplete},
+				},
+				endLeaf(ast.EndingBad),
+			},
+		},
+	}
+	em := New(newMockResolver())
+	data, err := em.Emit(ep)
+	if err != nil {
+		t.Fatalf("Emit failed: %v", err)
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["gate"] == nil {
+		t.Error("conditional end leaf must remain in gate (not lowered)")
+	}
+	if result["ending"] != nil {
+		t.Errorf("ending should be nil when gate has conditions, got %v", result["ending"])
+	}
+}
+
+// TestEmitGateMixedNextAndEnd verifies a gate can mix @next and @end leaves.
+func TestEmitGateMixedNextAndEnd(t *testing.T) {
+	ep := &ast.Episode{
+		BranchKey: "main:01", Title: "T",
+		Body: []ast.Node{&ast.NarratorNode{Text: "Hi."}},
+		Gate: &ast.GateBlock{
+			Routes: []*ast.GateRoute{
+				{
+					Condition: &ast.ComparisonCondition{
+						Left:  &ast.ComparisonOperand{Kind: ast.OperandValue, Name: "rejections"},
+						Op:    ">=",
+						Right: &ast.ComparisonOperand{Kind: ast.OperandLiteral, Value: 3},
+					},
+					Leaf: &ast.EndLeaf{Type: ast.EndingBad},
+				},
+				{
+					Condition: &ast.FlagCondition{Name: "HEROIC"},
+					Leaf:      &ast.EndLeaf{Type: ast.EndingComplete},
+				},
+				{Leaf: &ast.NextLeaf{Target: "main:02"}},
+			},
+		},
+	}
+	em := New(newMockResolver())
+	data, _ := em.Emit(ep)
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+
+	gate, ok := result["gate"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("gate should be a map, got %T", result["gate"])
+	}
+	if gate["end"] != "bad_ending" {
+		t.Errorf("gate.end = %v, want bad_ending", gate["end"])
+	}
+	if _, has := gate["next"]; has {
+		t.Error("gate root should not carry next (only end here)")
+	}
+	elseLvl := gate["else"].(map[string]interface{})
+	if elseLvl["end"] != "complete" {
+		t.Errorf("gate.else.end = %v, want complete", elseLvl["end"])
+	}
+	fallback := elseLvl["else"].(map[string]interface{})
+	if fallback["next"] != "main:02" {
+		t.Errorf("fallback next = %v, want main:02", fallback["next"])
+	}
+}
+
+// TestEmitAchievementStep verifies @achievement emits an inline step
+// carrying id, name, rarity, description.
 func TestEmitAchievementStep(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
@@ -671,7 +759,7 @@ func TestEmitAchievementStep(t *testing.T) {
 				Description: "desc",
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	out, err := e.Emit(ep)
 	if err != nil {
@@ -698,16 +786,13 @@ func TestEmitAchievementStep(t *testing.T) {
 		}
 	}
 	if step["achievement_id"] != "HEEL_WARRIOR" {
-		t.Errorf("achievement_id: got %v, want HEEL_WARRIOR (semantic id from MSS source)", step["achievement_id"])
+		t.Errorf("achievement_id: got %v, want HEEL_WARRIOR", step["achievement_id"])
 	}
 	if step["rarity"] != "rare" {
 		t.Errorf("rarity: got %v", step["rarity"])
 	}
-	// And the compiler-assigned stable step id should also be present
-	// (the universal `id` field stamped by assignStepID, distinct from
-	// the semantic `achievement_id`).
 	if step["id"] != "0001_ach" {
-		t.Errorf("step.id: got %v, want 0001_ach (compiler-assigned stable step id)", step["id"])
+		t.Errorf("step.id: got %v, want 0001_ach", step["id"])
 	}
 }
 
@@ -719,20 +804,17 @@ func TestEmitNoTopLevelAchievementsKey(t *testing.T) {
 		BranchKey: "main:01",
 		Title:     "T",
 		Body:      []ast.Node{&ast.NarratorNode{Text: "hi"}},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	out, err := e.Emit(ep)
 	if err != nil {
 		t.Fatalf("Emit err: %v", err)
 	}
 	if strings.Contains(string(out), `"achievements"`) {
-		t.Errorf("top-level 'achievements' key should not appear when body has no achievement step:\n%s", string(out))
+		t.Errorf("top-level 'achievements' key should not appear:\n%s", string(out))
 	}
 }
 
-// TestEmitSignalKind verifies the emitter includes the signal kind in the
-// output step. The kind slot is retained so future kinds can be added
-// without breaking consumers.
 func TestEmitSignalKind(t *testing.T) {
 	r := &mockResolver{}
 	e := New(r)
@@ -743,7 +825,7 @@ func TestEmitSignalKind(t *testing.T) {
 		Body: []ast.Node{
 			&ast.SignalNode{Kind: ast.SignalKindMark, Event: "A"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	out, err := e.Emit(ep)
 	if err != nil {
@@ -795,7 +877,7 @@ func assertStepEquals(t *testing.T, got, want map[string]interface{}) {
 func TestEmitSignalIntAssign(t *testing.T) {
 	src := `@episode main:01 "t" {
   @signal int rejections = 0
-  @ending complete
+  @gate { @end complete }
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
@@ -812,7 +894,7 @@ func TestEmitSignalIntAssign(t *testing.T) {
 func TestEmitSignalIntAdd(t *testing.T) {
 	src := `@episode main:01 "t" {
   @signal int rejections +1
-  @ending complete
+  @gate { @end complete }
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
@@ -829,7 +911,7 @@ func TestEmitSignalIntAdd(t *testing.T) {
 func TestEmitSignalIntSub(t *testing.T) {
 	src := `@episode main:01 "t" {
   @signal int rejections -2
-  @ending complete
+  @gate { @end complete }
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
@@ -846,7 +928,7 @@ func TestEmitSignalIntSub(t *testing.T) {
 func TestEmitSignalMarkUnchanged(t *testing.T) {
 	src := `@episode main:01 "t" {
   @signal mark HIGH_HEEL_EP05
-  @ending complete
+  @gate { @end complete }
 }`
 	step := firstBodyStep(t, src)
 	want := map[string]interface{}{
@@ -863,7 +945,7 @@ func TestEmitIfReadsIntVariableAsComparison(t *testing.T) {
   @if (rejections >= 3) {
     NARRATOR: too many
   }
-  @ending complete
+  @gate { @end complete }
 }`
 	step := firstBodyStep(t, src)
 	if step["type"] != "if" {
@@ -880,8 +962,203 @@ func TestEmitIfReadsIntVariableAsComparison(t *testing.T) {
 	if cond["op"] != ">=" {
 		t.Fatalf("unexpected op: %v", cond["op"])
 	}
-	if cond["right"].(float64) != 3 {
-		t.Fatalf("unexpected right: %v", cond["right"])
+	right := cond["right"].(map[string]interface{})
+	if right["kind"] != "literal" || right["value"].(float64) != 3 {
+		t.Fatalf("unexpected right: %#v", right)
+	}
+}
+
+// ---------- Operand tests (5 kinds: literal / affection / value / max / min) ----------
+
+func TestEmitOperandLiteral(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (affection.easton >= 5) {
+    NARRATOR: warm
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	right := cond["right"].(map[string]interface{})
+	if right["kind"] != "literal" {
+		t.Errorf("right.kind = %v, want literal", right["kind"])
+	}
+	if right["value"].(float64) != 5 {
+		t.Errorf("right.value = %v, want 5", right["value"])
+	}
+}
+
+func TestEmitOperandAffection(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (affection.easton >= 5) {
+    NARRATOR: warm
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "affection" || left["char"] != "easton" {
+		t.Errorf("left = %#v, want affection/easton", left)
+	}
+}
+
+func TestEmitOperandVsOperandComparison(t *testing.T) {
+	// affection.easton > affection.diego
+	src := `@episode main:01 "t" {
+  @if (affection.easton > affection.diego) {
+    NARRATOR: closer to easton
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	right := cond["right"].(map[string]interface{})
+	if left["kind"] != "affection" || left["char"] != "easton" {
+		t.Errorf("left = %#v, want affection/easton", left)
+	}
+	if right["kind"] != "affection" || right["char"] != "diego" {
+		t.Errorf("right = %#v, want affection/diego", right)
+	}
+	if cond["op"] != ">" {
+		t.Errorf("op = %v, want >", cond["op"])
+	}
+}
+
+func TestEmitOperandLiteralOnLeft(t *testing.T) {
+	// 5 < affection.easton
+	src := `@episode main:01 "t" {
+  @if (5 < affection.easton) {
+    NARRATOR: warm
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "literal" || left["value"].(float64) != 5 {
+		t.Errorf("left = %#v, want literal 5", left)
+	}
+}
+
+func TestEmitOperandMax2Args(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (MAX(affection.easton, affection.diego) >= 5) {
+    NARRATOR: somebody likes you
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "max" {
+		t.Fatalf("left.kind = %v, want max", left["kind"])
+	}
+	args := left["args"].([]interface{})
+	if len(args) != 2 {
+		t.Fatalf("max.args length = %d, want 2", len(args))
+	}
+	for _, a := range args {
+		am := a.(map[string]interface{})
+		if am["kind"] != "affection" {
+			t.Errorf("max.args[*].kind = %v, want affection", am["kind"])
+		}
+	}
+}
+
+func TestEmitOperandMin3Args(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (MIN(affection.easton, affection.diego, affection.mauricio) >= 2) {
+    NARRATOR: all warming up
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "min" {
+		t.Fatalf("left.kind = %v, want min", left["kind"])
+	}
+	args := left["args"].([]interface{})
+	if len(args) != 3 {
+		t.Fatalf("min.args length = %d, want 3", len(args))
+	}
+}
+
+func TestEmitOperandMax4Args(t *testing.T) {
+	src := `@episode main:01 "t" {
+  @if (MAX(affection.easton, affection.diego, affection.mauricio, affection.mark) >= 10) {
+    NARRATOR: harem
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "max" {
+		t.Fatalf("left.kind = %v, want max", left["kind"])
+	}
+	args := left["args"].([]interface{})
+	if len(args) != 4 {
+		t.Fatalf("max.args length = %d, want 4", len(args))
+	}
+}
+
+func TestEmitOperandMaxMixedKinds(t *testing.T) {
+	// max(affection, value, literal)
+	src := `@episode main:01 "t" {
+  @if (MAX(affection.easton, rejections, 5) >= 7) {
+    NARRATOR: above floor
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	args := left["args"].([]interface{})
+	if len(args) != 3 {
+		t.Fatalf("args length = %d, want 3", len(args))
+	}
+	a0 := args[0].(map[string]interface{})
+	a1 := args[1].(map[string]interface{})
+	a2 := args[2].(map[string]interface{})
+	if a0["kind"] != "affection" {
+		t.Errorf("args[0].kind = %v, want affection", a0["kind"])
+	}
+	if a1["kind"] != "value" || a1["name"] != "rejections" {
+		t.Errorf("args[1] = %#v, want value/rejections", a1)
+	}
+	if a2["kind"] != "literal" || a2["value"].(float64) != 5 {
+		t.Errorf("args[2] = %#v, want literal 5", a2)
+	}
+}
+
+func TestEmitOperandRecursiveNesting(t *testing.T) {
+	// MAX(affection.easton, MIN(affection.diego, affection.mauricio)) >= 5
+	src := `@episode main:01 "t" {
+  @if (MAX(affection.easton, MIN(affection.diego, affection.mauricio)) >= 5) {
+    NARRATOR: yes
+  }
+  @gate { @end complete }
+}`
+	step := firstBodyStep(t, src)
+	cond := step["condition"].(map[string]interface{})
+	left := cond["left"].(map[string]interface{})
+	if left["kind"] != "max" {
+		t.Fatalf("outer kind = %v, want max", left["kind"])
+	}
+	args := left["args"].([]interface{})
+	if len(args) != 2 {
+		t.Fatalf("outer args length = %d, want 2", len(args))
+	}
+	inner := args[1].(map[string]interface{})
+	if inner["kind"] != "min" {
+		t.Errorf("nested kind = %v, want min", inner["kind"])
+	}
+	innerArgs := inner["args"].([]interface{})
+	if len(innerArgs) != 2 {
+		t.Fatalf("inner args length = %d, want 2", len(innerArgs))
 	}
 }
 
@@ -905,24 +1182,17 @@ func TestStepTypeTag(t *testing.T) {
 		{"cg_show", "cg"},
 		{"bg", "bg"},
 		{"char_show", "char"},
-		{"char_hide", "char"},
-		{"char_look", "char"},
-		{"char_move", "char"},
 		{"bubble", "char"},
-		{"music_play", "mus"},
-		{"music_crossfade", "mus"},
-		{"music_fadeout", "mus"},
-		{"sfx_play", "sfx"},
+		{"music", "mus"},
+		{"music_stop", "mus"},
+		{"sfx", "sfx"},
 		{"phone_show", "phn"},
-		{"phone_hide", "phn"},
 		{"text_message", "phn"},
 		{"signal", "sig"},
 		{"affection", "aff"},
 		{"achievement", "ach"},
 		{"butterfly", "btf"},
 		{"if", "ctrl"},
-		{"goto", "ctrl"},
-		{"label", "ctrl"},
 		{"unknown_future_type", "unk"},
 	}
 	for _, tt := range tests {
@@ -944,11 +1214,11 @@ func TestStepIDFormatTopLevel(t *testing.T) {
 			&ast.NarratorNode{Text: "1"},
 			&ast.DialogueNode{Character: "JOSIE", Text: "2"},
 			&ast.YouNode{Text: "3"},
-			&ast.PauseNode{Clicks: 1},
+			&ast.PauseNode{},
 			&ast.BgSetNode{Name: "x"},
-			&ast.MusicPlayNode{Track: "m"},
+			&ast.MusicSetNode{Name: "m"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -973,15 +1243,14 @@ func TestStepIDFormatTopLevel(t *testing.T) {
 	}
 }
 
-// TestStepIDConcurrentGroupSharesParentCounter verifies that a concurrent
+// TestStepIDConcurrentGroupSharesParentCounter verifies a concurrent
 // group consumes sequential seqs from the parent container — it is NOT a
-// nested 0001 restart. The group as a JSON array does not itself carry an
-// id; only the steps inside it do.
+// nested 0001 restart.
 func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 	bg := &ast.BgSetNode{Name: "bg1"}
-	music := &ast.MusicPlayNode{Track: "calm_morning"}
+	music := &ast.MusicSetNode{Name: "calm_morning"}
 	music.SetConcurrent(true)
-	char := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk", Position: "right"}
+	char := &ast.CharShowNode{Char: "mauricio", Look: "neutral_smirk"}
 	char.SetConcurrent(true)
 	narr := &ast.NarratorNode{Text: "after"}
 
@@ -989,7 +1258,7 @@ func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 		BranchKey: "main:01",
 		Title:     "T",
 		Body:      []ast.Node{bg, music, char, narr},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1000,7 +1269,6 @@ func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 	json.Unmarshal(data, &result)
 	steps := result["steps"].([]interface{})
 
-	// steps[0] should be a concurrent group (array of 3) consuming seqs 1,2,3.
 	group, ok := steps[0].([]interface{})
 	if !ok {
 		t.Fatalf("steps[0] should be array, got %T", steps[0])
@@ -1016,9 +1284,6 @@ func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 		}
 	}
 
-	// steps[1] is the standalone narrator; it should consume seq 4
-	// (NOT restart at 0001) because the concurrent group did not open a
-	// new container.
 	narrStep := steps[1].(map[string]interface{})
 	if narrStep["id"] != "0004_nar" {
 		t.Errorf("narrator after group should be 0004_nar, got %v", narrStep["id"])
@@ -1026,8 +1291,7 @@ func TestStepIDConcurrentGroupSharesParentCounter(t *testing.T) {
 }
 
 // TestStepIDChoiceContinuesCounter verifies that choice option bodies
-// continue the episode-scoped counter — option A's first step follows
-// the choice's own seq, and option B continues after option A.
+// continue the episode-scoped counter.
 func TestStepIDChoiceContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -1059,9 +1323,9 @@ func TestStepIDChoiceContinuesCounter(t *testing.T) {
 					},
 				},
 			},
-			&ast.NarratorNode{Text: "outro"}, // 0004_nar (continues parent counter past choice)
+			&ast.NarratorNode{Text: "outro"}, // 0010_nar (continues parent counter past choice)
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1072,7 +1336,6 @@ func TestStepIDChoiceContinuesCounter(t *testing.T) {
 	json.Unmarshal(data, &result)
 
 	steps := result["steps"].([]interface{})
-	// Top-level: 0001_nar, 0002_nar, 0003_ch, 0010_nar
 	for i, want := range []string{"0001_nar", "0002_nar", "0003_ch", "0010_nar"} {
 		got := steps[i].(map[string]interface{})["id"]
 		if got != want {
@@ -1083,7 +1346,6 @@ func TestStepIDChoiceContinuesCounter(t *testing.T) {
 	choice := steps[2].(map[string]interface{})
 	options := choice["options"].([]interface{})
 
-	// Option A body: 0004_dlg, 0005_nar, 0006_dlg (continues from choice's 0003)
 	stepsA := options[0].(map[string]interface{})["steps"].([]interface{})
 	for i, want := range []string{"0004_dlg", "0005_nar", "0006_dlg"} {
 		got := stepsA[i].(map[string]interface{})["id"]
@@ -1092,7 +1354,6 @@ func TestStepIDChoiceContinuesCounter(t *testing.T) {
 		}
 	}
 
-	// Option B body: 0007_dlg, 0008_dlg, 0009_nar (continues from option A)
 	stepsB := options[1].(map[string]interface{})["steps"].([]interface{})
 	for i, want := range []string{"0007_dlg", "0008_dlg", "0009_nar"} {
 		got := stepsB[i].(map[string]interface{})["id"]
@@ -1118,11 +1379,11 @@ func TestStepIDIfContinuesCounter(t *testing.T) {
 				Else: []ast.Node{
 					&ast.DialogueNode{Character: "X", Text: "e1"},
 					&ast.NarratorNode{Text: "e2"},
-					&ast.PauseNode{Clicks: 1},
+					&ast.PauseNode{},
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1155,8 +1416,8 @@ func TestStepIDIfContinuesCounter(t *testing.T) {
 	}
 }
 
-// TestStepIDPhoneShowContinuesCounter verifies that phone_show.messages
-// continues the episode-scoped counter after the phone_show step.
+// TestStepIDPhoneShowContinuesCounter verifies phone_show.messages
+// continues the episode-scoped counter.
 func TestStepIDPhoneShowContinuesCounter(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -1170,7 +1431,7 @@ func TestStepIDPhoneShowContinuesCounter(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1198,9 +1459,7 @@ func TestStepIDPhoneShowContinuesCounter(t *testing.T) {
 	}
 }
 
-// TestStepIDMinigameLeaf verifies that @minigame is a leaf step (no
-// child counter) and the next sibling step continues the parent counter
-// without descending into the minigame.
+// TestStepIDMinigameLeaf verifies that @minigame is a leaf step.
 func TestStepIDMinigameLeaf(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -1213,7 +1472,7 @@ func TestStepIDMinigameLeaf(t *testing.T) {
 			},
 			&ast.NarratorNode{Text: "after"}, // 0003_nar
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1230,11 +1489,11 @@ func TestStepIDMinigameLeaf(t *testing.T) {
 		t.Errorf("minigame id = %v, want 0002_mg", mg["id"])
 	}
 	if _, has := mg["steps"]; has {
-		t.Error("minigame should not have a 'steps' child container in the new model")
+		t.Error("minigame should not have a 'steps' child container")
 	}
 	after := steps[2].(map[string]interface{})
 	if after["id"] != "0003_nar" {
-		t.Errorf("step after minigame should be 0003_nar (no children consumed), got %v", after["id"])
+		t.Errorf("step after minigame should be 0003_nar, got %v", after["id"])
 	}
 }
 
@@ -1252,7 +1511,7 @@ func TestStepIDTrickLeaf(t *testing.T) {
 			},
 			&ast.NarratorNode{Text: "after"}, // 0003_nar
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1286,24 +1545,21 @@ func TestStepIDTrickLeaf(t *testing.T) {
 	}
 }
 
-// TestStepIDCgShowContinuesCounter verifies cg_show.steps continues
-// the episode-scoped counter after the cg_show step.
-func TestStepIDCgShowContinuesCounter(t *testing.T) {
+// TestStepIDCgShowLeaf verifies cg_show is now a leaf step — it consumes
+// one seq, carries no body / steps / duration / transition, and the next
+// sibling continues the parent counter directly.
+func TestStepIDCgShowLeaf(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
 		Title:     "T",
 		Body: []ast.Node{
 			&ast.CgShowNode{
-				Name:     "window_stare",
-				Duration: "medium",
-				Content:  "x",
-				Body: []ast.Node{
-					&ast.YouNode{Text: "y1"},
-					&ast.YouNode{Text: "y2"},
-				},
+				Name:    "window_stare",
+				Content: "Slow camera push-in on the rain-streaked window.",
 			},
+			&ast.NarratorNode{Text: "after"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)
@@ -1319,25 +1575,29 @@ func TestStepIDCgShowContinuesCounter(t *testing.T) {
 	if cg["id"] != "0001_cg" {
 		t.Errorf("cg_show id = %v, want 0001_cg", cg["id"])
 	}
-	cgSteps := cg["steps"].([]interface{})
-	for i, want := range []string{"0002_you", "0003_you"} {
-		got := cgSteps[i].(map[string]interface{})["id"]
-		if got != want {
-			t.Errorf("cg_show.steps[%d].id = %v, want %q", i, got, want)
+	if cg["content"] != "Slow camera push-in on the rain-streaked window." {
+		t.Errorf("cg.content = %v", cg["content"])
+	}
+	for _, key := range []string{"steps", "duration", "transition", "body"} {
+		if _, has := cg[key]; has {
+			t.Errorf("cg_show must not carry %q (leaf step)", key)
 		}
+	}
+	after := steps[1].(map[string]interface{})
+	if after["id"] != "0002_nar" {
+		t.Errorf("step after cg_show should be 0002_nar, got %v", after["id"])
 	}
 }
 
 // TestStepIDDeterminism verifies that compiling the same source twice
-// produces byte-identical output — the id assignment must be a pure
-// function of declaration order.
+// produces byte-identical output.
 func TestStepIDDeterminism(t *testing.T) {
 	src := `@episode main:01 "T" {
   @bg set school_classroom fade
-  &music play calm_morning
+  &music calm_morning
   NARRATOR: line one.
   YOU: thinking.
-  @pause for 1
+  @pause
   @choice {
     @option A safe "go" {
       NARRATOR: a1
@@ -1355,7 +1615,7 @@ func TestStepIDDeterminism(t *testing.T) {
     X: e1
   }
   @signal mark DONE
-  @ending complete
+  @gate { @end complete }
 }`
 
 	emit := func() string {
@@ -1379,16 +1639,11 @@ func TestStepIDDeterminism(t *testing.T) {
 		t.Errorf("compile is non-deterministic; identical source produced different output")
 	}
 
-	// And every step in the output must carry an id field.
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(first), &result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	// Walk only the step-bearing containers — top-level steps, plus any
-	// nested step lists under known step keys. This avoids descending into
-	// `condition` / `gate` / comparison `left|right` / etc., where maps
-	// also carry a "type" field but are not steps and have no id.
 	walkSteps(result["steps"], func(step map[string]interface{}, path string) {
 		typeVal, _ := step["type"].(string)
 		if _, hasID := step["id"]; !hasID {
@@ -1397,17 +1652,10 @@ func TestStepIDDeterminism(t *testing.T) {
 	})
 }
 
-// walkSteps recursively walks an emitted-steps tree (the value of a
-// container's `steps` / `messages` / `then` / `else` key), calling visit
-// on every emitted step (= map with a "type" field that is a known step
+// walkSteps recursively walks an emitted-steps tree, calling visit on
+// every emitted step (= map with a "type" field that is a known step
 // type). Skips non-step subtrees like `condition`, gate `if`/`else`,
 // comparison `left`/`right`, etc.
-//
-// Concurrent groups appear as []any nested directly inside a steps slice;
-// each member of the group is its own step and is visited individually.
-//
-// Option records inside `choice.options` are not steps themselves (no
-// "type" field) but they carry a `steps` body that must be descended into.
 func walkSteps(node interface{}, visit func(step map[string]interface{}, path string)) {
 	walkStepsAt(node, "steps", visit)
 }
@@ -1415,18 +1663,9 @@ func walkSteps(node interface{}, visit func(step map[string]interface{}, path st
 func walkStepsAt(node interface{}, path string, visit func(step map[string]interface{}, path string)) {
 	switch v := node.(type) {
 	case map[string]interface{}:
-		// Two cases for a map under a step-bearing key:
-		//   1. It's an actual step: has a "type" key in stepTypeTag's table.
-		//   2. It's an option record (under choice.options): no "type", but
-		//      may have a `steps` body — descend into known child keys
-		//      regardless.
 		if t, ok := v["type"].(string); ok && stepTypeTag(t) != "unk" {
 			visit(v, path)
 		}
-		// Recurse into known step-bearing fields. (Note: we do NOT recurse
-		// into "condition" — that's a parsed condition tree, not steps.)
-		// `options` is recursed because its members are option records that
-		// in turn contain `steps`.
 		for _, key := range []string{"steps", "messages", "then", "else", "options"} {
 			if child, ok := v[key]; ok {
 				walkStepsAt(child, path+"."+key, visit)
@@ -1440,8 +1679,7 @@ func walkStepsAt(node interface{}, path string, visit func(step map[string]inter
 }
 
 // TestStepIDGloballyUnique verifies the episode-scoped invariant: no two
-// steps anywhere in the episode tree share the same id, regardless of
-// nesting depth.
+// steps anywhere in the episode tree share the same id.
 func TestStepIDGloballyUnique(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01",
@@ -1464,21 +1702,16 @@ func TestStepIDGloballyUnique(t *testing.T) {
 				Then:      []ast.Node{&ast.NarratorNode{Text: "t1"}},
 				Else:      []ast.Node{&ast.DialogueNode{Character: "X", Text: "e1"}},
 			},
-			&ast.MinigameNode{
-				Name: "mg", Description: "d",
-			},
+			&ast.MinigameNode{Name: "mg", Description: "d"},
 			&ast.TrickNode{Type: ast.TrickTap, Prompt: "tap."},
-			&ast.CgShowNode{
-				Name: "x", Duration: "short", Content: "c",
-				Body: []ast.Node{&ast.YouNode{Text: "y1"}},
-			},
+			&ast.CgShowNode{Name: "x", Content: "c"},
 			&ast.PhoneShowNode{
 				Body: []ast.Node{
 					&ast.TextMessageNode{Direction: "from", Char: "x", Content: "hi"},
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{nextLeaf("main:02")}},
 	}
 	em := New(newMockResolver())
 	data, err := em.Emit(ep)

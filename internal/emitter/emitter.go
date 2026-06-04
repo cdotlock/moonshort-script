@@ -38,8 +38,27 @@ func New(resolver AssetResolver) *Emitter {
 }
 
 // Emit converts an Episode AST into JSON bytes.
+//
+// Gate / Ending lowering (Scheme B): when the source gate has exactly one
+// unconditional route whose leaf is *EndLeaf, we lower it to Episode.Ending
+// and emit `gate: null`, preserving the simple terminal-marker shape the
+// overlay system already consumes. Any other gate shape — including a
+// single conditional end-leaf, or any mix of next-leaves — is emitted as
+// a structured `gate` object.
 func (e *Emitter) Emit(ep *ast.Episode) ([]byte, error) {
 	e.seq = 0
+
+	// Scheme B lowering: degenerate `@gate { @end TYPE }` → Episode.Ending.
+	if ep.Gate != nil && len(ep.Gate.Routes) == 1 {
+		only := ep.Gate.Routes[0]
+		if only.Condition == nil {
+			if leaf, ok := only.Leaf.(*ast.EndLeaf); ok {
+				ep.Ending = &ast.EndingNode{Type: leaf.Type}
+				ep.Gate = nil
+			}
+		}
+	}
+
 	out := map[string]interface{}{
 		"episode_id": ep.BranchKey,
 		"branch_key": extractBranchKey(ep.BranchKey),
@@ -106,13 +125,13 @@ func stepTypeTag(stepType string) string {
 		return "cg"
 	case "bg":
 		return "bg"
-	case "char_show", "char_hide", "char_look", "char_move", "bubble":
+	case "char_show", "bubble":
 		return "char"
-	case "music_play", "music_crossfade", "music_fadeout":
+	case "music", "music_stop":
 		return "mus"
-	case "sfx_play":
+	case "sfx":
 		return "sfx"
-	case "phone_show", "phone_hide", "text_message":
+	case "phone_show", "text_message":
 		return "phn"
 	case "signal":
 		return "sig"
@@ -122,7 +141,7 @@ func stepTypeTag(stepType string) string {
 		return "ach"
 	case "butterfly":
 		return "btf"
-	case "if", "goto", "label":
+	case "if":
 		return "ctrl"
 	default:
 		return "unk"
@@ -158,9 +177,9 @@ func assignStepID(step map[string]interface{}, seq int) {
 // ID assignment: each emitted step (whether solo or inside a concurrent
 // group) consumes one seq from e.seq — a single monotonic counter shared
 // across the entire episode tree. The parent step is stamped first, then
-// child containers (option.steps, minigame.steps, cg_show.steps,
-// if.then/else, phone_show.messages) are emitted via emitChildren,
-// giving children higher seqs than their parent (DFS pre-order).
+// child containers (option.steps, minigame.steps, if.then/else,
+// phone_show.messages) are emitted via emitChildren, giving children
+// higher seqs than their parent (DFS pre-order).
 func (e *Emitter) emitNodes(nodes []ast.Node) []interface{} {
 	steps := make([]interface{}, 0)
 	var group []interface{}
@@ -206,12 +225,6 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		return e.emitBg(v)
 	case *ast.CharShowNode:
 		return e.emitCharShow(v)
-	case *ast.CharHideNode:
-		return e.emitCharHide(v)
-	case *ast.CharLookNode:
-		return e.emitCharLook(v)
-	case *ast.CharMoveNode:
-		return e.emitCharMove(v)
 	case *ast.CharBubbleNode:
 		return e.emitCharBubble(v)
 	case *ast.CgShowNode:
@@ -224,18 +237,14 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		return e.emitYou(v)
 	case *ast.PhoneShowNode:
 		return e.emitPhoneShow(v)
-	case *ast.PhoneHideNode:
-		return map[string]interface{}{"type": "phone_hide"}
 	case *ast.TextMessageNode:
 		return e.emitTextMessage(v)
-	case *ast.MusicPlayNode:
-		return e.emitMusicPlay(v)
-	case *ast.MusicCrossfadeNode:
-		return e.emitMusicCrossfade(v)
-	case *ast.MusicFadeoutNode:
-		return map[string]interface{}{"type": "music_fadeout"}
-	case *ast.SfxPlayNode:
-		return e.emitSfxPlay(v)
+	case *ast.MusicSetNode:
+		return e.emitMusic(v)
+	case *ast.MusicStopNode:
+		return e.emitMusicStop(v)
+	case *ast.SfxNode:
+		return e.emitSfx(v)
 	case *ast.MinigameNode:
 		return e.emitMinigame(v)
 	case *ast.TrickNode:
@@ -263,12 +272,8 @@ func (e *Emitter) emitNode(n ast.Node) map[string]interface{} {
 		}
 	case *ast.IfNode:
 		return e.emitIf(v)
-	case *ast.LabelNode:
-		return map[string]interface{}{"type": "label", "name": v.Name}
 	case *ast.PauseNode:
-		return map[string]interface{}{"type": "pause", "clicks": v.Clicks}
-	case *ast.GotoNode:
-		return map[string]interface{}{"type": "goto", "target": v.Name}
+		return map[string]interface{}{"type": "pause"}
 	default:
 		e.warn("unknown node type: %T", n)
 		return nil
@@ -297,7 +302,6 @@ func (e *Emitter) emitCharShow(n *ast.CharShowNode) map[string]interface{} {
 		"type":      "char_show",
 		"character": n.Char,
 		"look":      n.Look,
-		"position":  n.Position,
 	}
 	url, err := e.resolver.ResolveCharacter(n.Char, n.Look)
 	if err != nil {
@@ -311,43 +315,6 @@ func (e *Emitter) emitCharShow(n *ast.CharShowNode) map[string]interface{} {
 	return m
 }
 
-func (e *Emitter) emitCharHide(n *ast.CharHideNode) map[string]interface{} {
-	m := map[string]interface{}{
-		"type":      "char_hide",
-		"character": n.Char,
-	}
-	if n.Transition != "" {
-		m["transition"] = n.Transition
-	}
-	return m
-}
-
-func (e *Emitter) emitCharLook(n *ast.CharLookNode) map[string]interface{} {
-	m := map[string]interface{}{
-		"type":      "char_look",
-		"character": n.Char,
-		"look":      n.Look,
-	}
-	url, err := e.resolver.ResolveCharacter(n.Char, n.Look)
-	if err != nil {
-		e.warn("char_look %q/%q: %v", n.Char, n.Look, err)
-	} else {
-		m["url"] = url
-	}
-	if n.Transition != "" {
-		m["transition"] = n.Transition
-	}
-	return m
-}
-
-func (e *Emitter) emitCharMove(n *ast.CharMoveNode) map[string]interface{} {
-	return map[string]interface{}{
-		"type":      "char_move",
-		"character": n.Char,
-		"position":  n.Position,
-	}
-}
-
 func (e *Emitter) emitCharBubble(n *ast.CharBubbleNode) map[string]interface{} {
 	return map[string]interface{}{
 		"type":        "bubble",
@@ -356,21 +323,20 @@ func (e *Emitter) emitCharBubble(n *ast.CharBubbleNode) map[string]interface{} {
 	}
 }
 
+// emitCgShow emits a CG step. CG is a leaf node: no body, no duration,
+// no transition. Pacing and camera motion are encoded in `content` and
+// realised by the agent-forge pipeline downstream.
 func (e *Emitter) emitCgShow(n *ast.CgShowNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type":     "cg_show",
-		"name":     n.Name,
-		"duration": n.Duration,
-		"content":  n.Content,
+		"type":    "cg_show",
+		"name":    n.Name,
+		"content": n.Content,
 	}
 	url, err := e.resolver.ResolveCg(n.Name)
 	if err != nil {
 		e.warn("cg_show %q: %v", n.Name, err)
 	} else {
 		m["url"] = url
-	}
-	if n.Transition != "" {
-		m["transition"] = n.Transition
 	}
 	return m
 }
@@ -412,42 +378,32 @@ func (e *Emitter) emitTextMessage(n *ast.TextMessageNode) map[string]interface{}
 	}
 }
 
-func (e *Emitter) emitMusicPlay(n *ast.MusicPlayNode) map[string]interface{} {
+func (e *Emitter) emitMusic(n *ast.MusicSetNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type": "music_play",
-		"name": n.Track,
+		"type": "music",
+		"name": n.Name,
 	}
-	url, err := e.resolver.ResolveMusic(n.Track)
+	url, err := e.resolver.ResolveMusic(n.Name)
 	if err != nil {
-		e.warn("music_play %q: %v", n.Track, err)
+		e.warn("music %q: %v", n.Name, err)
 	} else {
 		m["url"] = url
 	}
 	return m
 }
 
-func (e *Emitter) emitMusicCrossfade(n *ast.MusicCrossfadeNode) map[string]interface{} {
-	m := map[string]interface{}{
-		"type": "music_crossfade",
-		"name": n.Track,
-	}
-	url, err := e.resolver.ResolveMusic(n.Track)
-	if err != nil {
-		e.warn("music_crossfade %q: %v", n.Track, err)
-	} else {
-		m["url"] = url
-	}
-	return m
+func (e *Emitter) emitMusicStop(_ *ast.MusicStopNode) map[string]interface{} {
+	return map[string]interface{}{"type": "music_stop"}
 }
 
-func (e *Emitter) emitSfxPlay(n *ast.SfxPlayNode) map[string]interface{} {
+func (e *Emitter) emitSfx(n *ast.SfxNode) map[string]interface{} {
 	m := map[string]interface{}{
-		"type": "sfx_play",
-		"name": n.Sound,
+		"type": "sfx",
+		"name": n.Name,
 	}
-	url, err := e.resolver.ResolveSfx(n.Sound)
+	url, err := e.resolver.ResolveSfx(n.Name)
 	if err != nil {
-		e.warn("sfx_play %q: %v", n.Sound, err)
+		e.warn("sfx %q: %v", n.Name, err)
 	} else {
 		m["url"] = url
 	}
@@ -552,12 +508,11 @@ func (e *Emitter) emitIf(n *ast.IfNode) map[string]interface{} {
 
 // emitChildren attaches child containers to a step AFTER the parent has
 // been stamped with its id, ensuring children get higher seqs (DFS pre-order).
+//
+// CG is no longer a container — it's a leaf step whose `content` field
+// carries the narrative for downstream rendering.
 func (e *Emitter) emitChildren(n ast.Node, step map[string]interface{}) {
 	switch v := n.(type) {
-	case *ast.CgShowNode:
-		if len(v.Body) > 0 {
-			step["steps"] = e.emitNodes(v.Body)
-		}
 	case *ast.PhoneShowNode:
 		if len(v.Body) > 0 {
 			step["messages"] = e.emitNodes(v.Body)
@@ -603,18 +558,26 @@ func (e *Emitter) emitNestedIf(n *ast.IfNode) map[string]interface{} {
 	return m
 }
 
+// emitGate emits the top-level gate routing object. By the time Emit
+// reaches here, Scheme B lowering has already collapsed any pure
+// `@gate { @end TYPE }` into Episode.Ending — every gate we see has
+// at least one *NextLeaf or at least one conditional route.
 func (e *Emitter) emitGate(g *ast.GateBlock) interface{} {
 	return e.emitGateRoute(g.Routes, 0)
 }
 
 // emitGateRoute recursively builds a nested if/else chain from gate routes.
+// Each route's Leaf is either a *NextLeaf (emit `next: <target>`) or a
+// *EndLeaf (emit `end: <type>`). Conditional routes wrap with `if` and
+// chain remaining routes under `else`; unconditional routes are terminal
+// (emit only the leaf field).
 func (e *Emitter) emitGateRoute(routes []*ast.GateRoute, idx int) map[string]interface{} {
 	if idx >= len(routes) {
 		return nil
 	}
 
 	r := routes[idx]
-	m := map[string]interface{}{"next": r.Target}
+	m := e.emitGateLeaf(r.Leaf)
 
 	if r.Condition != nil {
 		m["if"] = e.emitCondition(r.Condition)
@@ -624,6 +587,47 @@ func (e *Emitter) emitGateRoute(routes []*ast.GateRoute, idx int) map[string]int
 	}
 
 	return m
+}
+
+// emitGateLeaf renders a single gate leaf (next-route or end-marker) as
+// the field map for one gate node.
+func (e *Emitter) emitGateLeaf(leaf ast.GateLeaf) map[string]interface{} {
+	switch l := leaf.(type) {
+	case *ast.NextLeaf:
+		return map[string]interface{}{"next": l.Target}
+	case *ast.EndLeaf:
+		return map[string]interface{}{"end": l.Type}
+	default:
+		e.warn("unknown gate leaf type: %T", leaf)
+		return map[string]interface{}{}
+	}
+}
+
+// emitOperand converts a ComparisonOperand AST node to its JSON map. All
+// five kinds are emitted with a `kind` discriminator plus the kind-specific
+// payload field (`value`, `char`, `name`, or `args`).
+func (e *Emitter) emitOperand(op *ast.ComparisonOperand) map[string]interface{} {
+	if op == nil {
+		e.warn("comparison operand is nil")
+		return nil
+	}
+	switch op.Kind {
+	case ast.OperandLiteral:
+		return map[string]interface{}{"kind": "literal", "value": op.Value}
+	case ast.OperandAffection:
+		return map[string]interface{}{"kind": "affection", "char": op.Char}
+	case ast.OperandValue:
+		return map[string]interface{}{"kind": "value", "name": op.Name}
+	case ast.OperandMax, ast.OperandMin:
+		args := make([]interface{}, 0, len(op.Args))
+		for _, a := range op.Args {
+			args = append(args, e.emitOperand(a))
+		}
+		return map[string]interface{}{"kind": op.Kind, "args": args}
+	default:
+		e.warn("unknown comparison operand kind: %q", op.Kind)
+		return nil
+	}
 }
 
 // emitCondition converts a Condition AST node to a JSON map.
@@ -642,24 +646,12 @@ func (e *Emitter) emitCondition(c ast.Condition) map[string]interface{} {
 			"type": "flag",
 			"name": v.Name,
 		}
-	case *ast.InfluenceCondition:
-		return map[string]interface{}{
-			"type":        "influence",
-			"description": v.Description,
-		}
 	case *ast.ComparisonCondition:
-		left := map[string]interface{}{"kind": v.Left.Kind}
-		switch v.Left.Kind {
-		case ast.OperandAffection:
-			left["char"] = v.Left.Char
-		case ast.OperandValue:
-			left["name"] = v.Left.Name
-		}
 		return map[string]interface{}{
 			"type":  "comparison",
-			"left":  left,
+			"left":  e.emitOperand(v.Left),
 			"op":    v.Op,
-			"right": v.Right,
+			"right": e.emitOperand(v.Right),
 		}
 	case *ast.CompoundCondition:
 		return map[string]interface{}{

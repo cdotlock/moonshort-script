@@ -38,6 +38,7 @@ const (
 	AT        Type = "AT"        // @
 	AMPERSAND Type = "AMPERSAND" // &
 	COLON     Type = "COLON"     // :
+	COMMA     Type = "COMMA"     // ,
 	DOT       Type = "DOT"       // .
 	COMMENT   Type = "COMMENT"   // // ...
 )
@@ -95,6 +96,8 @@ func (t Type) String() string {
 		return "AMPERSAND"
 	case COLON:
 		return "COLON"
+	case COMMA:
+		return "COMMA"
 	case DOT:
 		return "DOT"
 	case COMMENT:

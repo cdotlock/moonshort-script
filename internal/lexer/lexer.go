@@ -207,6 +207,10 @@ func (l *Lexer) NextToken() token.Token {
 		l.advance()
 		return l.makeToken(token.COLON, ":", line, col)
 
+	case ch == ',':
+		l.advance()
+		return l.makeToken(token.COMMA, ",", line, col)
+
 	case ch == '"':
 		return l.readString(line, col)
 

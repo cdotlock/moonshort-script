@@ -11,49 +11,17 @@ import (
 // D. Validator whitelist edge cases
 // =============================================================================
 
-// D1. Position "" (empty string) — should be flagged as invalid.
-func TestEmptyPosition(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharShowNode{Char: "c", Look: "l", Position: ""},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			found = true
-			if !strings.Contains(e.Message, `""`) {
-				t.Errorf("error message should include the invalid empty value in quotes, got: %s", e.Message)
-			}
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_POSITION error for empty position")
-	}
-}
-
 // D2. Transition "" (empty string) — should be VALID (means default/no transition).
 // The code checks `if v.Transition != "" && !validTransitions[v.Transition]`.
-// So empty string is allowed. Let's verify.
+// So empty string is allowed.
 func TestEmptyTransition(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
-			&ast.CharShowNode{Char: "c", Look: "l", Position: "center", Transition: ""},
+			&ast.CharShowNode{Char: "c", Look: "l", Transition: ""},
 			&ast.BgSetNode{Name: "bg", Transition: ""},
-			&ast.CgShowNode{
-				Name:       "cg",
-				Transition: "",
-				Duration:   ast.CgDurationMedium,
-				Content:    "cg content placeholder",
-			},
-			&ast.CharHideNode{Char: "c", Transition: ""},
-			&ast.CharLookNode{Char: "c", Look: "l", Transition: ""},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	for _, e := range errs {
@@ -70,7 +38,7 @@ func TestInvalidBubbleTypeMessage(t *testing.T) {
 		Body: []ast.Node{
 			&ast.CharBubbleNode{Char: "test", BubbleType: "sparkle_invalid"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -100,7 +68,7 @@ func TestEmptyOptionMode(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -124,7 +92,7 @@ func TestEmptyBubbleType(t *testing.T) {
 		Body: []ast.Node{
 			&ast.CharBubbleNode{Char: "c", BubbleType: ""},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -138,115 +106,35 @@ func TestEmptyBubbleType(t *testing.T) {
 	}
 }
 
-// D6. Empty position on CharMoveNode.
-func TestEmptyPositionOnMove(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharMoveNode{Char: "c", Position: ""},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("expected INVALID_POSITION error for empty move position")
-	}
-}
-
 // =============================================================================
 // E. Validator recursion completeness
 // =============================================================================
 
-// The 4 recursive walks: collectLabels, checkGotos, checkBraveOptions, checkValues.
-// All four must recurse into the same container node types.
-// Container types: CgShowNode, ChoiceNode, IfNode, MinigameNode, PhoneShowNode.
-//
-// Let's verify each walk handles all container types by placing a relevant node
-// deep inside each container type.
+// Container types still walked by the validator after the AST cleanup:
+// ChoiceNode, IfNode, PhoneShowNode. CgShow no longer has a Body; the
+// legacy "label/goto" tests are gone with the LabelNode/GotoNode removal.
 
-// E1. Test that all walks handle GateBlock correctly.
-// GateBlock is NOT part of Episode.Body — it's a separate field.
-// None of the walks recurse into GateBlock, which is correct since
-// Gate routes don't contain body nodes.
-
-// E2. Labels and gotos throughout the option body (including inside the
-// @if (check.success) / @else tree) must all be discoverable. The
-// OptionNode exposes a single Body slice, so the walk has to descend
-// through IfNode.Then/Else to find everything.
-func TestRecursion_LabelsInAllOptionFields(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.ChoiceNode{
-				Options: []*ast.OptionNode{
-					{
-						ID: "A", Mode: "brave", Text: "Fight",
-						Check: &ast.CheckBlock{Attr: "STR", DC: 14},
-						Body: []ast.Node{
-							&ast.IfNode{
-								Condition: &ast.CheckCondition{Result: "success"},
-								Then:      []ast.Node{&ast.LabelNode{Name: "L1"}},
-								Else:      []ast.Node{&ast.LabelNode{Name: "L2"}},
-							},
-							&ast.LabelNode{Name: "L3"},
-						},
-					},
-				},
-			},
-			// Gotos referencing all three labels
-			&ast.GotoNode{Name: "L1"},
-			&ast.GotoNode{Name: "L2"},
-			&ast.GotoNode{Name: "L3"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	for _, e := range errs {
-		if e.Code == GotoNoLabel {
-			t.Errorf("all labels in option fields should be found: %v", e)
-		}
-	}
-}
-
-// E3/E4. MinigameNode is now a leaf — there is no body to recurse into.
-// The legacy `TestRecursion_ValuesInsideMinigame` /
-// `TestRecursion_BraveOptionsInsideMinigame` tests have been removed
-// because their premise (rating-branch trees inside minigame body) no
-// longer exists in the spec. See `TestMinigameLeafNoBodyValidates` in
-// validator_test.go for the positive pin.
-
-// E5. Deeply nested: CgShow > IfNode > ChoiceNode > brave Option with a
-// goto inside the check.success branch of its inner @if tree.
+// E5. Deeply nested: IfNode > ChoiceNode > brave Option > @if (check.success)
+// branch containing a bad bubble type — exercises the full recursion chain.
 func TestRecursion_DeeplyNested(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
-			&ast.CgShowNode{
-				Name:     "cg1",
-				Duration: ast.CgDurationMedium,
-				Content:  "cg content placeholder",
-				Body: []ast.Node{
-					&ast.IfNode{
-						Condition: &ast.FlagCondition{Name: "A"},
-						Then: []ast.Node{
-							&ast.ChoiceNode{
-								Options: []*ast.OptionNode{
-									{
-										ID: "A", Mode: "brave", Text: "Fight",
-										Check: &ast.CheckBlock{Attr: "STR", DC: 14},
-										Body: []ast.Node{
-											&ast.IfNode{
-												Condition: &ast.CheckCondition{Result: "success"},
-												Then:      []ast.Node{&ast.GotoNode{Name: "DEEP_MISSING"}},
-												Else:      []ast.Node{&ast.NarratorNode{Text: "Fail."}},
-											},
+			&ast.IfNode{
+				Condition: &ast.FlagCondition{Name: "A"},
+				Then: []ast.Node{
+					&ast.ChoiceNode{
+						Options: []*ast.OptionNode{
+							{
+								ID: "A", Mode: "brave", Text: "Fight",
+								Check: &ast.CheckBlock{Attr: "STR", DC: 14},
+								Body: []ast.Node{
+									&ast.IfNode{
+										Condition: &ast.CheckCondition{Result: "success"},
+										Then: []ast.Node{
+											&ast.CharBubbleNode{Char: "c", BubbleType: "deep_invalid"},
 										},
+										Else: []ast.Node{&ast.NarratorNode{Text: "Fail."}},
 									},
 								},
 							},
@@ -255,42 +143,37 @@ func TestRecursion_DeeplyNested(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
-	foundGoto := false
+	found := false
 	for _, e := range errs {
-		if e.Code == GotoNoLabel && strings.Contains(e.Message, "DEEP_MISSING") {
-			foundGoto = true
+		if e.Code == InvalidBubbleType && strings.Contains(e.Message, "deep_invalid") {
+			found = true
 		}
 	}
-	if !foundGoto {
-		t.Error("checkGotos should find DEEP_MISSING in CgShow > IfNode > ChoiceNode > brave Option body > @if (check.success).Then")
+	if !found {
+		t.Error("checkValues should reach IfNode > ChoiceNode > brave Option body > @if (check.success).Then")
 	}
 }
 
-// E6. Verify that checkValues handles CharShowNode inside PhoneShowNode.
-func TestRecursion_CharShowInsidePhone(t *testing.T) {
+// E6. Verify that checkValues handles TextMessageNode inside PhoneShowNode
+// (the only legal child kind) without complaint.
+func TestRecursion_PhoneShowWithTextMessages(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body: []ast.Node{
 			&ast.PhoneShowNode{
 				Body: []ast.Node{
-					&ast.CharShowNode{Char: "c", Look: "l", Position: "bogus"},
+					&ast.TextMessageNode{Direction: "from", Char: "c", Content: "hi"},
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition && strings.Contains(e.Message, "bogus") {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("checkValues should recurse into PhoneShowNode body")
+	if len(errs) != 0 {
+		t.Errorf("legal phone body should validate cleanly, got: %v", errs)
 	}
 }
 
@@ -303,7 +186,7 @@ func TestValidatorEmptyBody(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body:      []ast.Node{},
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate:      unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -316,7 +199,7 @@ func TestValidatorNilBody(t *testing.T) {
 	ep := &ast.Episode{
 		BranchKey: "main:01", Title: "T",
 		Body:      nil,
-		Gate:      &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate:      unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -331,7 +214,7 @@ func TestValidatorEmptyChoice(t *testing.T) {
 		Body: []ast.Node{
 			&ast.ChoiceNode{Options: []*ast.OptionNode{}},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	// Should not panic — just no option-related errors.
@@ -352,7 +235,7 @@ func TestValidatorMinigameLeafShape(t *testing.T) {
 				Description: "minigame description placeholder",
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -383,7 +266,7 @@ func TestBraveOptionSuccessOnlyBodyIsValid(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	if len(errs) != 0 {
@@ -402,7 +285,7 @@ func TestOptionModeCaseSensitive(t *testing.T) {
 				},
 			},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -423,7 +306,7 @@ func TestTransitionCaseSensitive(t *testing.T) {
 		Body: []ast.Node{
 			&ast.BgSetNode{Name: "bg", Transition: "Fade"},
 		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
+		Gate: unconditionalGate("main:02"),
 	}
 	errs := Validate(ep)
 	found := false
@@ -434,26 +317,5 @@ func TestTransitionCaseSensitive(t *testing.T) {
 	}
 	if !found {
 		t.Error("'Fade' (capitalized) should be invalid transition — must be lowercase 'fade'")
-	}
-}
-
-// EDGE: Position "Center" (capitalized) — should be invalid.
-func TestPositionCaseSensitive(t *testing.T) {
-	ep := &ast.Episode{
-		BranchKey: "main:01", Title: "T",
-		Body: []ast.Node{
-			&ast.CharShowNode{Char: "c", Look: "l", Position: "Center"},
-		},
-		Gate: &ast.GateBlock{Routes: []*ast.GateRoute{{Target: "main:02"}}},
-	}
-	errs := Validate(ep)
-	found := false
-	for _, e := range errs {
-		if e.Code == InvalidPosition {
-			found = true
-		}
-	}
-	if !found {
-		t.Error("'Center' (capitalized) should be invalid position — must be lowercase 'center'")
 	}
 }

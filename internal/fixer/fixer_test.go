@@ -43,8 +43,8 @@ func TestFixCharacterCasing(t *testing.T) {
 	}{
 		{
 			name:     "character name lowercased",
-			input:    "@Mauricio show happy",
-			expected: "@mauricio show happy",
+			input:    "@Mauricio worried",
+			expected: "@mauricio worried",
 			fixed:    true,
 		},
 		{
@@ -54,15 +54,15 @@ func TestFixCharacterCasing(t *testing.T) {
 			fixed:    false,
 		},
 		{
-			name:     "keyword cg stays unchanged",
-			input:    "@cg show sunset",
-			expected: "@cg show sunset",
+			name:     "keyword cg stays unchanged (leaf form)",
+			input:    `@cg sunset "Golden hour fades across the bluffs."`,
+			expected: `@cg sunset "Golden hour fades across the bluffs."`,
 			fixed:    false,
 		},
 		{
-			name:     "mixed case character name",
-			input:    "@Elena hide",
-			expected: "@elena hide",
+			name:     "mixed case character name with pose",
+			input:    "@Elena neutral",
+			expected: "@elena neutral",
 			fixed:    true,
 		},
 	}
@@ -135,14 +135,14 @@ func TestFixUnquotedButterfly(t *testing.T) {
 			// takes a structured `<kind> <event>` argument and quoting
 			// the tail would corrupt it.
 			name:     "signal with spaces is left alone",
-			input:    `@signal quest complete`,
-			expected: `@signal quest complete`,
+			input:    `@signal mark quest_complete`,
+			expected: `@signal mark quest_complete`,
 			fixed:    false,
 		},
 		{
 			name:     "signal without spaces stays unquoted",
-			input:    `@signal done`,
-			expected: `@signal done`,
+			input:    `@signal mark done`,
+			expected: `@signal mark done`,
 			fixed:    false,
 		},
 	}
@@ -217,13 +217,13 @@ func TestFixNormalizeBlankLines(t *testing.T) {
 func TestFixMultipleIssues(t *testing.T) {
 	input := `@episode "Test" {
 
-@Mauricio show happy
+@Mauricio worried
 @NARRATOR: Once upon a time
 @butterfly Accepted Easton
 @bg set beach
 
 @gate {
-@default "end"
+@end complete
 }
 `
 	// Missing closing } for @episode
@@ -231,7 +231,7 @@ func TestFixMultipleIssues(t *testing.T) {
 	r := Fix(input)
 
 	// Check that character name was lowercased
-	if !strings.Contains(r.Fixed, "@mauricio show happy") {
+	if !strings.Contains(r.Fixed, "@mauricio worried") {
 		t.Error("expected @mauricio to be lowercased")
 	}
 
@@ -290,7 +290,7 @@ NARRATOR: Duplicate
 }
 }
 @gate {
-@default "end"
+@end complete
 }
 }`
 	r := Fix(input)
@@ -323,7 +323,7 @@ NARRATOR: Lose
 }
 }
 @gate {
-@default "end"
+@end complete
 }
 }`
 	r := Fix(input)
@@ -360,7 +360,7 @@ NARRATOR: Lose
 }
 }
 @gate {
-@default "end"
+@end complete
 }
 }`
 	r := Fix(input)
@@ -376,26 +376,36 @@ NARRATOR: Lose
 	}
 }
 
-func TestErrorGotoWithoutLabel(t *testing.T) {
+// TestErrorGotoAndLabelOldFormat verifies that the legacy `@goto` and
+// `@label` directives are surfaced as old-format errors with hints
+// pointing at the @if/@else replacement (the new AST has no
+// label/goto nodes — in-episode branching is conditional only).
+func TestErrorGotoAndLabelOldFormat(t *testing.T) {
 	input := `@episode "Test" {
 @goto ending
 @label start
 NARRATOR: Hello
 @gate {
-@default "end"
+@end complete
 }
 }`
 	r := Fix(input)
 
-	foundGotoError := false
+	foundGoto := false
+	foundLabel := false
 	for _, e := range r.Errors {
-		if strings.Contains(e, "goto ending has no matching label") {
-			foundGotoError = true
-			break
+		if strings.Contains(e, "@goto") && strings.Contains(e, "old-format") {
+			foundGoto = true
+		}
+		if strings.Contains(e, "@label") && strings.Contains(e, "old-format") {
+			foundLabel = true
 		}
 	}
-	if !foundGotoError {
-		t.Errorf("expected goto-without-label error, got errors: %v", r.Errors)
+	if !foundGoto {
+		t.Errorf("expected @goto old-format error, got errors: %v", r.Errors)
+	}
+	if !foundLabel {
+		t.Errorf("expected @label old-format error, got errors: %v", r.Errors)
 	}
 }
 
@@ -510,10 +520,247 @@ func TestFixTrickKeywordPreserved(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Legacy-pattern detection — one test per new check in checkOldFormatSyntax.
+// ---------------------------------------------------------------------------
+
+// TestLegacyCharShowSuffix verifies the new char-suffix legacy detector
+// catches `@<char> show ...` (and friends) and surfaces the new
+// `@<char> <pose>` hint.
+func TestLegacyCharShowSuffix(t *testing.T) {
+	cases := []string{
+		"@malia show neutral",
+		"@malia hide",
+		"@malia look angry",
+		"@malia move right",
+		"@malia at center",
+	}
+	for _, line := range cases {
+		t.Run(line, func(t *testing.T) {
+			r := Fix(line)
+			found := false
+			for _, e := range r.Errors {
+				if strings.Contains(e, "legacy char directive") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected legacy-char-directive error for %q, got: %v", line, r.Errors)
+			}
+		})
+	}
+}
+
+// TestLegacyPhoneShowHide verifies that the legacy `@phone show` /
+// `@phone hide` form is rejected. The form `@phone show{` (no space
+// before brace) bypasses the broad char-suffix regex and is caught
+// specifically by phoneLegacyRe with the @phone-block hint.
+func TestLegacyPhoneShowHide(t *testing.T) {
+	// Brace-attached form exercises phoneLegacyRe directly.
+	for _, line := range []string{"@phone show{", "@phone hide{"} {
+		t.Run("specific/"+line, func(t *testing.T) {
+			r := Fix(line)
+			found := false
+			for _, e := range r.Errors {
+				if strings.Contains(e, "@phone { ... } block") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected phone-lifecycle hint for %q, got: %v", line, r.Errors)
+			}
+		})
+	}
+
+	// Space-separated form is also rejected, though through the broader
+	// char-legacy-suffix check. The user-visible contract is just "the
+	// legacy phone form yields a legacy-format error".
+	for _, line := range []string{"@phone show", "@phone hide"} {
+		t.Run("legacy/"+line, func(t *testing.T) {
+			r := Fix(line)
+			rejected := false
+			for _, e := range r.Errors {
+				if strings.Contains(e, "legacy") || strings.Contains(e, "@phone { ... } block") {
+					rejected = true
+					break
+				}
+			}
+			if !rejected {
+				t.Errorf("expected legacy-format error for %q, got: %v", line, r.Errors)
+			}
+		})
+	}
+}
+
+// TestLegacyMusicPlay verifies `@music play <name>` / `@music crossfade <name>`
+// is flagged with a hint pointing at the new `@music <name>` leaf.
+func TestLegacyMusicPlay(t *testing.T) {
+	for _, line := range []string{"@music play tense", "@music crossfade tense"} {
+		t.Run(line, func(t *testing.T) {
+			r := Fix(line)
+			found := false
+			for _, e := range r.Errors {
+				if strings.Contains(e, "use @music <name>") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected music-play/crossfade hint for %q, got: %v", line, r.Errors)
+			}
+		})
+	}
+}
+
+// TestLegacyMusicFadeout verifies bare `@music fadeout` is flagged with
+// a hint pointing at the new `@music stop` leaf.
+func TestLegacyMusicFadeout(t *testing.T) {
+	r := Fix("@music fadeout")
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "use @music stop") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected music-fadeout hint, got: %v", r.Errors)
+	}
+}
+
+// TestLegacySfxPlay verifies `@sfx play <name>` is flagged with the
+// `@sfx <name>` hint.
+func TestLegacySfxPlay(t *testing.T) {
+	r := Fix("@sfx play door_slam")
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "use @sfx <name>") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected sfx-play hint, got: %v", r.Errors)
+	}
+}
+
+// TestLegacyPauseForN verifies `@pause for N` is flagged with the
+// "repeat the directive" hint (the new AST has no duration parameter).
+func TestLegacyPauseForN(t *testing.T) {
+	r := Fix("@pause for 3")
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "@pause is single-click only") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected pause-for-N hint, got: %v", r.Errors)
+	}
+}
+
+// TestLegacyIfStringLiteral verifies a bare double-quoted-string
+// condition is rejected.
+func TestLegacyIfStringLiteral(t *testing.T) {
+	r := Fix(`@if ("EP01_COMPLETE") {`)
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "string literal not allowed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected string-literal-condition error, got: %v", r.Errors)
+	}
+}
+
+// TestLegacyIfInfluence verifies the removed `influence` condition is
+// rejected with a hint pointing at affection / value comparisons.
+func TestLegacyIfInfluence(t *testing.T) {
+	for _, line := range []string{
+		"@if (influence >= 5) {",
+		"@if (influence) {",
+		"@if (influence_ok) {", // sanity: NOT influence (has trailing chars) — must NOT trigger
+	} {
+		t.Run(line, func(t *testing.T) {
+			r := Fix(line)
+			triggered := false
+			for _, e := range r.Errors {
+				if strings.Contains(e, "influence condition removed") {
+					triggered = true
+					break
+				}
+			}
+			isInfluence := strings.Contains(line, "influence)") || strings.Contains(line, "influence >") || strings.Contains(line, "influence <") || strings.Contains(line, "influence =") || strings.Contains(line, "influence !")
+			if isInfluence && !triggered {
+				t.Errorf("expected influence-condition error for %q, got: %v", line, r.Errors)
+			}
+			if !isInfluence && triggered {
+				t.Errorf("did NOT expect influence error for %q, got: %v", line, r.Errors)
+			}
+		})
+	}
+}
+
+// TestLegacyCgBlockForm verifies the old block-form `@cg show ...`
+// is rejected. The brace-attached form `@cg show{` bypasses the
+// broad char-suffix regex and is caught specifically by
+// cgBlockFormRe with the leaf-directive hint.
+func TestLegacyCgBlockForm(t *testing.T) {
+	// Brace-attached form exercises cgBlockFormRe directly.
+	r := Fix("@cg show{")
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "@cg is a leaf directive") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected cg-leaf-directive hint for @cg show{, got: %v", r.Errors)
+	}
+
+	// Space-separated `@cg show sunset {` is also rejected, though
+	// through the broader char-legacy-suffix detector. The
+	// user-visible contract is just "old @cg block form yields a
+	// legacy-format error".
+	r2 := Fix("@cg show sunset {")
+	rejected := false
+	for _, e := range r2.Errors {
+		if strings.Contains(e, "legacy") || strings.Contains(e, "leaf directive") {
+			rejected = true
+			break
+		}
+	}
+	if !rejected {
+		t.Errorf("expected legacy-format error for `@cg show sunset {`, got: %v", r2.Errors)
+	}
+}
+
+// TestLegacyEndingKeyword verifies standalone `@ending` is flagged
+// (endings are now gate leaves via `@gate { @end <type> }`).
+func TestLegacyEndingKeyword(t *testing.T) {
+	r := Fix("@ending complete")
+	found := false
+	for _, e := range r.Errors {
+		if strings.Contains(e, "@ending") && strings.Contains(e, "@gate { @end") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected @ending old-format error with @gate/@end hint, got: %v", r.Errors)
+	}
+}
+
 func TestCleanFileNoChanges(t *testing.T) {
 	input := `@episode "Clean Test" {
 
-@mauricio show happy
+@mauricio neutral
 
 NARRATOR: Everything is fine here.
 
@@ -529,7 +776,7 @@ NARRATOR: Option B selected
 }
 
 @gate {
-@default "end"
+@end complete
 }
 }`
 	r := Fix(input)

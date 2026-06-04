@@ -10,26 +10,26 @@ import (
 // Error codes for validation failures.
 const (
 	MissingTerminal            = "MISSING_TERMINAL"
-	GotoNoLabel                = "GOTO_NO_LABEL"
+	IncompleteGate             = "INCOMPLETE_GATE"
 	BraveNoCheck               = "BRAVE_NO_CHECK"
 	DuplicateOptionID          = "DUPLICATE_OPTION_ID"
 	SafeOptionHasCheck         = "SAFE_OPTION_HAS_CHECK"
-	InvalidPosition            = "INVALID_POSITION"
 	InvalidTransition          = "INVALID_TRANSITION"
 	InvalidBubbleType          = "INVALID_BUBBLE_TYPE"
 	InvalidOptionMode          = "INVALID_OPTION_MODE"
-	InvalidEndingType          = "INVALID_ENDING_TYPE"
+	InvalidEndType             = "INVALID_END_TYPE"
 	InvalidCondition           = "INVALID_CONDITION"
 	InvalidSignalKind          = "INVALID_SIGNAL_KIND"
 	InvalidRarity              = "INVALID_RARITY"
 	AchievementMissingField    = "ACHIEVEMENT_MISSING_FIELD"
-	InvalidCgDuration          = "INVALID_CG_DURATION"
-	CgMissingContent           = "CG_MISSING_CONTENT"
 	MinigameMissingDescription = "MINIGAME_MISSING_DESCRIPTION"
 	MinigameMissingName        = "MINIGAME_MISSING_NAME"
 	InvalidTrickType           = "INVALID_TRICK_TYPE"
 	TrickMissingPrompt         = "TRICK_MISSING_PROMPT"
-	ReservedIntName            = "RESERVED_INT_NAME"
+	ReservedKeyword            = "RESERVED_KEYWORD"
+	InvalidPhoneContent        = "INVALID_PHONE_CONTENT"
+	AggregateTooFewArgs        = "AGGREGATE_TOO_FEW_ARGS"
+	GateNextMissingTarget      = "GATE_NEXT_MISSING_TARGET"
 )
 
 // validTrickTypes mirrors the locked set in package ast. Keep in sync
@@ -48,21 +48,47 @@ var validSignalKinds = map[string]bool{
 	ast.SignalKindInt:  true,
 }
 
-// reservedIntNames blocks @signal int declarations from shadowing
-// engine-managed numeric values that scripts may only read.
-//
-// The list is intentionally conservative: concrete names the engine
-// currently defines. Expand as the engine grows.
-var reservedIntNames = map[string]bool{
+// reservedKeywords are identifiers reserved by the MSS language. They
+// may not be used as signal mark names, signal int names, or character
+// pose names. The list mirrors MSS-SPEC.md §保留字 (Appendix B) plus the
+// `bubble` character-directive verb and the `MAX` / `MIN` aggregate
+// function names.
+var reservedKeywords = map[string]bool{
+	// Directive verbs.
+	"set":    true,
+	"bubble": true,
+	"from":   true,
+	"to":     true,
+	"stop":   true,
+	// Flow keywords.
+	"if":      true,
+	"else":    true,
+	"next":    true,
+	"end":     true,
+	"gate":    true,
+	"episode": true,
+	"choice":  true,
+	"option":  true,
+	"check":   true,
+	"pause":   true,
+	// Option modes.
+	"brave": true,
+	"safe":  true,
+	// Ending types.
+	"complete":        true,
+	"to_be_continued": true,
+	"bad_ending":      true,
+	// Aggregate functions (case-sensitive uppercase).
+	"MAX": true,
+	"MIN": true,
+	// D20 check result words.
+	"success": true,
+	"fail":    true,
+	"any":     true,
+	// Engine-managed numeric names that scripts may only read.
 	"san": true, "cha": true, "atk": true,
 	"hp": true, "xp": true, "dex": true,
 	"int": true, "str": true, "wis": true, "con": true,
-}
-
-var validCgDurations = map[string]bool{
-	ast.CgDurationLow:    true,
-	ast.CgDurationMedium: true,
-	ast.CgDurationHigh:   true,
 }
 
 var validRarities = map[string]bool{
@@ -72,14 +98,12 @@ var validRarities = map[string]bool{
 	ast.RarityLegendary: true,
 }
 
-var validEndingTypes = map[string]bool{
+// validEndTypes enumerates the ending type values accepted by EndLeaf
+// (the `@end <type>` leaf inside a @gate route).
+var validEndTypes = map[string]bool{
 	ast.EndingComplete:      true,
 	ast.EndingToBeContinued: true,
 	ast.EndingBad:           true,
-}
-
-var validPositions = map[string]bool{
-	"left": true, "center": true, "right": true,
 }
 
 var validTransitions = map[string]bool{
@@ -106,30 +130,20 @@ func (e Error) Error() string {
 func Validate(ep *ast.Episode) []Error {
 	var errs []Error
 
-	// Episode must terminate with exactly one of @gate or @ending.
-	if ep.Gate == nil && ep.Ending == nil {
+	// Every episode MUST terminate with a @gate block. The emitter may
+	// later lower a degenerate `@gate { @end TYPE }` into Episode.Ending,
+	// but at source-AST level a missing gate is a hard error.
+	if ep.Gate == nil {
 		errs = append(errs, Error{
 			Code:    MissingTerminal,
-			Message: "episode is missing a terminal: add @gate { ... } for routing or @ending <type> for a terminal state",
+			Message: "episode is missing a terminal: add @gate { ... } at the end of the episode",
 		})
+	} else {
+		checkGateCompleteness(ep.Gate, &errs)
+		checkGateLeaves(ep.Gate, &errs)
 	}
 
-	// Validate @ending type if present.
-	if ep.Ending != nil && !validEndingTypes[ep.Ending.Type] {
-		errs = append(errs, Error{
-			Code:    InvalidEndingType,
-			Message: fmt.Sprintf("invalid @ending type %q (must be one of: complete, to_be_continued, bad_ending)", ep.Ending.Type),
-		})
-	}
-
-	// Collect all labels defined in the episode.
-	labels := make(map[string]bool)
-	collectLabels(ep.Body, labels)
-
-	// 3. All @goto targets must have matching @label.
-	checkGotos(ep.Body, labels, &errs)
-
-	// 4 & 5. Brave options must have check block and both outcomes.
+	// Brave options must have check block and both outcomes.
 	checkBraveOptions(ep.Body, &errs)
 
 	// Check value whitelists.
@@ -154,7 +168,64 @@ func Validate(ep *ast.Episode) []Error {
 	return errs
 }
 
-// checkSignals walks the body and ensures every SignalNode has a valid kind.
+// checkGateCompleteness verifies the gate has a valid completeness shape:
+// either a single unconditional route (one route, Condition == nil), or
+// a chain of conditional routes terminated by an unconditional fallback
+// (last route's Condition must be nil).
+func checkGateCompleteness(gate *ast.GateBlock, errs *[]Error) {
+	if len(gate.Routes) == 0 {
+		*errs = append(*errs, Error{
+			Code:    IncompleteGate,
+			Message: "@gate has no routes; must contain a single unconditional @next/@end or an @if/@else chain ending in an unconditional fallback",
+		})
+		return
+	}
+	last := gate.Routes[len(gate.Routes)-1]
+	if last.Condition != nil {
+		*errs = append(*errs, Error{
+			Code:    IncompleteGate,
+			Message: "@gate is missing an unconditional fallback: the final route must be an @else (or a single unconditional @next/@end)",
+		})
+	}
+}
+
+// checkGateLeaves validates every gate route's terminal leaf.
+//
+//   - *ast.EndLeaf  : Type must be in validEndTypes.
+//   - *ast.NextLeaf : Target must be non-empty.
+func checkGateLeaves(gate *ast.GateBlock, errs *[]Error) {
+	for i, route := range gate.Routes {
+		switch leaf := route.Leaf.(type) {
+		case *ast.EndLeaf:
+			if !validEndTypes[leaf.Type] {
+				*errs = append(*errs, Error{
+					Code:    InvalidEndType,
+					Message: fmt.Sprintf("@gate route #%d: invalid @end type %q (must be complete, to_be_continued, or bad_ending)", i+1, leaf.Type),
+				})
+			}
+		case *ast.NextLeaf:
+			if leaf.Target == "" {
+				*errs = append(*errs, Error{
+					Code:    GateNextMissingTarget,
+					Message: fmt.Sprintf("@gate route #%d: @next is missing its target branch_key", i+1),
+				})
+			}
+		case nil:
+			*errs = append(*errs, Error{
+				Code:    IncompleteGate,
+				Message: fmt.Sprintf("@gate route #%d has no terminal leaf (@next or @end)", i+1),
+			})
+		default:
+			*errs = append(*errs, Error{
+				Code:    IncompleteGate,
+				Message: fmt.Sprintf("@gate route #%d has unknown leaf type %T", i+1, leaf),
+			})
+		}
+	}
+}
+
+// checkSignals walks the body and ensures every SignalNode has a valid
+// kind and a non-reserved name.
 func checkSignals(nodes []ast.Node, errs *[]Error) {
 	for _, n := range nodes {
 		switch v := n.(type) {
@@ -166,16 +237,22 @@ func checkSignals(nodes []ast.Node, errs *[]Error) {
 				})
 				continue
 			}
-			if v.Kind == ast.SignalKindInt {
-				if reservedIntNames[v.Name] {
+			switch v.Kind {
+			case ast.SignalKindMark:
+				if reservedKeywords[v.Event] {
 					*errs = append(*errs, Error{
-						Code:    ReservedIntName,
-						Message: fmt.Sprintf("@signal int %q: name collides with an engine-managed numeric value; choose a different name", v.Name),
+						Code:    ReservedKeyword,
+						Message: fmt.Sprintf("@signal mark %q: name is a reserved keyword; choose a different name", v.Event),
+					})
+				}
+			case ast.SignalKindInt:
+				if reservedKeywords[v.Name] {
+					*errs = append(*errs, Error{
+						Code:    ReservedKeyword,
+						Message: fmt.Sprintf("@signal int %q: name is a reserved keyword or collides with an engine-managed value; choose a different name", v.Name),
 					})
 				}
 			}
-		case *ast.CgShowNode:
-			checkSignals(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
 				checkSignals(opt.Body, errs)
@@ -222,8 +299,6 @@ func checkAchievements(nodes []ast.Node, errs *[]Error) {
 					Message: fmt.Sprintf("achievement %q has invalid rarity %q (must be uncommon, rare, epic, or legendary)", v.ID, v.Rarity),
 				})
 			}
-		case *ast.CgShowNode:
-			checkAchievements(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
 				checkAchievements(opt.Body, errs)
@@ -245,6 +320,15 @@ var validComparisonOps = map[string]bool{
 }
 var validChoiceResults = map[string]bool{"success": true, "fail": true, "any": true}
 
+// validOperandKinds enumerates the five comparison-operand kinds.
+var validOperandKinds = map[string]bool{
+	ast.OperandLiteral:   true,
+	ast.OperandAffection: true,
+	ast.OperandValue:     true,
+	ast.OperandMax:       true,
+	ast.OperandMin:       true,
+}
+
 // checkConditions walks nodes and validates every Condition tree it finds.
 func checkConditions(nodes []ast.Node, errs *[]Error) {
 	for _, n := range nodes {
@@ -255,8 +339,6 @@ func checkConditions(nodes []ast.Node, errs *[]Error) {
 			}
 			checkConditions(v.Then, errs)
 			checkConditions(v.Else, errs)
-		case *ast.CgShowNode:
-			checkConditions(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
 				checkConditions(opt.Body, errs)
@@ -284,26 +366,21 @@ func checkCondition(c ast.Condition, errs *[]Error) {
 				Message: fmt.Sprintf("comparison has invalid operator %q", v.Op),
 			})
 		}
-		switch v.Left.Kind {
-		case ast.OperandAffection:
-			if v.Left.Char == "" {
-				*errs = append(*errs, Error{
-					Code:    InvalidCondition,
-					Message: "affection operand has empty character name",
-				})
-			}
-		case ast.OperandValue:
-			if v.Left.Name == "" {
-				*errs = append(*errs, Error{
-					Code:    InvalidCondition,
-					Message: "value operand has empty name",
-				})
-			}
-		default:
+		if v.Left == nil {
 			*errs = append(*errs, Error{
 				Code:    InvalidCondition,
-				Message: fmt.Sprintf("comparison has unknown operand kind %q", v.Left.Kind),
+				Message: "comparison is missing its left operand",
 			})
+		} else {
+			validateOperand(v.Left, "left", errs)
+		}
+		if v.Right == nil {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: "comparison is missing its right operand",
+			})
+		} else {
+			validateOperand(v.Right, "right", errs)
 		}
 	case *ast.CompoundCondition:
 		if !validCompoundOps[v.Op] {
@@ -318,8 +395,8 @@ func checkCondition(c ast.Condition, errs *[]Error) {
 		if v.Right != nil {
 			checkCondition(v.Right, errs)
 		}
-	case *ast.FlagCondition, *ast.InfluenceCondition:
-		// No further structural checks — any non-empty string is fine.
+	case *ast.FlagCondition:
+		// No further structural checks — any non-empty flag name is fine.
 	case *ast.CheckCondition:
 		if v.Result != "success" && v.Result != "fail" {
 			*errs = append(*errs, Error{
@@ -337,49 +414,54 @@ func checkCondition(c ast.Condition, errs *[]Error) {
 	}
 }
 
-// collectLabels recursively finds all LabelNodes and records their names.
-func collectLabels(nodes []ast.Node, labels map[string]bool) {
-	for _, n := range nodes {
-		switch v := n.(type) {
-		case *ast.LabelNode:
-			labels[v.Name] = true
-		case *ast.CgShowNode:
-			collectLabels(v.Body, labels)
-		case *ast.ChoiceNode:
-			for _, opt := range v.Options {
-				collectLabels(opt.Body, labels)
-			}
-		case *ast.IfNode:
-			collectLabels(v.Then, labels)
-			collectLabels(v.Else, labels)
-		case *ast.PhoneShowNode:
-			collectLabels(v.Body, labels)
-		}
+// validateOperand recursively validates a ComparisonOperand tree.
+// `side` is a human label ("left", "right", or "arg") used in error
+// messages so authors can locate the offending operand.
+func validateOperand(op *ast.ComparisonOperand, side string, errs *[]Error) {
+	if !validOperandKinds[op.Kind] {
+		*errs = append(*errs, Error{
+			Code:    InvalidCondition,
+			Message: fmt.Sprintf("%s operand has unknown kind %q (valid: literal, affection, value, max, min)", side, op.Kind),
+		})
+		return
 	}
-}
-
-// checkGotos recursively validates that every GotoNode target has a matching label.
-func checkGotos(nodes []ast.Node, labels map[string]bool, errs *[]Error) {
-	for _, n := range nodes {
-		switch v := n.(type) {
-		case *ast.GotoNode:
-			if !labels[v.Name] {
+	switch op.Kind {
+	case ast.OperandLiteral:
+		// No further structural checks — Value defaults to 0.
+	case ast.OperandAffection:
+		if op.Char == "" {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("%s affection operand has empty character name", side),
+			})
+		}
+	case ast.OperandValue:
+		if op.Name == "" {
+			*errs = append(*errs, Error{
+				Code:    InvalidCondition,
+				Message: fmt.Sprintf("%s value operand has empty name", side),
+			})
+		}
+	case ast.OperandMax, ast.OperandMin:
+		funcName := "MAX"
+		if op.Kind == ast.OperandMin {
+			funcName = "MIN"
+		}
+		if len(op.Args) < 2 {
+			*errs = append(*errs, Error{
+				Code:    AggregateTooFewArgs,
+				Message: fmt.Sprintf("%s %s aggregate requires at least 2 args, got %d", side, funcName, len(op.Args)),
+			})
+		}
+		for i, arg := range op.Args {
+			if arg == nil {
 				*errs = append(*errs, Error{
-					Code:    GotoNoLabel,
-					Message: fmt.Sprintf("@goto %q has no matching @label", v.Name),
+					Code:    InvalidCondition,
+					Message: fmt.Sprintf("%s %s aggregate has nil arg #%d", side, funcName, i+1),
 				})
+				continue
 			}
-		case *ast.CgShowNode:
-			checkGotos(v.Body, labels, errs)
-		case *ast.ChoiceNode:
-			for _, opt := range v.Options {
-				checkGotos(opt.Body, labels, errs)
-			}
-		case *ast.IfNode:
-			checkGotos(v.Then, labels, errs)
-			checkGotos(v.Else, labels, errs)
-		case *ast.PhoneShowNode:
-			checkGotos(v.Body, labels, errs)
+			validateOperand(arg, "arg", errs)
 		}
 	}
 }
@@ -400,32 +482,29 @@ func checkBraveOptions(nodes []ast.Node, errs *[]Error) {
 				}
 				seen[opt.ID] = true
 
-				if opt.Mode == "brave" {
-					// 4. Brave options must have a check block.
+				switch opt.Mode {
+				case "brave":
 					if opt.Check == nil {
 						*errs = append(*errs, Error{
 							Code:    BraveNoCheck,
 							Message: fmt.Sprintf("brave option %q is missing a @check block", opt.ID),
 						})
 					}
-				} else if opt.Mode == "safe" {
+				case "safe":
 					if opt.Check != nil {
 						*errs = append(*errs, Error{
 							Code:    SafeOptionHasCheck,
 							Message: fmt.Sprintf("safe option %q should not have a check block", opt.ID),
 						})
 					}
-				} else {
+				default:
 					*errs = append(*errs, Error{
 						Code:    InvalidOptionMode,
 						Message: fmt.Sprintf("option %q has invalid mode %q (must be 'brave' or 'safe')", opt.ID, opt.Mode),
 					})
 				}
-				// Recurse into option body.
 				checkBraveOptions(opt.Body, errs)
 			}
-		case *ast.CgShowNode:
-			checkBraveOptions(v.Body, errs)
 		case *ast.IfNode:
 			checkBraveOptions(v.Then, errs)
 			checkBraveOptions(v.Else, errs)
@@ -435,46 +514,34 @@ func checkBraveOptions(nodes []ast.Node, errs *[]Error) {
 	}
 }
 
-// checkValues validates enum-like fields (positions, transitions, bubble types).
+// checkValues validates enum-like fields (transitions, bubble types,
+// trick types, minigame fields) and enforces the phone-overlay body
+// whitelist.
 func checkValues(nodes []ast.Node, errs *[]Error) {
 	for _, n := range nodes {
 		switch v := n.(type) {
 		case *ast.CharShowNode:
-			if !validPositions[v.Position] {
-				*errs = append(*errs, Error{
-					Code:    InvalidPosition,
-					Message: fmt.Sprintf("character %q has invalid position %q", v.Char, v.Position),
-				})
-			}
 			if v.Transition != "" && !validTransitions[v.Transition] {
 				*errs = append(*errs, Error{
 					Code:    InvalidTransition,
 					Message: fmt.Sprintf("character %q show has invalid transition %q", v.Char, v.Transition),
 				})
 			}
-		case *ast.CharHideNode:
-			if v.Transition != "" && !validTransitions[v.Transition] {
+			// `bubble` is a reserved word: it must not appear as a pose
+			// name. The character-bubble animation has its own node type.
+			if v.Look == "bubble" {
 				*errs = append(*errs, Error{
-					Code:    InvalidTransition,
-					Message: fmt.Sprintf("character %q hide has invalid transition %q", v.Char, v.Transition),
-				})
-			}
-		case *ast.CharLookNode:
-			if v.Transition != "" && !validTransitions[v.Transition] {
-				*errs = append(*errs, Error{
-					Code:    InvalidTransition,
-					Message: fmt.Sprintf("character %q look has invalid transition %q", v.Char, v.Transition),
-				})
-			}
-		case *ast.CharMoveNode:
-			if !validPositions[v.Position] {
-				*errs = append(*errs, Error{
-					Code:    InvalidPosition,
-					Message: fmt.Sprintf("character %q move has invalid position %q", v.Char, v.Position),
+					Code:    ReservedKeyword,
+					Message: fmt.Sprintf("character %q has reserved pose name %q (use @<char> bubble <type> for bubble animations)", v.Char, v.Look),
 				})
 			}
 		case *ast.CharBubbleNode:
-			if !validBubbleTypes[v.BubbleType] {
+			if v.BubbleType == "" {
+				*errs = append(*errs, Error{
+					Code:    InvalidBubbleType,
+					Message: fmt.Sprintf("character %q has empty bubble type (valid: anger, sweat, heart, question, exclaim, idea, music, doom, ellipsis)", v.Char),
+				})
+			} else if !validBubbleTypes[v.BubbleType] {
 				*errs = append(*errs, Error{
 					Code:    InvalidBubbleType,
 					Message: fmt.Sprintf("character %q has invalid bubble type %q", v.Char, v.BubbleType),
@@ -487,26 +554,6 @@ func checkValues(nodes []ast.Node, errs *[]Error) {
 					Message: fmt.Sprintf("bg %q has invalid transition %q", v.Name, v.Transition),
 				})
 			}
-		case *ast.CgShowNode:
-			if v.Transition != "" && !validTransitions[v.Transition] {
-				*errs = append(*errs, Error{
-					Code:    InvalidTransition,
-					Message: fmt.Sprintf("cg %q has invalid transition %q", v.Name, v.Transition),
-				})
-			}
-			if !validCgDurations[v.Duration] {
-				*errs = append(*errs, Error{
-					Code:    InvalidCgDuration,
-					Message: fmt.Sprintf("cg %q has invalid duration %q (must be low, medium, or high)", v.Name, v.Duration),
-				})
-			}
-			if v.Content == "" {
-				*errs = append(*errs, Error{
-					Code:    CgMissingContent,
-					Message: fmt.Sprintf("cg %q missing required 'content' field", v.Name),
-				})
-			}
-			checkValues(v.Body, errs)
 		case *ast.ChoiceNode:
 			for _, opt := range v.Options {
 				checkValues(opt.Body, errs)
@@ -541,6 +588,16 @@ func checkValues(nodes []ast.Node, errs *[]Error) {
 				})
 			}
 		case *ast.PhoneShowNode:
+			// Phone overlay body is a strict whitelist: only text
+			// messages may appear inside @phone { ... }.
+			for _, child := range v.Body {
+				if _, ok := child.(*ast.TextMessageNode); !ok {
+					*errs = append(*errs, Error{
+						Code:    InvalidPhoneContent,
+						Message: fmt.Sprintf("@phone body contains disallowed node %T (only @<char> from/to text messages are permitted inside the phone overlay)", child),
+					})
+				}
+			}
 			checkValues(v.Body, errs)
 		}
 	}
