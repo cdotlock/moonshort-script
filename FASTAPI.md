@@ -4,16 +4,16 @@ This directory provides a FastAPI HTTP wrapper around the `lsc` CLI binary. An L
 
 ## Public hosted instance
 
-> **Base URL: `https://lunascripts-production.up.railway.app`**
+> **Base URL: `https://moonshort-script-production.up.railway.app`**
 >
-> Swagger docs: https://lunascripts-production.up.railway.app/docs
+> Swagger docs: https://moonshort-script-production.up.railway.app/docs
 >
 > Deployed on Railway from `main`. The Dockerfile in this repo (multi-stage: Go build → Python uvicorn) is the source of truth — every push to `main` that touches `cmd/`, `internal/`, `api_server.py`, `requirements.txt`, or `Dockerfile` should be redeployed via `railway up --service lunascripts --ci`. Railway's healthcheck hits `/health` and restarts on failure.
 
 Smoke-tested from outside:
 
 ```bash
-BASE=https://lunascripts-production.up.railway.app
+BASE=https://moonshort-script-production.up.railway.app
 
 curl -s "$BASE/health"
 # {"status":"ok"}
