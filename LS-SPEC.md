@@ -612,6 +612,57 @@ MALIA: One quick step. My heel went straight through his shoe.
 
 `@signal int` **不受** "marks 要克制" 的诫命约束；计数器天生就是要频繁写入的。但只给计数器命名有实际含义的名字，不要一个变量半途改语义。
 
+#### MP 跨角色信号命名（cross-signal naming）
+
+多人故事（MP）中，一个角色的关键选择会被铸造成一个跨角色信号（cross-signal），写入双方共享的 multiplayer 状态盒，**让对方的脚本能用 `@if (...)` 读到自己角色当前为止的选择**。命名格式由引擎统一铸造，作者不手写信号名——但写跨角色条件查询时**必须**理解格式，否则没法引用对方的选择。
+
+**格式：**
+
+```
+mp_<role>_a<actIndex>_c<choiceIndex>_<optionId>
+```
+
+| 段 | 含义 | 来源 |
+|------|------|------|
+| `<role>` | 产出该选择的角色 roleKey（小写，例：`diego` / `seiya` / `ryu`） | 剧本声明的角色键 |
+| `<actIndex>` | 该角色当前 act/episode 在自己 track 中的 0-indexed 序号 | 编译期由 LS 结构决定 |
+| `<choiceIndex>` | 该 act 内、联合选择点（joint choice）按 DFS 文档顺序的 0-indexed 序号 | 编译期由 LS 结构决定 |
+| `<optionId>` | 角色实际选中的 `@option` 字面 ID（例：`A` / `B` / `CONFRONT`） | 运行时由玩家选择决定 |
+
+**核心性质：内容寻址（content-addressed），不是运行时寻址。**
+
+信号名由"选择在故事里的位置"决定（角色 + act 序号 + 该 act 内 joint choice 的 DFS 文档序号 + 选中的 option ID），**不依赖**运行时 barrier 计数器或谁先谁后到达。这意味着：
+
+- **重编译稳定**：同一份脚本无论编译多少次、玩家在哪个房间里运行，同一个选择产生的信号名都不变
+- **可前向引用**：partner 的脚本可以在自己 act 写 `@if (mp_diego_a2_c0_A)`，引用 diego 还没到达的选择——读取时机由引擎调度，命名时不需要同步
+- **位置 vs 时间**：信号名编码"这个选择在故事里的位置"，**不**编码"运行时什么时候到达"
+
+**示例：**
+
+`chaoreqi-idol` 故事中，diego 的 act 2（自己 track 的第 3 集，0-indexed = 2）按 DFS 文档顺序包含 3 个 joint choice。其中第 1 个（`choiceIndex = 0`）若玩家选了 option A，铸造的信号为：
+
+```
+mp_diego_a2_c0_A
+```
+
+seiya 的 track 可以在任意位置用条件查询门控：
+
+```
+@if (mp_diego_a2_c0_A) {
+  SEIYA: I saw what Diego picked. The corner's mine now.
+}
+```
+
+**对比历史命名（已废弃）：**
+
+旧设计用 `mp_<role>_b<N>_<opt>`，其中 `<N>` 是运行时 barrier 计数器编号。该方案在编译 / 重编译间不稳定（barrier 编号会因脚本结构变化漂移）、要求双方运行时严格按 barrier 顺序同步、且无法在 partner 未到达前进行前向引用。当前实现已**整体替换**为本节描述的位置寻址命名，旧 `b<N>` 形态在 codebase 中不再出现。
+
+**作者纪律：**
+
+- **不要手写 `mp_*` 信号名做 `@signal mark`**——cross-signal 由引擎在跨角色选择点自动铸造，作者只能 `@if` 读
+- **跨角色条件查询要做防御性书写**：partner 还没运行到那个选择点时该 `@if` 为 false，本角色脚本应能在 false 分支自然推进，不要强假设 partner 永远已到
+- **roleKey 命名一旦上线不可改**：信号名里嵌了 roleKey，改名等于历史信号全失效；roleKey 一经发布须冻结
+
 #### `@achievement <id> { name / rarity / description }`
 
 成就指令——块内携带元数据，执行到这条节点就是解锁时机。条件触发由外层 `@if` 承担。
