@@ -7,7 +7,7 @@ Parses `.md` script files into structured JSON for the frontend player, resolvin
 ## Install
 
 ```bash
-go build -o bin/lscc ./cmd/lscc
+go build -o bin/lsc ./cmd/lsc
 ```
 
 ## Usage

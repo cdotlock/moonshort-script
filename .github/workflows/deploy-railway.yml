@@ -29,6 +29,10 @@ jobs:
   deploy:
     name: railway up
     runs-on: ubuntu-latest
+    env:
+      RAILWAY_PROJECT_ID: 64a837fc-1712-492f-b571-e1fec8090cd7
+      RAILWAY_ENVIRONMENT: production
+      RAILWAY_SERVICE_ID: b33addae-782a-469a-929e-56c8fd09d70c
     steps:
       - uses: actions/checkout@v4
 
@@ -44,8 +48,12 @@ jobs:
         run: |
           railway --version
           railway link \
-            --project 64a837fc-1712-492f-b571-e1fec8090cd7 \
-            --environment production \
-            --service lunascripts
-          railway up --service lunascripts --ci
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --service "$RAILWAY_SERVICE_ID"
+          railway up \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT" \
+            --service "$RAILWAY_SERVICE_ID" \
+            --ci
         shell: bash
