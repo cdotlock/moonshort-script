@@ -29,7 +29,7 @@ curl -s -X POST "$BASE/validate" -F "script=@testdata/minimal.ls"
 ```bash
 # 1. Build the binary (one time)
 cd <repo-root>
-go build -o bin/lscc ./cmd/lscc
+go build -o bin/lsc ./cmd/lsc
 
 # 2. Install Python dependencies (one time)
 pip install -r requirements.txt
